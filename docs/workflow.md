@@ -222,6 +222,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 | skills `stack-nextjs-ts`, `stack-supabase-postgres`, `stack-swift-ios`, `stack-python` | Conventions, test commands and pitfalls, scanned from the real projects |
 | plugin `typesafe@typesafe-ai` | Official Jev/TypeSafe docs skill |
 | skills `impeccable`, `ui-ux-pro-max` | Design pair, required for any task that involves design (§4 step 1) |
+| `~/.claude/release/export.sh` (maintainer only) | One-way export of `~/.claude` to the public `dryas-workflow` repo: allowlist `public-manifest.txt`, path/name rewrites `rewrites.tsv`, deny-term and secret scans, Jev tests on the staged tree, FlowObserve stages shipped disabled. `--dry-run` first. Never edit `claude/` in the public repo; change `~/.claude` and re-export |
 
 ## 10. Where things live
 
@@ -231,6 +232,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 | `~/.claude/DryasWorkflow.md` (this file) | `CLAUDE.md` (workspace rules, inherited by every project) |
 | `ruflo` CLI (nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, **Ruflo memory**) |
 | `~/.zshrc` (`OPENROUTER_API_KEY`, guarded cache block, `dev` alias) | `_tools/` (settings_merge.py, relink_claude.py) |
+| `~/.claude/release/` (private export pipeline, never published) | `projects/dryas-workflow` (public repo clone; installer `install/install.sh` generates Ruflo helpers with `ruflo init` + pinned patches) |
 | | `projects/flowobserve` (the observer app) |
 | | `docs/` (specs, plans, reports, backup copy of this file), `_archive/` |
 
