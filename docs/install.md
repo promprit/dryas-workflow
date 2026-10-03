@@ -59,6 +59,8 @@ export DRYAS_DATA_ROOT=/path/to/data
 
 Ruflo data goes to `$DRYAS_DATA_ROOT/ruflo/<namespace>`.
 
+The Ruflo helpers are generated locally by `ruflo init` and patched (data root, no background npx), not shipped in the repo.
+
 ## Verify
 
 The installer ends with a verify step. Each check prints `PASS`, `FAIL` or `SKIP`:

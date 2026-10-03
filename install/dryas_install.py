@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import ruflo_helpers  # noqa: E402
 import settings_merge as sm  # noqa: E402
 
 RECORD = ".dryas-installed.json"
@@ -276,10 +277,23 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
     sm.load_settings(cd / "settings.json")  # malformed settings.json aborts here, before any write
     mapping = _mapping(comps, home)
     _fragment(repo, comps, mapping)  # unmapped placeholders abort here too
+    helpers = {}
+    if "ruflo" in comps:
+        if dry:
+            print("would generate Ruflo helpers with: %s" % " ".join(ruflo_helpers.init_argv(mapping.get("RUFLO_BIN", ""))))
+        else:
+            try:
+                helpers = ruflo_helpers.patched_helpers(mapping.get("RUFLO_BIN", ""))
+            except ruflo_helpers.HelperError as e:
+                print("error: Ruflo helpers: %s" % e)
+                return 1
     rec = load_record(cd)
     if dry:
         print("dry run: nothing will be written")
     rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping)
+    for n, (data, mode) in helpers.items():
+        _put(cd, "ruflo/helpers/" + n, rec, force, ts, rep, dry, data=data)
+        os.chmod(str(cd / "ruflo" / "helpers" / n), mode)
     tpl = repo / "claude" / "CLAUDE.md.template"
     if dry:
         for rel in rep["new"]:
@@ -420,6 +434,9 @@ def verify(cd: Path, comps: List[str]) -> int:
     if "jev" in comps:
         rc, out = capture(["claude", "mcp", "list"])
         fails += say("PASS" if "jev:" in out else "FAIL", "jev MCP server registered")
+    if "ruflo" in comps:
+        probs = ruflo_helpers.check(cd / "ruflo" / "helpers")
+        fails += say("FAIL" if probs else "PASS", "Ruflo helpers patched", "; ".join(probs))
     hook = cd / "hooks" / "pretool-chain.sh"
     wt = Path(tempfile.mkdtemp())
     try:

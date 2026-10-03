@@ -3,6 +3,7 @@ from pathlib import Path
 REPO_INSTALL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_INSTALL))
 import dryas_install as di
+import ruflo_helpers as rh
 
 CHAIN = {"pretool": [{"name": "scope-lock", "component": "core", "cmd": ["true"]},
                      {"name": "jev-gate", "component": "jev", "cmd": ["true"]},
@@ -40,6 +41,7 @@ class InstallTest(unittest.TestCase):
         di.detect = lambda: {"RUFLO_BIN": "/b/ruflo", "RUFLO_JS": "/b/ruflo.js", "RUFLO_NODE_FALLBACK": "/b/node", "RUFLO_NODE_MODULES": "/b/nm",
                              "RUFLO_CLI_DIST": str(self.dist)}
         di.confirm = lambda prompt: True
+        rh.generate = lambda ruflo_bin: {n: (("".join(o for f, o, _ in rh.PATCHES if f == n) or "x\n").encode(), 0o644) for n in rh.HELPERS}
 
     def install(self, comps, **kw):
         return di.install(self.repo, self.cd, comps, home=self.home, force=kw.get("force", False), dry=kw.get("dry", False))
