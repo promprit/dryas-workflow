@@ -1,0 +1,9 @@
+#!/bin/sh
+# Deny-term scan on what is being committed (the index), so git-ignored scratch is not scanned.
+# Terms are private to the maintainer ($DRYAS_DENY_TERMS or ~/.claude/release/deny-terms.txt);
+# without them the scan is skipped.
+top=$(git rev-parse --show-toplevel)
+tmp=$(mktemp -d) || exit 1
+trap 'rm -rf "$tmp"' EXIT
+git checkout-index -a --prefix="$tmp/" || exit 1
+python3 "$top/tools/deny_scan.py" "$tmp"

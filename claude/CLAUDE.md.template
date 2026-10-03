@@ -1,0 +1,11 @@
+# Dryas Workflow
+- The user's dev workflow, called the Dryas Workflow (layers, model ladder Sonnet→Opus→Fable, brainstorm-first flow, hook order, Jev/Ruflo/Superpowers rules, file locations) is documented in `~/.claude/docs/dryas-workflow.md`. Read it before multi-step work or when asked about the workflow. Keep it in sync when the workflow changes.
+
+# Model policy (super workflow)
+- Orchestrator: Opus, always (`"model": "opus"` in ~/.claude/settings.json).
+- Executors: Sonnet (`~/.claude/agents/executor.md`).
+- Escalation ladder: Sonnet → Opus → Fable. A task Sonnet can't finish goes to an Opus executor; Fable is used only if the Opus executor also fails that task. If Opus gets it, no Fable. Every step is logged with its reason via `mcp__jev__log_escalation`.
+- Jev (via the `jev` MCP server and hooks) answers narrow typed questions only; it never writes code or plans. Below threshold or escalate → Opus decides.
+
+# Compact instructions
+- When compacting, keep the summary SHORT (aim under 300 words): current goal, open decisions, next step. A Jev-scored handoff of verbatim excerpts (user messages, files touched, test results, commits, key tool lines) is re-injected right after compaction, so do not repeat file lists, test output or tool logs in the summary.
