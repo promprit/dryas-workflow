@@ -451,6 +451,7 @@ def verify(cd: Path, comps: List[str]) -> int:
         event = {"tool_name": "Write", "tool_input": {"file_path": str(wt / "src/other.ts"), "content": "x"}, "cwd": str(wt)}
         env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
         env["HOME"] = str(cd.parent)
+        env["JEV_LOG_DIR"] = str(wt / "logs")
         rc, out = capture(["/bin/sh", str(hook)], json.dumps(event), env)
         try:
             ok = json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"

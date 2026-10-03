@@ -186,6 +186,19 @@ class InstallTest(unittest.TestCase):
         self.assertEqual((self.cd / "agents/executor.md").read_text(), "mine")
         self.assertEqual(list(self.cd.glob(".dryas-backup-*")), [])
 
+    def test_verify_smoke_logs_outside_claude_dir(self):
+        envs = []
+        orig = di.capture
+        di.capture = lambda argv, input_text=None, env=None: envs.append(env) or (0, "")
+        try:
+            di.verify(self.cd, [])
+        finally:
+            di.capture = orig
+        env = envs[-1]
+        self.assertIn("JEV_LOG_DIR", env)
+        self.assertFalse(Path(env["JEV_LOG_DIR"]).resolve().is_relative_to(self.cd.resolve()))
+        self.assertEqual(list(self.cd.rglob("logs")), [])
+
 class ShellTest(unittest.TestCase):
     def test_space_in_home_refuses_ruflo(self):
         home = Path(tempfile.mkdtemp()) / "Jane Doe"; home.mkdir()
