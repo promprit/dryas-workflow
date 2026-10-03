@@ -1,0 +1,24 @@
+{
+  "gate": {
+    "allowlist": [
+      "ls",
+      "cat",
+      "head",
+      "tail",
+      "wc",
+      "pwd",
+      "git status",
+      "git diff",
+      "git log",
+      "git show",
+      "pnpm test",
+      "npm test",
+      "pnpm lint",
+      "pnpm typecheck",
+      "pytest",
+      "python3 -m pytest",
+      "swift test",
+      "cd"
+    ]
+  }
+}

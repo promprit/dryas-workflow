@@ -1,0 +1,193 @@
+{
+  "core": {
+    "model": "opus",
+    "env": {
+      "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "65"
+    },
+    "permissions": {
+      "allow": [
+        "Read(~/.claude/jev/**)",
+        "Bash(/usr/bin/python3 \"$HOME/.claude/jev/planfile.py\":*)",
+        "Bash(/usr/bin/python3 \"$HOME/.claude/jev/handoff.py\" save:*)",
+        "Bash(/usr/bin/python3 \"$HOME/.claude/jev/tune.py\" report)"
+      ]
+    },
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "*",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/hooks/pretool-chain.sh\"",
+              "timeout": 20
+            }
+          ]
+        }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/hooks/prompt-chain.sh\"",
+              "timeout": 15
+            }
+          ]
+        }
+      ],
+      "SessionStart": [
+        {
+          "matcher": "compact",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/usr/bin/python3 \"$HOME/.claude/jev/compact_restore.py\"",
+              "timeout": 5
+            }
+          ]
+        },
+        {
+          "matcher": "clear",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/usr/bin/python3 \"$HOME/.claude/jev/handoff_restore.py\"",
+              "timeout": 5
+            }
+          ]
+        }
+      ],
+      "PreCompact": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/usr/bin/python3 \"$HOME/.claude/jev/compact_keep.py\"",
+              "timeout": 30
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "jev": {
+    "permissions": {
+      "allow": [
+        "mcp__jev"
+      ]
+    }
+  },
+  "ruflo": {
+    "env": {
+      "DRYAS_DATA_ROOT": "$DRYAS_DATA_ROOT",
+      "RUFLO_HOOK_SKIP_NPX": "1",
+      "RUFLO_MCP_SKIP_NPX": "1",
+      "RUFLO_NO_AUTO_ENABLE": "1",
+      "RUFLO_DAEMON_AUTOSTART": "0",
+      "CLAUDE_FLOW_MEMORY_PATH": "$DRYAS_DATA_ROOT/ruflo/memory",
+      "CLAUDE_FLOW_DB_PATH": "$DRYAS_DATA_ROOT/ruflo/memory/memory.db",
+      "CLAUDE_FLOW_SWARM_DIR": "$DRYAS_DATA_ROOT/ruflo/swarm",
+      "RUFLO_STATE_DIR": "$DRYAS_DATA_ROOT/ruflo/state",
+      "CLAUDE_FLOW_CWD": "$DRYAS_DATA_ROOT/ruflo/mcp",
+      "RUFLO_HOOK_CLI_OVERRIDE": "/bin/sh $HOME/.claude/ruflo/cli.sh",
+      "RUFLO_MCP_CLI_OVERRIDE": "$HOME/.claude/ruflo/mcp-shim/bin/cli.js",
+      "RUFLO_BIN": "$RUFLO_BIN",
+      "RUFLO_JS": "$RUFLO_JS",
+      "RUFLO_NODE_FALLBACK": "$RUFLO_NODE_FALLBACK",
+      "RUFLO_NODE_MODULES": "$RUFLO_NODE_MODULES"
+    },
+    "permissions": {
+      "allow": [
+        "mcp__plugin_ruflo-core_ruflo__memory_search",
+        "mcp__plugin_ruflo-core_ruflo__memory_store",
+        "mcp__plugin_ruflo-core_ruflo__swarm_init"
+      ]
+    },
+    "hooks": {
+      "PostToolUse": [
+        {
+          "matcher": "Write|Edit|MultiEdit",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/ruflo/run.sh\" node \"$HOME/.claude/ruflo/helpers/hook-handler.cjs\" post-edit",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "SubagentStop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/ruflo/run.sh\" node \"$HOME/.claude/ruflo/helpers/hook-handler.cjs\" post-task",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "SessionStart": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/ruflo/run.sh\" node \"$HOME/.claude/ruflo/helpers/hook-handler.cjs\" session-restore",
+              "timeout": 10
+            },
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/ruflo/run.sh\" node \"$HOME/.claude/ruflo/helpers/auto-memory-hook.mjs\" import",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "SessionEnd": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/ruflo/run.sh\" node \"$HOME/.claude/ruflo/helpers/hook-handler.cjs\" session-end",
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "PreCompact": [
+        {
+          "matcher": "manual",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/ruflo/run.sh\" node \"$HOME/.claude/ruflo/helpers/hook-handler.cjs\" session-end manual",
+              "timeout": 10
+            }
+          ]
+        },
+        {
+          "matcher": "auto",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "/bin/sh \"$HOME/.claude/ruflo/run.sh\" node \"$HOME/.claude/ruflo/helpers/hook-handler.cjs\" session-end auto",
+              "timeout": 10
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "superpowers": {
+    "permissions": {
+      "deny": [
+        "Skill(superpowers:subagent-driven-development)",
+        "Skill(superpowers:executing-plans)",
+        "Skill(superpowers:dispatching-parallel-agents)",
+        "Skill(superpowers:finishing-a-development-branch)",
+        "Skill(superpowers:diagnosing-superpowers)"
+      ]
+    }
+  }
+}
