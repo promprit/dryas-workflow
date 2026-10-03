@@ -1,0 +1,15 @@
+{
+  "superpowers": {"version": "6.4.1", "commands": [["claude", "plugin", "install", "superpowers@claude-plugins-official"]], "plugin": "superpowers@claude-plugins-official"},
+  "ruflo": {"version": "3.51.0", "commands": [
+    ["npm", "install", "-g", "ruflo@3.51.0"],
+    ["claude", "plugin", "marketplace", "add", "ruvnet/ruflo"],
+    ["claude", "plugin", "install", "ruflo-core@ruflo"],
+    ["claude", "plugin", "install", "ruflo-swarm@ruflo"],
+    ["claude", "plugin", "install", "ruflo-testgen@ruflo"],
+    ["claude", "plugin", "install", "ruflo-jujutsu@ruflo"]], "plugin": "ruflo-core@ruflo"},
+  "design": {"version": "4.3.1", "commands": [
+    ["claude", "plugin", "marketplace", "add", "pbakaus/impeccable"],
+    ["claude", "plugin", "install", "impeccable@impeccable"],
+    ["claude", "plugin", "marketplace", "add", "nextlevelbuilder/ui-ux-pro-max-skill"],
+    ["claude", "plugin", "install", "ui-ux-pro-max@ui-ux-pro-max-skill"]], "plugin": "impeccable@impeccable"}
+}
