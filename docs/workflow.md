@@ -33,7 +33,7 @@ Last updated: 2026-10-03.
 | **Jev** (TypeSafe `typesafe/jev-1.13` via OpenRouter) | Decision support: tool-call gate, prompt routing, per-task triage, commit check, compaction keep/drop | Write code or plans |
 | **Ruflo** (`ruflo@3.51.0`, pinned) | Orchestration plumbing (hierarchical swarm) and the **only** memory/learning layer | Plan (its goals/planning hooks are dropped); use `ANTHROPIC_API_KEY` |
 | **Superpowers** (plugin) | Process: brainstorming, worktrees, TDD, two-stage review, verification, plan format | — |
-| **FlowObserve** (separate observer app, in development) | Ambient monitor of live sessions: shows each session's stage in the loop (Brainstorm, Plan, Judge, Build, Escalate, Review, Ship) and what needs you (observe-only) | Block or change anything; write Jev logs or `.orchestrate/` |
+| **FlowObserve** (separate observer app, optional) | Ambient monitor of live sessions: shows each session's stage in the loop (Brainstorm, Plan, Judge, Build, Escalate, Review, Ship) and what needs you (observe-only) | Block or change anything; write Jev logs or `.orchestrate/` |
 
 ## 3. Model policy and escalation ladder
 
@@ -114,14 +114,14 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
    - Any failure (timeout 3 s, no key, offline, SSD missing) means no decision.
    - Gate state: `dev workspace on external SSD; prod credentials NOT present; parallel sessions possible in different project folders`.
 3. **Ruflo PreToolUse stages** (pre-bash only), skipped when the SSD is missing.
-4. *(planned)* **FlowObserve `fo-hook`** (observe-only; its output is ignored). Not wired until `fo-hook` ships (§12).
+4. *(optional)* **FlowObserve `fo-hook`** (observe-only, last; its output is ignored; shipped disabled; §12).
 
-**UserPromptSubmit** (15 s): Jev route, then context watch. FlowObserve will observe here once wired (§12). Ruflo's own route hook is dropped.
+**UserPromptSubmit** (15 s): Jev route, then context watch, then FlowObserve if enabled (observe-only, §12). Ruflo's own route hook is dropped.
 
 **Other events:**
 - Ruflo learning and memory hooks: post-edit, session restore/end, memory import (no sync), PreCompact persist, SubagentStop post-task.
 - Jev compaction: `PreCompact` runs `compact_keep.py`, `SessionStart(compact)` runs `compact_restore.py`, and `SessionStart(clear)` runs `handoff_restore.py` (for `/handoff`).
-- *(planned)* FlowObserve's other events (session, subagent, stop, notification, permission, compact).
+- *(optional)* FlowObserve's own hooks for other events, installed by FlowObserve itself (§12).
 
 **Rules for the chain:**
 - A deny beats an ask, and a stage's "allow" is ignored.
@@ -229,7 +229,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 |---|---|
 | `~/.claude/` (settings, skills, agents, commands, hooks, jev code and logs, ruflo helpers, plugins, Claude memory per project) | `projects/<name>` |
 | `~/.claude/DryasWorkflow.md` (this file) | `CLAUDE.md` (workspace rules, inherited by every project) |
-| `ruflo` CLI (nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite, once built) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, **Ruflo memory**) |
+| `ruflo` CLI (nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, **Ruflo memory**) |
 | `~/.zshrc` (`OPENROUTER_API_KEY`, guarded cache block, `dev` alias) | `_tools/` (settings_merge.py, relink_claude.py) |
 | | `projects/flowobserve` (the observer app) |
 | | `docs/` (specs, plans, reports, backup copy of this file), `_archive/` |
@@ -247,18 +247,10 @@ If the gate logs `JevUnavailable` inside Orca, Orca's environment lacks `OPENROU
 
 ## 12. FlowObserve (observer)
 
-A separate observer app (closed source, in development). The workflow runs fully without it.
+An optional, separate observer app (closed source). The workflow runs fully without it, and it is not part of this repo.
 
-- **Status:** design approved, not built. Until `fo-hook` ships, no observer runs in the hook chain.
-- **Architecture:**
-  - `fo-hook` (Python stdlib, <30 ms, never blocks): hook events + statusline `rate_limits` -> redact (Jev rules) -> append to `~/.flowobserve/spool/YYYY-MM-DD.jsonl`.
-  - `fo-server` (Node + TypeScript, pnpm, launchd): tails spool + Jev logs -> pure reducer -> WebSocket `/ws`, SSE `/events`, static PWA; SQLite snapshots.
-- **Contract with the workflow:**
-  - Observe-only: `fo-hook` exits 0 with no output, no network, fails silent.
-  - Binds to `127.0.0.1:4317` only.
-  - Writes only its spool and SQLite. Reads Jev logs and `.orchestrate/PLAN.md`, never writes them.
-  - Stage inference reads the workflow's own signals (brainstorm skill, `/wplan`, Jev judge/escalation logs, executor dispatch, `/wreview`, `/commit`), so a change to the loop in §4 or to Jev log formats must be mirrored in FlowObserve's reducer.
-- **Wiring (when `fo-hook` ships):** add an observe-only `flowobserve` stage at the end of `pretool` and `prompt` in `jev/chain.json`, plus direct entries for the other events via `settings_merge.py` (dry-run, approval, backup). Then update §5 and this section.
+- If installed, it adds an observe-only `flowobserve` stage at the end of `pretool` and `prompt` in `jev/chain.json` (shipped disabled here) and its own hooks for other events. Its output is ignored; it never blocks or changes anything.
+- It reads the workflow's own signals (Jev logs, `.orchestrate/PLAN.md`) and never writes them.
 
 ## 13. Known trade-offs
 

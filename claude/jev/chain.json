@@ -3,10 +3,11 @@
     {"name": "scope-lock", "component": "core", "cmd": ["/usr/bin/python3", "$HOME/.claude/jev/scope_lock.py"], "match": "Edit|Write|MultiEdit|NotebookEdit", "timeout": 3},
     {"name": "jev-gate", "component": "jev", "cmd": ["/usr/bin/python3", "$HOME/.claude/jev/gate.py"], "match": "Bash|Write|Edit", "timeout": 5},
     {"name": "ruflo-pre-bash", "component": "ruflo", "cmd": ["/bin/sh", "$HOME/.claude/ruflo/run.sh", "node", "$HOME/.claude/ruflo/helpers/hook-handler.cjs", "pre-bash"], "requires_path": "$DRYAS_DATA_ROOT", "timeout": 5, "match": "Bash", "observe": true},
-    {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["/bin/sh", "$HOME/.flowobserve/hook.sh"], "timeout": 2, "observe": true}
+    {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["/usr/bin/python3", "-S", "$HOME/.flowobserve/bin/fo_hook.py"], "timeout": 1, "observe": true}
   ],
   "prompt": [
     {"name": "jev-route", "component": "jev", "cmd": ["/usr/bin/python3", "$HOME/.claude/jev/route.py"], "timeout": 5},
-    {"name": "context-watch", "component": "core", "cmd": ["/usr/bin/python3", "$HOME/.claude/jev/context_watch.py"], "timeout": 2}
+    {"name": "context-watch", "component": "core", "cmd": ["/usr/bin/python3", "$HOME/.claude/jev/context_watch.py"], "timeout": 2},
+    {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["/usr/bin/python3", "-S", "$HOME/.flowobserve/bin/fo_hook.py"], "timeout": 1, "observe": true}
   ]
 }
