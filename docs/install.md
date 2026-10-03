@@ -28,9 +28,9 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code) installed fi
 | `--no-ruflo` | Do not install Ruflo |
 | `--no-superpowers` | Do not install Superpowers |
 | `--no-design` | Do not install Impeccable or UI UX Pro Max |
-| `--yes` | Answer yes to prompts |
-| `--force` | Overwrite existing files |
-| `--dry-run` | Print the plan, change nothing |
+| `--yes` | Run the third-party install commands without asking |
+| `--force` | Replace your existing files (originals are backed up first) |
+| `--dry-run` | Print the plan and the settings diff, change nothing (skips third-party installs and verify) |
 | `--uninstall` | Remove what the installer added |
 
 `--yes` does not skip the settings merge confirmation. The installer always asks before it edits `~/.claude/settings.json`.
@@ -61,11 +61,17 @@ Ruflo data goes to `$DRYAS_DATA_ROOT/ruflo/<namespace>`.
 
 ## Verify
 
-The installer ends with a verify step. It checks that each installed file is in place, that the settings entries exist, and that the Jev tests pass. The Jev tests need `pytest`. If `pytest` is missing, install it (`python3 -m pip install pytest`) and re-run the installer.
+The installer ends with a verify step. Each check prints `PASS`, `FAIL` or `SKIP`:
+
+- **Jev tests**: runs the tests in `~/.claude/jev/tests`. They need `pytest`. If `pytest` is missing the check prints `SKIP (install pytest to run the Jev tests)`; install it (`/usr/bin/python3 -m pip install pytest`) and re-run the installer.
+- **jev MCP server registered** (only with Jev): `claude mcp list` shows `jev:`.
+- **scope lock blocks an out-of-scope write**: a write outside an active task's scope is denied in a temporary folder.
+
+It ends with `verify: N failed`. The installer exits non-zero if any check failed.
 
 ## Upgrade
 
-Pull the repo and run `./install/install.sh` again. Existing files are kept unless you pass `--force`.
+Pull the repo and run `./install/install.sh` again. Files the installer added before are updated. Your own files are still kept unless you pass `--force`. You can add a component you skipped earlier (for example, re-run without `--no-ruflo`); one `--uninstall` later removes everything from all runs.
 
 ## Uninstall
 
@@ -73,7 +79,7 @@ Pull the repo and run `./install/install.sh` again. Existing files are kept unle
 ./install/install.sh --uninstall
 ```
 
-This removes exactly what the installer added, and only the settings entries it added. A backup of your settings from before the merge is kept. Use it as a manual fallback if something looks wrong.
+This removes exactly what the installer added: its files and folders, the Dryas block in `CLAUDE.md`, only the settings entries it added, the `jev` MCP registration, and the data root if it created it and it is still empty. Files replaced with `--force` are restored from their backup. A backup of your settings from before the merge (`~/.claude/settings.json.dryas-bak-<timestamp>`) is kept, and its path is printed. Use it as a manual fallback if something looks wrong.
 
 ## Troubleshooting
 
