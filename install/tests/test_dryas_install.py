@@ -154,6 +154,18 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(self.snapshot(), [".claude"])
         self.assertEqual(self.calls, [])
 
+    def test_install_creates_missing_claude_dir_and_uninstall_removes_it(self):
+        self.cd.rmdir()
+        self.install(["core", "jev", "ruflo"])
+        self.assertTrue(json.loads((self.cd / ".dryas-installed.json").read_text())["claude_dir_created"])
+        di.uninstall(self.cd)
+        self.assertFalse(self.cd.exists())
+
+    def test_dry_run_with_missing_claude_dir_creates_nothing(self):
+        self.cd.rmdir()
+        self.install(["core", "jev", "ruflo"], dry=True)
+        self.assertEqual(self.snapshot(), [])
+
     def test_uninstall_without_record(self):
         self.assertEqual(di.uninstall(self.cd), 0)
 

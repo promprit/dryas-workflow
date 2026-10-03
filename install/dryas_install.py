@@ -290,6 +290,9 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
     rec = load_record(cd)
     if dry:
         print("dry run: nothing will be written")
+    elif not cd.exists():
+        cd.mkdir(parents=True)
+        rec["claude_dir_created"] = True
     rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping)
     for n, (data, mode) in helpers.items():
         _put(cd, "ruflo/helpers/" + n, rec, force, ts, rep, dry, data=data)
@@ -378,6 +381,8 @@ def uninstall(cd: Path) -> int:
     if "jev" in rec.get("mcp", []):
         run(["claude", "mcp", "remove", "--scope", "user", "jev"])
     (cd / RECORD).unlink()
+    if rec.get("claude_dir_created") and cd.is_dir() and not cd.is_symlink() and not os.listdir(str(cd)):
+        cd.rmdir()
     print("uninstalled")
     if rec.get("settings_backup"):
         print("settings backup from before the merge (manual fallback): %s" % rec["settings_backup"])
