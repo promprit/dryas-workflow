@@ -83,6 +83,8 @@ Pull the repo and run `./install/install.sh` again. Files the installer added be
 
 This removes exactly what the installer added: its files and folders, the Dryas block in `CLAUDE.md`, only the settings entries it added, the `jev` MCP registration, and the data root if it created it and it is still empty. Files replaced with `--force` are restored from their backup. A backup of your settings from before the merge (`~/.claude/settings.json.dryas-bak-<timestamp>`) is kept, and its path is printed. Use it as a manual fallback if something looks wrong.
 
+Uninstall removes only settings values that still match what the installer wrote. A value changed afterwards, by you or by Claude Code itself (for example it may rewrite `"model": "opus"` to `"opus[1m]"`), counts as your edit and is kept.
+
 ## Troubleshooting
 
 - **Jev shows `JevUnavailable`.** Apps launched from the GUI do not read your shell profile, so they do not see `OPENROUTER_API_KEY`. Launch Claude Code from a terminal, or set the variable in the app's environment.

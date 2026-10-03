@@ -4,7 +4,6 @@ import argparse
 import datetime
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -16,10 +15,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import ruflo_helpers  # noqa: E402
 import settings_merge as sm  # noqa: E402
+from claude_md_block import START, END, claude_md, remove_claude_md  # noqa: E402,F401
 
 RECORD = ".dryas-installed.json"
 SKIP = {"settings.fragment.json", "CLAUDE.md.template"}
-START, END = "<!-- dryas:start -->", "<!-- dryas:end -->"
 PY = "/usr/bin/python3"
 SHIM_LINK = "ruflo/mcp-shim/dist"
 KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUTER_API_KEY=...  "
@@ -169,44 +168,6 @@ def copy_files(repo: Path, cd: Path, comps: List[str], rec: dict, force: bool, t
     return rep
 
 
-def claude_md(cd: Path, template_text: str, rec: dict) -> None:
-    p = cd / "CLAUDE.md"
-    block = START + "\n" + template_text.strip() + "\n" + END + "\n"
-    if not p.exists():
-        rec["claude_md_created"] = True
-        text = ""
-    else:
-        rec.setdefault("claude_md_created", False)
-        text = p.read_text()
-    if START in text and END in text:
-        new = re.sub(re.escape(START) + r".*?" + re.escape(END) + r"\n?", lambda m: block, text, count=1, flags=re.S)
-    else:
-        sep = ""
-        if text and not text.endswith("\n\n"):
-            sep = "\n" if text.endswith("\n") else "\n\n"
-        rec["claude_md_sep"] = sep
-        new = text + sep + block
-    if new != text:
-        p.write_text(new)
-    rec["claude_md"] = True
-
-
-def _remove_claude_md(cd: Path, rec: dict) -> None:
-    p = cd / "CLAUDE.md"
-    if not rec.get("claude_md") or not p.exists():
-        return
-    text = p.read_text()
-    body = re.escape(START) + r".*?" + re.escape(END) + r"\n?"
-    sep = rec.get("claude_md_sep", "")
-    new, n = re.subn(re.escape(sep) + body, "", text, count=1, flags=re.S) if sep else (text, 0)
-    if not n:
-        new = re.sub(body, "", text, count=1, flags=re.S)
-    if rec.get("claude_md_created") and not new.strip():
-        p.unlink()
-    elif new != text:
-        p.write_text(new)
-
-
 def _mapping(comps: List[str], home: Path) -> Dict[str, str]:
     m = {"HOME": str(home), "DRYAS_DATA_ROOT": os.environ.get("DRYAS_DATA_ROOT", str(home / ".dryas"))}
     if "ruflo" in comps:
@@ -235,7 +196,7 @@ def _unique(p: Path) -> Path:
 
 
 def apply_settings(repo: Path, cd: Path, comps: List[str], rec: dict, home: Path, ts: str = "",
-                   mapping: Optional[Dict[str, str]] = None, dry: bool = False) -> None:
+                   mapping: Optional[Dict[str, str]] = None, dry: bool = False, yes: bool = False) -> None:
     mapping = mapping if mapping is not None else _mapping(comps, home)
     frag = _fragment(repo, comps, mapping)
     path = cd / "settings.json"
@@ -251,7 +212,7 @@ def apply_settings(repo: Path, cd: Path, comps: List[str], rec: dict, home: Path
     if dry:
         print("dry run: settings.json not changed")
         return
-    if not confirm("Apply these settings changes?"):
+    if not (yes or confirm("Apply these settings changes?")):
         print("settings.json not changed")
         return
     if path.exists():
@@ -275,7 +236,8 @@ def _ts() -> str:
     return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
-def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = False, dry: bool = False) -> int:
+def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = False, dry: bool = False,
+            yes: bool = False) -> int:
     repo, cd, home, ts = Path(repo), Path(cd), Path(home), _ts()
     sm.load_settings(cd / "settings.json")  # malformed settings.json aborts here, before any write
     mapping = _mapping(comps, home)
@@ -309,7 +271,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
             print("would add or update the Dryas block in CLAUDE.md")
     elif tpl.exists():
         claude_md(cd, tpl.read_text(), rec)
-    apply_settings(repo, cd, comps, rec, home, ts, mapping, dry)
+    apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes)
     if "ruflo" in comps:
         root = Path(mapping["DRYAS_DATA_ROOT"])
         if dry:
@@ -367,7 +329,7 @@ def uninstall(cd: Path) -> int:
         d = cd / rel
         if d.is_dir() and not d.is_symlink() and not os.listdir(str(d)):
             d.rmdir()
-    _remove_claude_md(cd, rec)
+    remove_claude_md(cd, rec)
     if spath.exists():
         new = sm.unmerge(cur, rec.get("settings", {}))
         if rec.get("settings_created") and new == {}:
@@ -488,7 +450,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     a = ap.parse_args(argv)
     comps = [c for c in getattr(a, "components", "").split(",") if c]
     if a.cmd == "install":
-        return install(Path(a.repo), Path(a.claude_dir), comps, home=Path.home(), force=a.force, dry=a.dry_run)
+        return install(Path(a.repo), Path(a.claude_dir), comps, home=Path.home(), force=a.force, dry=a.dry_run, yes=a.yes)
     if a.cmd == "thirdparty":
         return thirdparty(comps, a.yes)
     if a.cmd == "uninstall":
