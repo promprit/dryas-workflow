@@ -105,7 +105,8 @@ def _mkdirs(cd: Path, d: Path, rec: dict) -> None:
 
 
 def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bool,
-         data: Optional[bytes] = None, link: Optional[str] = None, mode_src: Optional[Path] = None) -> None:
+         data: Optional[bytes] = None, link: Optional[str] = None, mode_src: Optional[Path] = None,
+         mode: Optional[int] = None) -> None:
     dest = cd / rel
     backup = None
     if os.path.lexists(str(dest)):
@@ -143,6 +144,8 @@ def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bo
         dest.write_bytes(data)
         if mode_src is not None:
             shutil.copymode(str(mode_src), str(dest))
+        if mode is not None:
+            os.chmod(str(dest), mode)
     rec["files"][rel] = {"backup": backup}
     rep["written"].append(rel)
 
@@ -295,8 +298,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
         rec["claude_dir_created"] = True
     rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping)
     for n, (data, mode) in helpers.items():
-        _put(cd, "ruflo/helpers/" + n, rec, force, ts, rep, dry, data=data)
-        os.chmod(str(cd / "ruflo" / "helpers" / n), mode)
+        _put(cd, "ruflo/helpers/" + n, rec, force, ts, rep, dry, data=data, mode=mode)
     tpl = repo / "claude" / "CLAUDE.md.template"
     if dry:
         for rel in rep["new"]:

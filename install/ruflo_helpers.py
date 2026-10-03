@@ -9,6 +9,8 @@ from typing import Dict, List, Tuple
 HELPERS = ("auto-memory-hook.mjs", "hook-handler.cjs", "intelligence.cjs", "memory.cjs", "router.cjs", "session.cjs")
 INIT_FLAGS = ["init", "--only-claude", "--no-global", "--no-mods", "--no-plugin-install", "--no-skills-sh",
               "--no-signup", "--no-codex-detect"]
+INIT_TIMEOUT = 300
+HINT = " (patches are pinned to ruflo 3.51.0; install that version or use --no-ruflo)"
 
 PATCHES = [
     ("hook-handler.cjs",
@@ -43,14 +45,14 @@ def init_argv(ruflo_bin: str) -> List[str]:
     return [ruflo_bin] + INIT_FLAGS
 
 
-def patch_text(name: str, text: str, strict: bool = False) -> str:
+def patch_text(name: str, text: str, strict: bool = True) -> str:
     """Apply the file's patches. Each anchor must occur at most once; strict also demands exactly once
     (non-strict still raises if none of the file's anchors is found)."""
     mine = [(old, new) for f, old, new in PATCHES if f == name]
     counts = [text.count(old) for old, _ in mine]
     for (old, _), n in zip(mine, counts):
         if n > 1 or (n == 0 and (strict or not any(counts))):
-            raise HelperError("%s: patch anchor must occur exactly once (found %d): %r" % (name, n, old))
+            raise HelperError("%s: patch anchor must occur exactly once (found %d): %r%s" % (name, n, old, HINT))
     for (old, new), n in zip(mine, counts):
         if n:
             text = text.replace(old, new)
@@ -68,12 +70,15 @@ def generate(ruflo_bin: str) -> Dict[str, Tuple[bytes, int]]:
         env = dict(os.environ, HOME=str(t / "home"), RUFLO_NO_SKILLS_SH="1", RUFLO_NO_AUTO_ENABLE="1",
                    RUFLO_DAEMON_AUTOSTART="0")
         try:
-            rc = subprocess.run(init_argv(ruflo_bin), cwd=str(t / "proj"), env=env, stdin=subprocess.DEVNULL,
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+            r = subprocess.run(init_argv(ruflo_bin), cwd=str(t / "proj"), env=env, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=INIT_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            raise HelperError("ruflo init timed out after %d s" % INIT_TIMEOUT)
         except OSError as e:
             raise HelperError("could not run %s: %s" % (ruflo_bin, e))
-        if rc != 0:
-            raise HelperError("ruflo init failed (exit %d)" % rc)
+        if r.returncode != 0:
+            tail = "\n".join((r.stderr or b"").decode("utf-8", errors="replace").splitlines()[-10:])
+            raise HelperError("ruflo init failed (exit %d)%s" % (r.returncode, ": " + tail if tail else ""))
         out = {}
         for n in HELPERS:
             p = t / "proj" / ".claude" / "helpers" / n

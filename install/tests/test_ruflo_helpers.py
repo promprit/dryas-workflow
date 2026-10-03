@@ -1,9 +1,11 @@
-import contextlib, io, json, sys, unittest
+import contextlib, io, json, os, stat, sys, tempfile, unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import dryas_install as di
 import ruflo_helpers as rh
 from test_dryas_install import InstallTest as _Base
+
+REAL_GENERATE = rh.generate  # captured before any setUp monkeypatches it
 
 NAMES = ("auto-memory-hook.mjs", "hook-handler.cjs", "intelligence.cjs", "memory.cjs", "router.cjs", "session.cjs")
 
@@ -36,9 +38,9 @@ class PatchTableTest(unittest.TestCase):
             self.assertEqual(rh.patch_text(n, expected_src(n)), expected(n))
 
     def test_patch_text_exact_replacement(self):
-        out = rh.patch_text("intelligence.cjs", "const SESSION_DIR = path.join(PROJECT_ROOT, '.claude-flow', 'sessions');\n")
+        out = rh.patch_text("intelligence.cjs", "const SESSION_DIR = path.join(PROJECT_ROOT, '.claude-flow', 'sessions');\n", strict=False)
         self.assertEqual(out, "const SESSION_DIR = path.join(DATA_ROOT, '.claude-flow', 'sessions');\n")
-        out = rh.patch_text("hook-handler.cjs", "function spawnDetachedHookRefresh(subcommand) {\n")
+        out = rh.patch_text("hook-handler.cjs", "function spawnDetachedHookRefresh(subcommand) {\n", strict=False)
         self.assertTrue(out.startswith("function spawnDetachedHookRefresh(subcommand) {\n  return; // LIFT PATCH:"))
 
     def test_unpatched_file_passthrough(self):
@@ -50,6 +52,12 @@ class PatchTableTest(unittest.TestCase):
         a = rh.PATCHES[0][1]
         with self.assertRaises(rh.HelperError):
             rh.patch_text("hook-handler.cjs", a + a + rh.PATCHES[1][1])
+
+    def test_strict_is_default_and_hint_in_message(self):
+        with self.assertRaises(rh.HelperError) as cm:
+            rh.patch_text("intelligence.cjs", "const SESSION_DIR = path.join(PROJECT_ROOT, '.claude-flow', 'sessions');\n")
+        self.assertIn("pinned to ruflo 3.51.0", str(cm.exception))
+        self.assertIn("--no-ruflo", str(cm.exception))
 
 
 def expected_src(n):
@@ -146,6 +154,84 @@ class HelperInstallTest(_Base):
         di.uninstall(self.cd)
         for n in NAMES:
             self.assertFalse((self.hdir / n).exists())
+
+    def test_skipped_user_helper_keeps_mode(self):
+        rh.generate = lambda b: fake(mode=0o755)
+        self.hdir.mkdir(parents=True)
+        mine = self.hdir / "router.cjs"
+        mine.write_text("mine")
+        os.chmod(str(mine), 0o600)
+        self.assertEqual(self.install(["core", "ruflo"]), 0)
+        self.assertEqual(mine.read_text(), "mine")
+        self.assertEqual(stat.S_IMODE(mine.stat().st_mode), 0o600)
+
+    def test_dangling_symlink_helper_does_not_crash(self):
+        rh.generate = lambda b: fake(mode=0o755)
+        self.hdir.mkdir(parents=True)
+        os.symlink(str(self.cd / "nowhere"), str(self.hdir / "memory.cjs"))
+        self.assertEqual(self.install(["core", "ruflo"]), 0)
+        self.assertTrue(os.path.islink(str(self.hdir / "memory.cjs")))
+        self.assertTrue((self.cd / ".dryas-installed.json").exists())
+
+
+FAKE_OK = "#!/bin/sh\nmkdir -p .claude/helpers\ncd .claude/helpers\n%s"
+
+
+class GenerateTest(unittest.TestCase):
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.made = []
+        real = tempfile.mkdtemp
+        self._orig = tempfile.mkdtemp
+        tempfile.mkdtemp = lambda *a, **k: self.made.append(real(*a, **k)) or self.made[-1]
+        self.addCleanup(setattr, tempfile, "mkdtemp", self._orig)
+
+    def script(self, body):
+        p = self.d / "ruflo"
+        p.write_text("#!/bin/sh\n" + body)
+        os.chmod(str(p), 0o755)
+        return str(p)
+
+    def files(self, names, mode=644):
+        return "".join("echo x > %s; chmod %d %s\n" % (n, mode, n) for n in names)
+
+    def no_temp_left(self):
+        self.assertTrue(self.made)
+        for m in self.made:
+            self.assertFalse(os.path.exists(m))
+
+    def test_success(self):
+        b = self.script("mkdir -p .claude/helpers; cd .claude/helpers\n" + self.files(NAMES[:5]) + self.files(NAMES[5:], 755))
+        out = REAL_GENERATE(b)
+        self.assertEqual(sorted(out), sorted(NAMES))
+        self.assertEqual(out[NAMES[0]], (b"x\n", 0o644))
+        self.assertEqual(out[NAMES[5]][1], 0o755)
+        self.no_temp_left()
+
+    def test_nonzero_exit_includes_stderr(self):
+        b = self.script("echo boom-detail >&2; exit 3\n")
+        with self.assertRaises(rh.HelperError) as cm:
+            REAL_GENERATE(b)
+        self.assertIn("boom-detail", str(cm.exception))
+        self.assertIn("3", str(cm.exception))
+        self.no_temp_left()
+
+    def test_missing_helper_raises(self):
+        b = self.script("mkdir -p .claude/helpers; cd .claude/helpers\n" + self.files(NAMES[:5]))
+        with self.assertRaises(rh.HelperError) as cm:
+            REAL_GENERATE(b)
+        self.assertIn(NAMES[5], str(cm.exception))
+        self.no_temp_left()
+
+    def test_timeout_raises(self):
+        b = self.script("sleep 5\n")
+        old = rh.INIT_TIMEOUT
+        rh.INIT_TIMEOUT = 0.5
+        self.addCleanup(setattr, rh, "INIT_TIMEOUT", old)
+        with self.assertRaises(rh.HelperError) as cm:
+            REAL_GENERATE(b)
+        self.assertIn("timed out", str(cm.exception))
+        self.no_temp_left()
 
 
 del _Base  # keep only HelperInstallTest's own copy collected
