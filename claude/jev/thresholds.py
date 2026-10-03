@@ -26,7 +26,7 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     "commit": {"min_confidence": 0.7},
     "compact": {"keep_above": 0.5},
     "handoff": {"keep_min": 0.5},
-    "context": {"warn_pct": 0.55},
+    "context": {"warn_pct": 0.65},
 }
 
 

@@ -2,7 +2,7 @@
   "core": {
     "model": "opus",
     "env": {
-      "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "65"
+      "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75"
     },
     "permissions": {
       "allow": [

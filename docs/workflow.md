@@ -159,14 +159,14 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   | commit | 0.7 |
   | compact | keep_above 0.5 |
   | handoff | keep_min 0.5 |
-  | context | warn_pct 0.55 |
+  | context | warn_pct 0.65 |
 
 - **Logs** go to `~/.claude/jev/logs/*.jsonl` (gate, route, mcp, calls, escalations, overrides, compact, compare). They hold decisions and confidences only, never payloads; a Bash call logs just the first word of the command.
 - **Compaction.**
-  - `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=65` starts auto-compaction at about 65%.
-  - **Context warning** (`context_watch.py`, prompt chain stage): at 55% and again at 60% Claude tells you to run `/handoff` then `/clear`. Window = `JEV_CONTEXT_WINDOW`, else 1M if the model is `[1m]` or usage went past 200k, else 200k. Tiers reset after a compaction.
+  - `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75` starts auto-compaction at about 75%.
+  - **Context warning** (`context_watch.py`, prompt chain stage): at 65% and again at 70% Claude tells you to run `/handoff` then `/clear`. Window = `JEV_CONTEXT_WINDOW`, else 1M if the model is `[1m]` or usage went past 200k, else 200k. Tiers reset after a compaction.
   - **Manual (preferred, no lossy summary): `/handoff` then `/clear`.** `handoff.py` reads the whole transcript (deduped by uuid) into items: real user messages, Claude replies, subagent hand-backs, and one line per tool call with a trimmed result. Always kept without Jev: last 10 user messages, files touched, latest result per test command, commits. Jev scores the newest 200 other items keep/drop (40 per call, 60 s deadline). Saved redacted to `~/.claude/jev/handoff/<project>-<hash>.md` (0600, keyed by the main repo root so worktrees match, pruned after 24 h). `/clear` fires `SessionStart(clear)` -> `handoff_restore.py` injects it (only if under 30 min old and same project) and deletes it.
-  - **Automatic (safety net):** at 65% Claude Code compacts and writes its own summary (kept short by the `~/.claude/CLAUDE.md` compact instructions). `PreCompact` runs the same handoff engine (`compact_keep.py`, 20 s deadline, hook timeout 30 s) and `SessionStart(compact)` re-injects the scored items word for word.
+  - **Automatic (safety net):** at 75% Claude Code compacts and writes its own summary (kept short by the `~/.claude/CLAUDE.md` compact instructions). `PreCompact` runs the same handoff engine (`compact_keep.py`, 20 s deadline, hook timeout 30 s) and `SessionStart(compact)` re-injects the scored items word for word.
   - If Jev is down or the deadline passes, the newest 30 unscored items are kept instead, and the file says so.
   - This is our own code; **jev-use is not used** (it's unofficial).
 - **`/tune`** (weekly) reports:

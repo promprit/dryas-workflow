@@ -139,7 +139,7 @@ if __name__ == "__main__":
 class HandoffThresholdsTest(unittest.TestCase):
     def test_defaults(self):
         self.assertEqual(thresholds.DEFAULTS["handoff"]["keep_min"], 0.5)
-        self.assertEqual(thresholds.DEFAULTS["context"]["warn_pct"], 0.55)
+        self.assertEqual(thresholds.DEFAULTS["context"]["warn_pct"], 0.65)
 
     def test_keep_min_range(self):
         self.assertIsNone(thresholds.validate("handoff.keep_min", 0.7))

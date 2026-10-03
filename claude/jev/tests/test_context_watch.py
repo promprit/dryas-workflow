@@ -31,7 +31,8 @@ class WatchTest(unittest.TestCase):
         for k in ENVS:
             os.environ.pop(k, None)
         os.environ["JEV_HANDOFF_DIR"] = os.path.join(self.tmp, "handoff")
-        os.environ["JEV_THRESHOLDS"] = os.path.join(self.tmp, "none.json")
+        os.environ["JEV_THRESHOLDS"] = os.path.join(self.tmp, "th.json")
+        json.dump({"context": {"warn_pct": 0.55}}, open(os.environ["JEV_THRESHOLDS"], "w"))  # pin: tier logic, not the default
         self.tp = os.path.join(self.tmp, "t.jsonl")
 
     def tearDown(self):
