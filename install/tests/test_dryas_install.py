@@ -44,7 +44,7 @@ class InstallTest(unittest.TestCase):
         rh.generate = lambda ruflo_bin: {n: (("".join(o for f, o, _ in rh.PATCHES if f == n) or "x\n").encode(), 0o644) for n in rh.HELPERS}
 
     def install(self, comps, **kw):
-        return di.install(self.repo, self.cd, comps, home=self.home, force=kw.get("force", False), dry=kw.get("dry", False))
+        return di.install(self.repo, self.cd, comps, home=self.home, force=kw.get("force", False), dry=kw.get("dry", False), yes=kw.get("yes", False))
 
     def snapshot(self):
         return sorted(str(p.relative_to(self.home)) for p in self.home.rglob("*"))
@@ -148,6 +148,19 @@ class InstallTest(unittest.TestCase):
         self.install(["core"])
         self.assertFalse((self.cd / "settings.json").exists())
         self.assertTrue((self.cd / "agents/executor.md").exists())
+
+    def test_yes_skips_settings_prompt(self):
+        di.confirm = lambda prompt: False
+        self.install(["core"], yes=True)
+        self.assertTrue((self.cd / "settings.json").exists())
+
+    def test_main_yes_flag_reaches_apply_settings(self):
+        def no_prompt(prompt):
+            raise AssertionError("confirm called despite --yes")
+        di.confirm = no_prompt
+        rc = di.main(["install", "--repo", str(self.repo), "--claude-dir", str(self.cd), "--components", "core", "--yes"])
+        self.assertEqual(rc, 0)
+        self.assertTrue((self.cd / "settings.json").exists())
 
     def test_dry_run_writes_nothing(self):
         self.install(["core", "jev", "ruflo"], dry=True)
