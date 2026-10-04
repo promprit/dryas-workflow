@@ -1,8 +1,10 @@
-# Windows support — design
+# Windows and Codex support — design
 
 Date: 2026-10-05
 Status: approved in brainstorming, awaiting spec review
-Sub-project: A of 2 (B = Codex as main harness, separate spec, built after this one)
+Scope: Part A (Windows support) and Part B (Codex as main harness, rules + MCP). One plan; Part A tasks first, Part B builds on the portable installer from Part A.
+
+# Part A — Windows support
 
 ## Goal
 
@@ -107,9 +109,75 @@ Cannot be automated; done once before release by the maintainer or a tester: run
 - `README.md`: CI status badge; mention Windows support.
 - `~/.claude/DryasWorkflow.md` (and its backup) only if a user-visible rule changes.
 
-## Out of scope
+## Out of scope (Part A)
 
-- Codex as main harness (sub-project B, its own spec).
 - FlowObserve on Windows.
 - `.githooks/pre-commit` (maintainer-only).
 - Installing Python, Node or Git for the user.
+
+# Part B — Codex as main harness (rules + MCP)
+
+## Goal
+
+People who use Codex (CLI, IDE extension or desktop app) as their main agent get the Dryas Workflow process rules, the workflow commands as Codex skills, and the Jev and Ruflo MCP servers, from the same installer, on every OS Part A supports.
+
+## Codex facts this design relies on (checked 2026-10-05)
+
+- Config: `~/.codex/config.toml`, or `$CODEX_HOME/config.toml` when `CODEX_HOME` is set. MCP servers are `[mcp_servers.<name>]` tables with `command`, `args`, `env`; `codex mcp add` writes them. The CLI, IDE extension and desktop app share this file.
+- Global instructions: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`); `AGENTS.override.md` wins if present. Combined instructions are capped at 32 KiB by default (`project_doc_max_bytes`).
+- Skills: user-level skills live in `~/.agents/skills/<name>/SKILL.md`, with the same `name` / `description` frontmatter as Claude skills. Invoked with `$name`, from `/skills`, or chosen automatically by description.
+- Codex also supports hooks. They are not used in this design (see Out of scope).
+
+## Design
+
+### Installer target
+
+- New flag `--harness claude|codex|both`, default `claude` (existing behaviour unchanged).
+- Codex target directory: `$CODEX_HOME` if set, else `~/.codex`. Skills target: `~/.agents/skills`.
+- Reuses the Part A installer core: same `.dryas-installed.json` record format (one record per target directory), same uninstall, same `{{PY}}` / `{{CD}}` rendering, same preflight. Preflight for the Codex target requires the `codex` CLI on `PATH`.
+- Components for Codex: `core` (AGENTS.md block, skills), `jev` (MCP server), `ruflo` (MCP server). `superpowers` and `design` are not installed for Codex (see below); passing them with `--harness codex` prints a note and is otherwise ignored.
+
+### AGENTS.md block
+
+- `install/claude_md_block.py` is generalised to take a target path and template, keeping the same start/end markers logic. It inserts or replaces one marker-delimited block in `~/.codex/AGENTS.md` (creating the file if missing) and removes it cleanly on uninstall.
+- Template: `codex/AGENTS.md.template`. Content: the process rules that apply in any harness (Dryas Workflow §1 and §16: brainstorm first, worktree per multi-step task, plan as a file, TDD, two-stage review, verification before completion, commit only after review, never push without asking), the Jev and Ruflo usage rules, and a pointer to the full workflow reference. It must stay well under the 32 KiB cap; a test asserts the rendered block is under 8 KiB.
+
+### Skills
+
+- New folder `codex/skills/` with `orchestrate`, `wreview`, `wplan`, `commit`, `handoff` and `tune`, each a `SKILL.md` in the shared format, copied to `~/.agents/skills/<name>/`.
+- Bodies are adapted from the Claude versions where they name Claude-only features: Codex uses its own sub-agent mechanism instead of the Agent tool and the `executor` agent; the model rule is "cheaper model first, escalate on failure", with every escalation logged via the `jev` MCP tool `log_escalation`; commit messages and plans name the harness. Python calls use `{{PY}}` / `{{CD}}` like the Claude versions.
+- `handoff` keeps only the parts that do not need Claude Code hooks (saving a handoff file); automatic restore on session start is a Claude Code hook and is not available.
+- A skill directory that already exists and is not in the record is skipped and reported, unless `--force` (same rule as Claude files).
+
+### MCP servers
+
+- `jev`: command `{{PY}}`, args `[<CD>/jev/jev_mcp.py]`, where `<CD>` is the Claude directory installed by Part A (Jev code is installed once and shared by both harnesses; `--harness codex` alone still installs the Jev files under the Claude directory).
+- `ruflo`: command `node`, args `[<CD>/ruflo/mcp-shim/bin/cli.js, mcp, start]`, with the same `DRYAS_DATA_ROOT` and Ruflo env values as the Claude settings fragment.
+- Written with `codex mcp add <name> -- <command> <args...>` (env via its flags). If `codex mcp add` is missing or fails, the installer writes the table itself between `# >>> dryas-workflow >>>` / `# <<< dryas-workflow <<<` markers in `config.toml`, never touching anything outside the markers. The method used is stored in the record; uninstall uses `codex mcp remove` or removes the marked region accordingly.
+- Billing rule unchanged: no `ANTHROPIC_API_KEY` is written; Jev reads only `OPENROUTER_API_KEY` from the environment.
+
+### Superpowers for Codex
+
+The installer does not install Superpowers for Codex. It checks whether Superpowers' skills are present under `~/.agents/skills` (or Codex's plugin locations) and, if not, prints Superpowers' documented Codex install step. Nothing is fetched from third parties for the Codex target.
+
+### Docs
+
+- `docs/harnesses.md`: Codex moves from "Coming" to supported (rules + MCP), with a clear list of what Codex users do not get.
+- `docs/install.md`: `--harness` flag, Codex prerequisites.
+- `~/.claude/DryasWorkflow.md` §16 and its backup: updated to say the installer sets up Codex.
+
+## Testing (Part B)
+
+- Fake `codex` CLI on `PATH` that records `mcp add` / `mcp remove` calls, plus a variant that fails so the TOML fallback runs.
+- AGENTS.md block: insert into missing file, insert into existing file with user content, replace on re-install, remove on uninstall leaving user content byte-identical; rendered block size under 8 KiB.
+- Skills copy and uninstall; existing unrecorded skill directory skipped without `--force`.
+- `config.toml` fallback: marked region added, re-install idempotent, uninstall restores the file byte-identical to before.
+- `--harness both`: one run produces both targets; uninstall removes both.
+- Runs in the same three-OS CI matrix as Part A.
+
+## Out of scope (Part B)
+
+- Codex hooks (scope lock, Jev gate and route, context watch, compaction and handoff restore). Codex supports hooks, so this is a possible follow-up with its own design.
+- FlowObserve for Codex sessions.
+- The Sonnet → Opus → Fable ladder and the `executor` agent (Claude Code-specific).
+- Installing Superpowers, impeccable or ui-ux-pro-max for Codex.
