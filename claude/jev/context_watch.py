@@ -5,6 +5,7 @@ Tiers: once at warn_pct, once more at warn_pct+0.05; a tier never repeats within
 import hashlib
 import json
 import os
+import re
 import sys
 from typing import Any, Dict, Optional, Tuple
 
@@ -15,21 +16,37 @@ TAIL_BYTES = 2 * 1024 * 1024
 DEFAULT_WINDOW = 200000
 STEP = 0.05
 DEFAULT_AUTOCOMPACT = 95
+_VERSION = re.compile(r"(?:opus|sonnet)-(\d{1,2})(?!\d)(?:-(\d{1,2})(?!\d))?")
 
 
 def _state_dir() -> str:
     return os.path.join(os.environ.get("JEV_HANDOFF_DIR", os.path.expanduser("~/.claude/jev/handoff")), ".warned")
 
 
+def _million_model(model: str) -> bool:
+    """Models with a 1M window by default: Fable, Mythos, Opus/Sonnet 4.6 and later. Same rule as flowobserve's
+    millionModel() (server/src/transcript.ts); keep the two in step."""
+    if "fable" in model or "mythos" in model:
+        return True
+    # Versions are 1-2 digits so a date is never read as one: claude-sonnet-4-20250514 is 4.0, claude-3-opus-20240229 has no match.
+    m = _VERSION.search(model)
+    if not m:
+        return False  # Haiku and unknown ids: 200k; the > 200k usage rule still corrects a miss
+    major, minor = int(m.group(1)), int(m.group(2) or 0)
+    return major > 4 or (major == 4 and minor >= 6)
+
+
 def _window(model: str, max_tokens: int) -> int:
-    """JEV_CONTEXT_WINDOW if valid; else 1M when the model id says [1m] or usage ever exceeded 200k; else 200k."""
+    """JEV_CONTEXT_WINDOW if valid; else 1M when the model id says [1m], names a 1M-default model, or usage ever
+    exceeded 200k; else 200k."""
     try:
         w = int(os.environ.get("JEV_CONTEXT_WINDOW", ""))
         if w > 0:
             return w
     except ValueError:
         pass
-    return 1000000 if "[1m]" in model or max_tokens > DEFAULT_WINDOW else DEFAULT_WINDOW
+    big = "[1m]" in model or _million_model(model) or max_tokens > DEFAULT_WINDOW
+    return 1000000 if big else DEFAULT_WINDOW
 
 
 def _autocompact_pct() -> int:

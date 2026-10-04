@@ -123,6 +123,20 @@ class WatchTest(unittest.TestCase):
         write_jsonl(self.tp, [with_usage(560000, model="claude-opus-4-5[1m]")])
         self.assertIn("Context 56%", context_watch.run(self.ev()))
 
+    def test_window_model_table(self):
+        # Same table as flowobserve server/test/transcript.test.ts ("window: model table").
+        for m in ("claude-fable-5-1", "claude-mythos-5-1", "claude-opus-5-5", "claude-opus-5", "claude-opus-4-6",
+                  "claude-sonnet-5-5", "claude-sonnet-5", "claude-sonnet-4-6"):
+            self.assertEqual(context_watch._window(m, 10), 1000000, m)
+        for m in ("claude-haiku-4-5", "claude-haiku-4-5-20251001", "claude-opus-4-5-20251101", "claude-sonnet-4-5",
+                  "claude-opus-4-1", "claude-sonnet-4-20250514", "claude-3-opus-20240229",
+                  "claude-3-5-sonnet-20241022", "claude-3-7-sonnet-20250219", "", "m"):
+            self.assertEqual(context_watch._window(m, 10), 200000, m)
+
+    def test_window_1m_model_without_tag(self):
+        write_jsonl(self.tp, [with_usage(141000, model="claude-opus-5-5")])
+        self.assertIsNone(context_watch.run(self.ev()))  # 14% of 1M, not 70% of 200k
+
     def test_window_detected_1m_from_observed_usage_over_200k(self):
         write_jsonl(self.tp, [with_usage(250000), with_usage(130000)])
         self.assertIsNone(context_watch.run(self.ev()))  # 13% of 1M, not 65% of 200k
