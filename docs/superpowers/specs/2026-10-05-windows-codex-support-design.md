@@ -84,6 +84,7 @@ Unchanged in meaning:
 
 - **Python removed after install** (for example a deleted venv): the hook exits non-zero but not 2, so Claude Code shows a non-blocking error and the session continues. The next `verify` reports it.
 - **Spaces in paths:** the Ruflo plugin splits `RUFLO_HOOK_CLI_OVERRIDE` on spaces, so a space in the path to `~/.claude` breaks Ruflo. This is common on Windows (`C:\Users\Ana Silva`). On Windows the installer renders the 8.3 short path (`GetShortPathNameW`). The same applies to the interpreter path when Python lives under a path with spaces (`C:\Program Files\Python312`). If no short name exists (8.3 names can be disabled per volume), preflight refuses the Ruflo component with a clear message suggesting `--no-ruflo`. This is the current behaviour, now applied on every OS.
+- **Text encoding:** hook stdin is UTF-8, but Python on Windows reads it in the console code page, so every hook, chain stage and MCP command runs Python with `-X utf8`, and every installer read or write of a text file uses `encoding="utf-8"`.
 - **Line endings:** add `.gitattributes` with `* text=auto eol=lf` and `*.ps1 text eol=crlf`, so Windows clones do not break Python, JS or the sh wrapper.
 - **File modes:** `chmod 0o600`/`0o700` calls stay; on Windows they are effectively no-ops. Tests that assert modes skip that assertion on Windows.
 
@@ -111,7 +112,7 @@ Cannot be automated; done once before release by the maintainer or a tester: run
 
 ## Out of scope (Part A)
 
-- FlowObserve on Windows.
+- FlowObserve on Windows: its hook, Node server (launchd today) and installer live in the separate `flowobserve` repo and get their own spec there. This repo only guarantees the `flowobserve` chain stage is portable (rendered `"<PY>" -X utf8 <HOME>/.flowobserve/bin/fo_hook.py`, no shell).
 - `.githooks/pre-commit` (maintainer-only).
 - Installing Python, Node or Git for the user.
 
@@ -144,9 +145,9 @@ People who use Codex (CLI, IDE extension or desktop app) as their main agent get
 
 ### Skills
 
-- New folder `codex/skills/` with `orchestrate`, `wreview`, `wplan`, `commit`, `handoff` and `tune`, each a `SKILL.md` in the shared format, copied to `~/.agents/skills/<name>/`.
+- New folder `codex/skills/` with `orchestrate`, `wreview`, `wplan`, `commit` and `tune`, each a `SKILL.md` in the shared format, copied to `~/.agents/skills/<name>/`.
 - Bodies are adapted from the Claude versions where they name Claude-only features: Codex uses its own sub-agent mechanism instead of the Agent tool and the `executor` agent; the model rule is "cheaper model first, escalate on failure", with every escalation logged via the `jev` MCP tool `log_escalation`; commit messages and plans name the harness. Python calls use `{{PY}}` / `{{CD}}` like the Claude versions.
-- `handoff` keeps only the parts that do not need Claude Code hooks (saving a handoff file); automatic restore on session start is a Claude Code hook and is not available.
+- No `handoff` skill: `handoff.py` scores Claude Code transcripts, so it has nothing to read in a Codex session.
 - A skill directory that already exists and is not in the record is skipped and reported, unless `--force` (same rule as Claude files).
 
 ### MCP servers
@@ -163,6 +164,7 @@ Only the scope lock, the Jev gate and the Jev route run under Codex. Context wat
 - **Install:** the installer merges two entries into `$CODEX_HOME/hooks.json` with `settings_merge.merge` (the `hooks` shape is identical) and records them; uninstall removes exactly those entries with `settings_merge.unmerge`, deleting the file if the installer created it and it ends up empty.
   - `PreToolUse`, matcher `Bash|apply_patch|Edit|Write`: `"<PY>" "<CD>/jev/chain.py" pretool --harness codex`, timeout 20.
   - `UserPromptSubmit`: `"<PY>" "<CD>/jev/chain.py" prompt --harness codex`, timeout 15.
+  - Each entry also carries `commandWindows`, built from the space-free (8.3) forms of the interpreter and Claude directory and left unquoted, because Codex on Windows may run hook commands through PowerShell, where a quoted path is a string, not a command. If no space-free form exists, preflight refuses `--harness codex|both` on Windows and suggests `--harness claude`.
 - **Normalizer:** new module `claude/jev/codex_event.py`, used by `chain.py` when `--harness codex` is passed.
   - `apply_patch`: parse the headers `*** Add File: <path>`, `*** Update File: <path>`, `*** Delete File: <path>` and `*** Move to: <path>` (CRLF tolerated). Each touched path (including both source and destination of a move) becomes one synthetic event `{"tool_name": "Write", "tool_input": {"file_path": <path>, "content": <that file's hunk text>}, "cwd": <cwd>}`. The pretool chain runs once per synthetic event; the strictest decision wins (deny > ask > none), and the reason names the file.
   - **Fail closed:** a patch that cannot be parsed, or has no file headers, is denied with reason `[codex-patch] unparseable apply_patch`.
