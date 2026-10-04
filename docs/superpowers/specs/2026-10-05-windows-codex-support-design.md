@@ -2,7 +2,7 @@
 
 Date: 2026-10-05
 Status: approved in brainstorming, awaiting spec review
-Scope: Part A (Windows support) and Part B (Codex as main harness, rules + MCP). One plan; Part A tasks first, Part B builds on the portable installer from Part A.
+Scope: Part A (Windows support) and Part B (Codex as main harness: rules, MCP, and the safety and routing hooks). One plan; Part A tasks first, Part B builds on the portable installer from Part A.
 
 # Part A — Windows support
 
@@ -115,7 +115,7 @@ Cannot be automated; done once before release by the maintainer or a tester: run
 - `.githooks/pre-commit` (maintainer-only).
 - Installing Python, Node or Git for the user.
 
-# Part B — Codex as main harness (rules + MCP)
+# Part B — Codex as main harness (rules, MCP, safety and routing hooks)
 
 ## Goal
 
@@ -126,7 +126,7 @@ People who use Codex (CLI, IDE extension or desktop app) as their main agent get
 - Config: `~/.codex/config.toml`, or `$CODEX_HOME/config.toml` when `CODEX_HOME` is set. MCP servers are `[mcp_servers.<name>]` tables with `command`, `args`, `env`; `codex mcp add` writes them. The CLI, IDE extension and desktop app share this file.
 - Global instructions: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`); `AGENTS.override.md` wins if present. Combined instructions are capped at 32 KiB by default (`project_doc_max_bytes`).
 - Skills: user-level skills live in `~/.agents/skills/<name>/SKILL.md`, with the same `name` / `description` frontmatter as Claude skills. Invoked with `$name`, from `/skills`, or chosen automatically by description.
-- Codex also supports hooks. They are not used in this design (see Out of scope).
+- Hooks: `$CODEX_HOME/hooks.json` (or inline `[hooks]` in `config.toml`), same shape as Claude Code: event → list of `{matcher, hooks: [{type: "command", command, timeout}]}`. Events include `PreToolUse` and `UserPromptSubmit`. Stdin JSON carries `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `model`, plus `tool_name` / `tool_input` (PreToolUse) or `prompt` (UserPromptSubmit). Output contract matches Claude Code: `hookSpecificOutput.permissionDecision: "deny"` with `permissionDecisionReason`, `hookSpecificOutput.additionalContext`, `{"decision": "block", "reason"}`, or exit code 2. File edits arrive as `tool_name: "apply_patch"` with the patch text in `tool_input.command`. Default timeout 600 s. Hooks can be disabled with `[features] hooks = false`.
 
 ## Design
 
@@ -156,6 +156,20 @@ People who use Codex (CLI, IDE extension or desktop app) as their main agent get
 - Written with `codex mcp add <name> -- <command> <args...>` (env via its flags). If `codex mcp add` is missing or fails, the installer writes the table itself between `# >>> dryas-workflow >>>` / `# <<< dryas-workflow <<<` markers in `config.toml`, never touching anything outside the markers. The method used is stored in the record; uninstall uses `codex mcp remove` or removes the marked region accordingly.
 - Billing rule unchanged: no `ANTHROPIC_API_KEY` is written; Jev reads only `OPENROUTER_API_KEY` from the environment.
 
+### Hooks (safety and routing)
+
+Only the scope lock, the Jev gate and the Jev route run under Codex. Context watch, compaction keep and restore, handoff restore, the Ruflo hooks and FlowObserve stay Claude Code only, because they read Claude Code transcripts or Claude-shaped events.
+
+- **Install:** the installer merges two entries into `$CODEX_HOME/hooks.json` with `settings_merge.merge` (the `hooks` shape is identical) and records them; uninstall removes exactly those entries with `settings_merge.unmerge`, deleting the file if the installer created it and it ends up empty.
+  - `PreToolUse`, matcher `Bash|apply_patch|Edit|Write`: `"<PY>" "<CD>/jev/chain.py" pretool --harness codex`, timeout 20.
+  - `UserPromptSubmit`: `"<PY>" "<CD>/jev/chain.py" prompt --harness codex`, timeout 15.
+- **Normalizer:** new module `claude/jev/codex_event.py`, used by `chain.py` when `--harness codex` is passed.
+  - `apply_patch`: parse the headers `*** Add File: <path>`, `*** Update File: <path>`, `*** Delete File: <path>` and `*** Move to: <path>` (CRLF tolerated). Each touched path (including both source and destination of a move) becomes one synthetic event `{"tool_name": "Write", "tool_input": {"file_path": <path>, "content": <that file's hunk text>}, "cwd": <cwd>}`. The pretool chain runs once per synthetic event; the strictest decision wins (deny > ask > none), and the reason names the file.
+  - **Fail closed:** a patch that cannot be parsed, or has no file headers, is denied with reason `[codex-patch] unparseable apply_patch`.
+  - `Bash`, `Edit`, `Write` and every other tool pass through unchanged.
+- **Stage selection:** each stage in `chain.json` may carry `"harness": [...]`; a missing key means `["claude"]`. `scope-lock`, `jev-gate` and `jev-route` get `["claude", "codex"]`. `chain.py` skips stages whose list does not contain the current harness (default `claude`).
+- **Route wording:** `chain.py` sets `DRYAS_HARNESS` in the stage environment. When it is `codex`, `route.py` prints `escalate: yes|no (<conf>)` instead of `opus: yes|no (<conf>)`; the Jev question and the log fields are unchanged.
+
 ### Superpowers for Codex
 
 The installer does not install Superpowers for Codex. It checks whether Superpowers' skills are present under `~/.agents/skills` (or Codex's plugin locations) and, if not, prints Superpowers' documented Codex install step. Nothing is fetched from third parties for the Codex target.
@@ -173,11 +187,15 @@ The installer does not install Superpowers for Codex. It checks whether Superpow
 - Skills copy and uninstall; existing unrecorded skill directory skipped without `--force`.
 - `config.toml` fallback: marked region added, re-install idempotent, uninstall restores the file byte-identical to before.
 - `--harness both`: one run produces both targets; uninstall removes both.
+- Patch parser: add, update, delete, move, multi-file, CRLF line endings, no headers, garbage input.
+- Chain under `--harness codex`: an `apply_patch` touching one in-scope and one out-of-scope file is denied naming the out-of-scope file; an unparseable patch is denied; a Claude-only stage (context-watch) does not run; `DRYAS_HARNESS=codex` makes `route.py` print `escalate:`.
+- `hooks.json` merge: created when missing, merged next to user hooks, re-install idempotent, uninstall leaves user hooks byte-identical.
+- Without `--harness`, `chain.py` behaves exactly as before (existing tests unchanged).
 - Runs in the same three-OS CI matrix as Part A.
 
 ## Out of scope (Part B)
 
-- Codex hooks (scope lock, Jev gate and route, context watch, compaction and handoff restore). Codex supports hooks, so this is a possible follow-up with its own design.
+- Codex context watch, compaction keep and restore, handoff restore and Ruflo hooks (need a Codex transcript reader and Codex-shaped Ruflo handlers; possible follow-up).
 - FlowObserve for Codex sessions.
 - The Sonnet → Opus → Fable ladder and the `executor` agent (Claude Code-specific).
 - Installing Superpowers, impeccable or ui-ux-pro-max for Codex.
