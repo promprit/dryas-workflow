@@ -39,7 +39,7 @@ class InstallTest(unittest.TestCase):
         self.calls = []
         self.dist = Path(tempfile.mkdtemp()) / "cli-dist"
         self.dist.mkdir()
-        di.run = lambda argv: self.calls.append(argv) or 0
+        di.run = lambda argv, cwd=None: self.calls.append(argv) or 0
         di.detect = lambda: {"RUFLO_BIN": "/b/ruflo", "RUFLO_JS": "/b/ruflo.js", "RUFLO_NODE_FALLBACK": "/b/node", "RUFLO_NODE_MODULES": "/b/nm",
                              "RUFLO_CLI_DIST": str(self.dist)}
         di.confirm = lambda prompt: True
@@ -49,7 +49,7 @@ class InstallTest(unittest.TestCase):
         return di.install(self.repo, self.cd, comps, home=self.home, force=kw.get("force", False), dry=kw.get("dry", False), yes=kw.get("yes", False))
 
     def snapshot(self):
-        return sorted(str(p.relative_to(self.home)) for p in self.home.rglob("*"))
+        return sorted(p.relative_to(self.home).as_posix() for p in self.home.rglob("*"))
 
     def test_full_install_record_and_files(self):
         self.install(["core", "jev", "ruflo"])
@@ -59,7 +59,7 @@ class InstallTest(unittest.TestCase):
             self.assertTrue((self.cd / "ruflo/run.sh").stat().st_mode & 0o100)
         self.assertTrue((self.cd / "docs/dryas-workflow.md").exists())
         s = json.loads((self.cd / "settings.json").read_text())
-        self.assertEqual(s["env"]["DRYAS_DATA_ROOT"], str(self.home / ".dryas"))
+        self.assertEqual(s["env"]["DRYAS_DATA_ROOT"], di.pu.fwd(self.home / ".dryas"))
         self.assertTrue((self.home / ".dryas").is_dir())
         self.assertIn(["claude", "mcp", "add", "--scope", "user", "jev", "--", di.PY, "-X", "utf8",
                        di.pu.fwd(self.cd / "jev/jev_mcp.py")], self.calls)

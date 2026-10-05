@@ -195,8 +195,8 @@ class SaveTest(HandoffBase):
         handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True))
         b = self.body()
         self.assertLessEqual(len(b), 12000)
-        self.assertIn("039 ", b)
-        self.assertNotIn("000 ", b)
+        self.assertIn("**assistant:** 039 ", b)
+        self.assertNotIn("**assistant:** 000 ", b)
         self.assertTrue(b.startswith("<!-- handoff"))
 
     def test_joblog_no_text(self):

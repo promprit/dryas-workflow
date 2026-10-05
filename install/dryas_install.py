@@ -29,9 +29,9 @@ KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUT
             "(not stored by this installer)")
 
 
-def run(argv: List[str]) -> int:
+def run(argv: List[str], cwd=None) -> int:
     try:
-        return subprocess.call(pu.resolve_argv(argv))
+        return subprocess.call(pu.resolve_argv(argv), cwd=cwd)
     except OSError:
         return 127
 
@@ -436,7 +436,7 @@ def verify(cd: Path, comps: List[str]) -> int:
     elif run(PYX + ["-c", "import pytest"]) != 0:
         fails += say("SKIP", "Jev tests", "install pytest to run the Jev tests")
     else:
-        fails += say("PASS" if run(PYX + ["-m", "pytest", "-q", str(tdir)]) == 0 else "FAIL", "Jev tests")
+        fails += say("PASS" if run(PYX + ["-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(tdir), str(tdir)], cwd=str(tdir)) == 0 else "FAIL", "Jev tests")
     if "jev" in comps:
         rc, out = capture(["claude", "mcp", "list"])
         fails += say("PASS" if "jev:" in out else "FAIL", "jev MCP server registered")
