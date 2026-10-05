@@ -18,6 +18,41 @@ class PlatformUtilTest(unittest.TestCase):
     def test_python_exe_is_forward_slash_sys_executable(self):
         self.assertEqual(pu.python_exe(), sys.executable.replace("\\", "/"))
 
+    def _reset(self):
+        pu._PYTHON_EXE = None
+        self.addCleanup(setattr, pu, "_PYTHON_EXE", None)
+        old = os.environ.get("DRYAS_PYTHON_PATH")
+        def restore():
+            if old is None:
+                os.environ.pop("DRYAS_PYTHON_PATH", None)
+            else:
+                os.environ["DRYAS_PYTHON_PATH"] = old
+        self.addCleanup(restore)
+
+    def test_python_exe_prefers_launch_path(self):
+        self._reset()
+        link = self.tmp / "py3link"
+        try:
+            os.symlink(sys.executable, str(link))
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks unavailable")
+        os.environ["DRYAS_PYTHON_PATH"] = str(link)
+        self.assertEqual(pu.python_exe(), str(link).replace("\\", "/"))
+
+    def test_python_exe_missing_launch_path_falls_back(self):
+        self._reset()
+        os.environ["DRYAS_PYTHON_PATH"] = str(self.tmp / "nope")
+        self.assertEqual(pu.python_exe(), sys.executable.replace("\\", "/"))
+
+    @unittest.skipIf(os.name == "nt", "shell script stub")
+    def test_python_exe_wrong_version_falls_back(self):
+        self._reset()
+        fake = self.tmp / "fakepy"
+        fake.write_text("#!/bin/sh\necho 2.7\n")
+        fake.chmod(0o755)
+        os.environ["DRYAS_PYTHON_PATH"] = str(fake)
+        self.assertEqual(pu.python_exe(), sys.executable.replace("\\", "/"))
+
     def test_space_free_without_space_is_identity(self):
         self.assertEqual(pu.space_free("/a/b"), "/a/b")
 

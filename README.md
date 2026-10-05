@@ -4,7 +4,7 @@
 
 A Claude Code workflow: brainstorm first, plan, gate risky steps with a cheap judge, build with Sonnet executors under a file-scope lock, escalate only when needed, review, ship.
 
-This repo is public but not promoted. Expect rough edges.
+This repo is public but not promoted. Expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
 
 ## The loop
 

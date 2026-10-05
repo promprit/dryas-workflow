@@ -7,6 +7,8 @@ set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 for c in ${DRYAS_PYTHON:-} python3 python; do
   if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then
+    DRYAS_PYTHON_PATH="$(command -v "$c")"
+    export DRYAS_PYTHON_PATH
     exec "$c" "$REPO/install/dryas_install.py" run --repo "$REPO" "$@"
   fi
 done

@@ -132,13 +132,13 @@ def run(event: Dict[str, Any]) -> Optional[str]:
         emit = tier > warned
         if emit or (has_state and (tokens != last)):
             os.makedirs(sdir, mode=0o700, exist_ok=True)
-            os.chmod(sdir, 0o700)
+            os.chmod(sdir, 0o700)  # portable-ok: POSIX file privacy; no-op on Windows
             fd = os.open(sfile, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             try:
                 os.write(fd, ("%d %d" % (max(tier, warned) if emit else warned, tokens)).encode())
             finally:
                 os.close(fd)
-            os.chmod(sfile, 0o600)
+            os.chmod(sfile, 0o600)  # portable-ok: POSIX file privacy; no-op on Windows
         if not emit:
             return None
         return ("Context %d%% — tell the user: run /handoff then /clear to continue with a Jev-scored context "

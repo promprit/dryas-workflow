@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import claude_mcp  # noqa: E402
 import platform_util as pu  # noqa: E402
 import ruflo_helpers  # noqa: E402
 import settings_merge as sm  # noqa: E402
@@ -166,14 +167,14 @@ def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bo
         if dir_link:
             entry["link"] = pu.make_dir_link(link, str(dest))
         else:
-            os.symlink(link, str(dest))
+            os.symlink(link, str(dest))  # portable-ok: POSIX checkouts only; no shipped file is a symlink
             entry["link"] = "symlink"
     else:
         dest.write_bytes(data)
         if mode_src is not None:
             shutil.copymode(str(mode_src), str(dest))
         if mode is not None:
-            os.chmod(str(dest), mode)
+            os.chmod(str(dest), mode)  # portable-ok: keeps helper exec bit; no-op on Windows
     rec["files"][rel] = entry
     rep["written"].append(rel)
 
@@ -337,14 +338,8 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
                 root.mkdir(parents=True)
                 rec["data_root_created"] = True
                 rec["data_root"] = str(root)
-        if claude and "jev" in comps and "jev" not in rec["mcp"]:
-            argv = ["claude", "mcp", "add", "--scope", "user", "jev", "--"] + PYX + [pu.fwd(cd / "jev/jev_mcp.py")]
-            if dry:
-                print("would run: %s" % " ".join(argv))
-            elif run(argv) == 0:
-                rec["mcp"].append("jev")
-            else:
-                print("warning: could not register the jev MCP server; re-run the installer to retry")
+        if claude and "jev" in comps:
+            claude_mcp.ensure_jev(cd, PYX, rec, run, capture, dry)
         for rel in rep["skipped"]:
             print("kept your file: %s (use --force to replace, original is backed up)" % rel)
     finally:

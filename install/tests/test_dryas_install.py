@@ -43,6 +43,7 @@ class InstallTest(unittest.TestCase):
         di.detect = lambda: {"RUFLO_BIN": "/b/ruflo", "RUFLO_JS": "/b/ruflo.js", "RUFLO_NODE_FALLBACK": "/b/node", "RUFLO_NODE_MODULES": "/b/nm",
                              "RUFLO_CLI_DIST": str(self.dist)}
         di.confirm = lambda prompt: True
+        di.capture = lambda argv, *a, **k: (1, "")
         rh.generate = lambda ruflo_bin: {n: (("".join(o for f, o, _ in rh.PATCHES if f == n) or "x\n").encode(), 0o644) for n in rh.HELPERS}
 
     def install(self, comps, **kw):
