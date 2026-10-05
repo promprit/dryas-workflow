@@ -24,6 +24,7 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Ladder: sonnet -> opus -> fable. Fable only after the Opus executor also failed.
     "escalation": {"executor_confidence_below": 0.5, "sonnet_failures_before_opus": 2, "opus_failures_before_fable": 1},
     "commit": {"min_confidence": 0.7},
+    "interrogate": {"min_confidence": 0.7},
     "compact": {"keep_above": 0.5},
     "handoff": {"keep_min": 0.5},
     "context": {"warn_pct": 0.65},

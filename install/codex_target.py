@@ -17,9 +17,15 @@ import hookcheck
 import settings_merge as sm
 import upgrade
 from claude_md_block import insert_block, remove_block
+from render import gate_blocks
 
 RECORD = ".dryas-installed.json"
 SKILLS = ("orchestrate", "wreview", "wplan", "commit", "tune")
+PSTACK_SKILLS = ("interrogate", "benchmark-checklist")
+
+
+def skills_for(comps: List[str]) -> Tuple[str, ...]:
+    return SKILLS + (PSTACK_SKILLS if "pstack-picks" in comps else ())
 TOML_START, TOML_END = "# >>> dryas-workflow >>>", "# <<< dryas-workflow <<<"
 RUFLO_ENV_KEYS = ("DRYAS_DATA_ROOT", "RUFLO_JS", "RUFLO_NO_AUTO_ENABLE", "RUFLO_DAEMON_AUTOSTART", "RUFLO_MCP_SKIP_NPX",
                   "CLAUDE_FLOW_MEMORY_PATH", "CLAUDE_FLOW_DB_PATH", "CLAUDE_FLOW_SWARM_DIR", "RUFLO_STATE_DIR")
@@ -89,7 +95,7 @@ def install_codex(repo: Path, cdx: Path, home: Path, comps: List[str], mapping: 
     srv = servers(comps, mapping, ruflo_env)
     if dry:
         print("would add or update the Dryas block in %s" % (cdx / "AGENTS.md"))
-        print("would install Codex skills into %s: %s" % (skills_dir(home), ", ".join(SKILLS)))
+        print("would install Codex skills into %s: %s" % (skills_dir(home), ", ".join(skills_for(comps))))
         print("would merge Codex hooks into %s" % (cdx / "hooks.json"))
         for name in srv:
             print("would register the %s MCP server for Codex" % name)
@@ -99,10 +105,12 @@ def install_codex(repo: Path, cdx: Path, home: Path, comps: List[str], mapping: 
         cdx.mkdir(parents=True)
         rec.setdefault("dir_created", True)
     rec.setdefault("dir_created", False)
+    gate = sorted(set(rec.get("components", [])) | set(comps))
+    rec["components"] = gate
     tpl = (repo / "codex" / "AGENTS.md.template").read_text(encoding="utf-8")
-    insert_block(cdx / "AGENTS.md", sm.render_tokens(tpl, mapping), rec, "agents_md")
+    insert_block(cdx / "AGENTS.md", sm.render_tokens(gate_blocks(tpl, gate), mapping), rec, "agents_md")
     sd = skills_dir(home)
-    for name in SKILLS:
+    for name in skills_for(gate):
         dest = sd / name
         mine = name in rec["skills"]
         if dest.exists() and not mine:
@@ -115,7 +123,7 @@ def install_codex(repo: Path, cdx: Path, home: Path, comps: List[str], mapping: 
             rec["skill_backups"][name] = str(b)
         dest.mkdir(parents=True, exist_ok=True)
         text = (repo / "codex" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
-        (dest / "SKILL.md").write_text(sm.render_tokens(text, mapping), encoding="utf-8")
+        (dest / "SKILL.md").write_text(sm.render_tokens(gate_blocks(text, gate), mapping), encoding="utf-8")
         if not mine:
             rec["skills"].append(name)
     if "core" in comps:

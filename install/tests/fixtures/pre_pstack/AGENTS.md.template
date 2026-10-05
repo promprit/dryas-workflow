@@ -13,9 +13,6 @@ Process rules for coding sessions on this machine. Full reference: `{{CD}}/docs/
 
 ## Skills
 `$orchestrate` (multi-step tasks), `$wplan` (write a plan), `$wreview` (two-stage review), `$commit` (Jev-gated commit), `$tune` (weekly Jev calibration).
-<!-- pstack-picks -->
-`$interrogate` (gated two-model review), `$benchmark-checklist` (vet a measured performance number). Shared references: `{{CD}}/pstack/`.
-<!-- /pstack-picks -->
 
 ## Jev and Ruflo (MCP servers `jev` and `ruflo`)
 - Jev answers narrow typed questions only (`jev_judge`); it never writes code or plans. When it is below threshold, escalates or is unavailable, you decide; log any disagreement with `log_override`.
