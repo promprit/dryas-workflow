@@ -84,6 +84,16 @@ class InstallTest(unittest.TestCase):
         backups = list(self.cd.glob(".dryas-backup-*/agents/executor.md"))
         self.assertEqual([b.read_text() for b in backups], ["mine"])
 
+    def test_identical_existing_file_is_adopted_and_upgraded(self):
+        (self.cd / "agents").mkdir()
+        (self.cd / "agents/executor.md").write_text("exec")
+        self.install(["core"])
+        rec = json.loads((self.cd / ".dryas-installed.json").read_text())
+        self.assertIn("agents/executor.md", rec["files"])
+        (self.repo / "claude/agents/executor.md").write_text("exec v2")
+        self.install(["core"])
+        self.assertEqual((self.cd / "agents/executor.md").read_text(), "exec v2")
+
     def test_claude_md_block_idempotent(self):
         (self.cd / "CLAUDE.md").write_text("# mine\n")
         self.install(["core"])
