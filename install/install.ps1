@@ -1,5 +1,5 @@
 # Dryas Workflow installer for native Windows. Finds Python >= 3.9 and runs install\dryas_install.py.
-# Usage: .\install\install.ps1 [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--yes] [--force]
+# Usage: .\install\install.ps1 [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks] [--yes] [--force]
 #        [--dry-run] [--uninstall] [--preflight-only] [--harness claude|codex|both]   See docs\install.md.
 # DRYAS_PYTHON overrides the interpreter.
 $ErrorActionPreference = 'Continue'

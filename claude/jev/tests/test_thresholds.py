@@ -131,9 +131,10 @@ class ThresholdsTest(unittest.TestCase):
         err = thresholds.validate("gate.ask_risk", "none_of_these")
         self.assertIsNotNone(err)
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_interrogate_default(self):
+        self.assertEqual(thresholds.load()["interrogate"]["min_confidence"], 0.7)
+        self.assertIsNone(thresholds.validate("interrogate.min_confidence", 0.8))
+        self.assertIsNotNone(thresholds.validate("interrogate.min_confidence", 1.5))
 
 
 class HandoffThresholdsTest(unittest.TestCase):
@@ -169,3 +170,7 @@ def test_load_nan_falls_back(tmp_path, monkeypatch):
     t = thresholds.load()
     assert t["gate"]["min_confidence"] == thresholds.DEFAULTS["gate"]["min_confidence"]
     assert t["route"]["min_confidence"] == thresholds.DEFAULTS["route"]["min_confidence"]
+
+
+if __name__ == "__main__":
+    unittest.main()

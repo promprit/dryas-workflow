@@ -12,10 +12,6 @@ Unless the request points at an already-approved design/spec, invoke superpowers
 
 You (Opus) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.claude/jev/thresholds.json` (defaults in `~/.claude/jev/thresholds.py`). Ruflo tool names: `~/.claude/skills/orchestrate/ruflo-tools.md`.
 
-<!-- pstack-picks -->
-Keep bulk output in executors and only summaries here (`{{CD}}/pstack/principles/guard-the-context-window.md`). Judge each report against the real artifact, not the self-report (`{{CD}}/pstack/principles/prove-it-works.md`).
-
-<!-- /pstack-picks -->
 ## 1. Memory first
 Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project folder name) for tasks similar to the request. Take the top 3 outcomes and write them down as `Past: <what worked> / <what failed>` before planning. None found → say so.
 
@@ -34,9 +30,6 @@ Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project fold
    ```
 
    Scopes of tasks that may run in parallel must not overlap.
-<!-- pstack-picks -->
-   When the approved design is performance work, every task that produces or reports a measured number gets the Done line: `numbers vetted per {{CD}}/pstack/benchmark-checklist.md (verdict, run count, range, limiter)`.
-<!-- /pstack-picks -->
 3. `.orchestrate/` is ignored globally (~/.config/git/ignore); never commit it.
 
 ## 3. Per-task Jev call (one call per task; batch when >5 tasks to triage)
@@ -65,9 +58,6 @@ Any name in `escalate`, or Jev unavailable → you decide that item. Whenever yo
 
 ## 4. TDD gate
 If `failing_test_exists` is not confidently true: dispatch a **tester** executor first for that task, confirm the test fails for the right reason, then dispatch the coder.
-<!-- pstack-picks -->
-Review and cleanup tasks (`Failing test first: none (review)` or `none (cleanup)`) skip this gate and the §3 Jev call; their executor role is fixed (reviewer or coder).
-<!-- /pstack-picks -->
 
 ## 5. Dispatch
 1. Initialise the Ruflo swarm once (swarm_init from ruflo-tools.md). Call it with topology "hierarchical" (the plugin default is hierarchical-mesh).
@@ -89,29 +79,11 @@ Only an incident, a failure or an escalation reaches you in full; otherwise log 
 Ladder: **Sonnet → Opus → Fable**. Fable is used only when Opus also could not do the task.
 Every `mcp__jev__log_escalation` call passes all five fields: task, reason, decided_by ("jev" or "opus"), from_model, to_model.
 First Sonnet failure: re-dispatch once more on Sonnet with the failure details; the second Sonnet failure escalates to Opus.
-<!-- pstack-picks -->
-Before each climb (Sonnet → Opus, Opus → Fable), run superpowers:systematic-debugging with `{{CD}}/pstack/principles/fix-root-causes.md` on the failing reports. Read only; do not edit project files. If the root cause is a plan defect (scope too narrow, Done vague or wrong, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the same model: that is not a climb and the failure count stays. Do this at most once per model; a second failure on that model climbs. Otherwise climb, and put the root cause in the re-dispatch prompt and in the `log_escalation` reason.
-<!-- /pstack-picks -->
 1. A Sonnet executor that fails done-criteria `escalation.sonnet_failures_before_opus` times (2), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with `model: opus`. Call `mcp__jev__log_escalation` first (from sonnet, to opus, with the reason).
 2. If the Opus executor succeeds, stop: no Fable.
 3. Only if the Opus executor fails `escalation.opus_failures_before_fable` times (1), or reports CONFIDENCE below the threshold, re-dispatch once with `model: fable`, after `mcp__jev__log_escalation` (from opus, to fable, reason naming what Opus could not resolve). If Fable is unavailable, stop and report to the user.
 4. A Fable failure comes to the user with all three reports.
 
-<!-- pstack-picks -->
-## 7b. Interrogate (gated), then cleanup
-Start only after every build task has left `.orchestrate/active.json`.
-
-1. One `mcp__jev__jev_judge` call:
-```json
-{"state": {"design_summary": "...", "diff_stat": "...", "files_touched": [], "contested": false},
- "questions": {
-  "needs_interrogate": {"type": "noul", "instructions": "Does the change described in `design_summary` and `diff_stat` restructure how components fit together, change an interface other modules depend on, or carry `contested: true`?",
-                        "criteria": {"true": "Architectural or contested change", "false": "Contained change with no shared-interface impact"}}}}
-```
-2. Run `{{CD}}/skills/interrogate/SKILL.md` (read it and follow it) when Jev says true at confidence ≥ `interrogate.min_confidence`, when the user asked, or when the approved design marked the change contested. Below threshold, escalated or Jev unavailable: you decide; call `mcp__jev__log_override` when you differ. Reviewer A runs on the executor's default (Sonnet), reviewer B with `model: opus`. Never put the top rung on the panel. Act On findings become new tasks (§3-§6).
-3. Cleanup: unless the diff touches documentation only, add one task with Scope = the files in the diff, `Failing test first: none (cleanup)`, and Done = `follow {{CD}}/pstack/cleanup.md; behavior unchanged; <project test command> passes`. Dispatch it like any task (Sonnet, `active.json`).
-
-<!-- /pstack-picks -->
 ## 8. Finish
 Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then remove the worktree.
 

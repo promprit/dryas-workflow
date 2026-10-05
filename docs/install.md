@@ -19,6 +19,7 @@ The installer asks before it changes anything. Use `--dry-run` first to see what
 | Ruflo | Orchestration and memory ([ruvnet/ruflo](https://github.com/ruvnet/ruflo), pinned 3.51.0) | `--no-ruflo` skips |
 | Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), pinned 6.4.1) | `--no-superpowers` skips |
 | Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (pinned 4.3.1) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
+| pstack picks | Interrogate review, cleanup, benchmark checklist and principles, adapted from [pstack-claude](https://github.com/michael-denyer/pstack-claude) (see NOTICE.md) | `--no-pstack-picks` skips |
 
 You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex CLI, or both, installed first.
 
@@ -30,6 +31,7 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 | `--no-ruflo` | Do not install Ruflo |
 | `--no-superpowers` | Do not install Superpowers |
 | `--no-design` | Do not install Impeccable or UI UX Pro Max |
+| `--no-pstack-picks` | Do not install the pstack picks |
 | `--yes` | Run the third-party install commands without asking |
 | `--force` | Replace your existing files (originals are backed up first) |
 | `--dry-run` | Print the plan and the settings diff, change nothing (skips third-party installs and verify) |
@@ -98,7 +100,7 @@ It ends with `verify: N failed`. The installer exits non-zero if any check faile
 
 ## Upgrade
 
-Pull the repo and run `./install/install.sh` again. Files the installer added before are updated. Your own files are still kept unless you pass `--force`. You can add a component you skipped earlier (for example, re-run without `--no-ruflo`); one `--uninstall` later removes everything from all runs.
+Pull the repo and run `./install/install.sh` again. Files the installer added before are updated. Your own files are still kept unless you pass `--force`. You can add a component you skipped earlier (for example, re-run without `--no-ruflo`); one `--uninstall` later removes everything from all runs. Re-running with --no-pstack-picks (or any --no- flag) after a full install does not remove that component; use --uninstall.
 
 After the first install, `~/.claude/jev/thresholds.json` is yours (`/tune` changes it); re-installing never overwrites it. Optional stages you enabled yourself in `jev/chain.json` (for example an observer) keep their settings.
 

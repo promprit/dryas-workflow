@@ -1,6 +1,6 @@
 """Installer entry used by install.sh and install.ps1: flags, preflight, then thirdparty -> install -> verify.
 
-  dryas_install.py run [--repo PATH] [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design]
+  dryas_install.py run [--repo PATH] [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
                        [--yes] [--force] [--dry-run] [--uninstall] [--preflight-only] [--harness claude|codex|both]
 """
 import argparse
@@ -12,7 +12,7 @@ from typing import List, Optional
 import platform_util as pu
 
 HERE = Path(__file__).resolve().parent
-OPTIONAL = ("jev", "ruflo", "superpowers", "design")
+OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
 HARNESSES = ("claude", "codex", "both")
 NO_SPACE_RUFLO = ("Your Python or Claude folder path contains a space and has no short form; "
                   "Ruflo's hook override cannot handle that. Re-run with --no-ruflo.")
@@ -34,7 +34,7 @@ def parse(argv: List[str]) -> argparse.Namespace:
 
 
 def components(a: argparse.Namespace) -> List[str]:
-    return ["core"] + [c for c in OPTIONAL if not getattr(a, "no_" + c)]
+    return ["core"] + [c for c in OPTIONAL if not getattr(a, "no_" + c.replace("-", "_"))]
 
 
 def preflight(comps: List[str], harness: str, claude_dir: Path) -> List[str]:

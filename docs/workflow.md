@@ -4,7 +4,7 @@ This is your development workflow on this Mac: what each layer does, the order t
 
 - **Canonical copy:** `~/.claude/DryasWorkflow.md`, on the Mac, so it's available even when the SSD is unplugged.
 
-Last updated: 2026-10-03.
+Last updated: 2026-10-05.
 
 ---
 
@@ -33,6 +33,7 @@ Last updated: 2026-10-03.
 | **Jev** (TypeSafe `typesafe/jev-1.13` via OpenRouter) | Decision support: tool-call gate, prompt routing, per-task triage, commit check, compaction keep/drop | Write code or plans |
 | **Ruflo** (`ruflo@3.51.0`, pinned) | Orchestration plumbing (hierarchical swarm) and the **only** memory/learning layer | Plan (its goals/planning hooks are dropped); use `ANTHROPIC_API_KEY` |
 | **Superpowers** (plugin) | Process: brainstorming, worktrees, TDD, two-stage review, verification, plan format | — |
+| **pstack picks** (vendored from pstack, optional, `--no-pstack-picks`) | Review, cleanup and perf references, executor principles | Route, pick models, add hooks, or run without a trigger |
 | **FlowObserve** (separate observer app, optional) | Ambient monitor of live sessions: shows each session's stage in the loop (Brainstorm, Plan, Judge, Build, Escalate, Review, Ship) and what needs you (observe-only) | Block or change anything; write Jev logs or `.orchestrate/` |
 
 ## 3. Model policy and escalation ladder
@@ -46,6 +47,7 @@ Last updated: 2026-10-03.
   4. If Fable fails too, the task goes to you with all three reports.
   - Jev's per-task `needs_opus` answer can start an executor on Opus directly. Nothing starts a task on Fable directly.
   - Every escalation step is logged with its reason via the `log_escalation` MCP tool.
+- **Root cause before each climb** (pstack picks). Before Sonnet → Opus and Opus → Fable, the orchestrator runs systematic-debugging on the failing reports. A plan defect is fixed in PLAN.md and re-run on the same model; otherwise the climb carries the root cause in its prompt and its log_escalation reason.
 - **Jev answers narrow typed questions only.** A Jev answer below 0.7 confidence, or flagged to escalate, means Opus decides.
 
 ## 4. How a task flows
@@ -76,6 +78,7 @@ Last updated: 2026-10-03.
      Failing test first: <file :: test>
      ```
    - `.orchestrate/` (including `.orchestrate/PLAN.md`) is globally git-ignored (`~/.config/git/ignore`) and never committed.
+   - Perf work: tasks that report a measured number get a Done line pointing to the benchmark checklist.
 5. **Per-task Jev check.** One `jev_judge` call per task (one batched call when more than 5 tasks need triage). Its questions:
    - `executor` (coder / tester / reviewer / docs / none)
    - `specific` (is it specific enough?)
@@ -86,9 +89,11 @@ Last updated: 2026-10-03.
    - Write `.orchestrate/active.json`, which arms the scope lock.
    - Each executor receives **only its own section** (`"<python>" -X utf8 "~/.claude/jev/planfile.py" section .orchestrate/PLAN.md <N>`, where `<python>` is the interpreter the installer recorded; the allow rule is rendered with the same absolute paths) plus the worktree path, never the whole plan.
    - Independent tasks run in parallel through Ruflo's hierarchical swarm. Agents spawn via Claude Code's Agent tool, so they run on the subscription.
+   - Executors follow four principles (fix root causes, prove it works, test behavior, subtract before you add), full text in ~/.claude/pstack/principles/.
 8. **On return.** Jev checks `done` (done-criteria met?) and `risk` (routine / worth a look / incident).
    - Only incidents, failures and escalations reach Opus in full; everything else becomes one summary line.
    - The outcome is stored in Ruflo memory.
+8b. **Interrogate and cleanup** (pstack picks). Jev noul (yes/no) needs_interrogate (architectural or contested change?); at ≥ 0.7, or when you ask, two read-only executor reviewers (Sonnet and Opus, never Fable) run /interrogate and Opus judges; Act On items become tasks. Then one Sonnet cleanup task removes slop and stale comments from the diff's files, tests rerun. Docs-only diffs skip cleanup.
 9. **Finish.**
    - Delete `active.json`.
    - Run `/wreview` (two-stage: spec compliance, then code quality).
@@ -161,6 +166,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   | compact | keep_above 0.5 |
   | handoff | keep_min 0.5 |
   | context | warn_pct 0.65 |
+  | interrogate | min_confidence 0.7 |
 
 - **Logs** go to `~/.claude/jev/logs/*.jsonl` (gate, route, mcp, calls, escalations, overrides, compact, compare). They hold decisions and confidences only, never payloads; a Bash call logs just the first word of the command.
 - **Compaction.**
@@ -219,6 +225,8 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 | `/commit` | Conventional commit, gated by Jev "safe to commit?", never pushes |
 | `/tune` | Weekly calibration (§6) |
 | `/handoff` | Jev-scored context reset: saves kept items, then you type `/clear` (§6) |
+| `/interrogate` | Two-model adversarial review with a lead verdict; gated step of /orchestrate or on request |
+| `/benchmark-checklist` | Vet a measured perf number before reporting it |
 | agent `executor` | Sonnet, tools Read/Edit/Write/Bash, one task section, locked scope. Ends with CHANGED / TESTS / DONE-CRITERIA / CONFIDENCE / UNRESOLVED |
 | skills `stack-nextjs-ts`, `stack-supabase-postgres`, `stack-swift-ios`, `stack-python` | Conventions, test commands and pitfalls, scanned from the real projects |
 | plugin `typesafe@typesafe-ai` | Official Jev/TypeSafe docs skill |

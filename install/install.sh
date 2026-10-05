@@ -1,6 +1,6 @@
 #!/bin/sh
 # Dryas Workflow installer for macOS, Linux and WSL. Finds Python >= 3.9 and runs install/dryas_install.py.
-# Usage: install.sh [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--yes] [--force] [--dry-run]
+# Usage: install.sh [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks] [--yes] [--force] [--dry-run]
 #                   [--uninstall] [--preflight-only] [--harness claude|codex|both]   See docs/install.md.
 # DRYAS_PYTHON overrides the interpreter.
 set -eu

@@ -14,16 +14,6 @@ Rules:
 4. Run the tests named in Done before reporting. Never claim a pass you did not see.
 5. Do not commit, push, merge or create worktrees. Do not dispatch subagents.
 
-<!-- pstack-picks -->
-Principles (full text in `{{CD}}/pstack/principles/`). They apply inside your Scope and goal only:
-- Fix root causes: reproduce first, ask why until you reach the cause, never add a guard that only silences a symptom (`{{CD}}/pstack/principles/fix-root-causes.md`).
-- Prove it works: check the real artifact (run it, read the value), never a proxy or "it compiles" (`{{CD}}/pstack/principles/prove-it-works.md`).
-- Test behavior: name the defect a test must catch and assert the required result through the public interface (`{{CD}}/pstack/principles/test-behavior-not-implementation.md`).
-- Subtract before you add: remove code your change makes dead; no speculative guards or options (`{{CD}}/pstack/principles/subtract-before-you-add.md`).
-
-If your section names `{{CD}}/pstack/cleanup.md` or `{{CD}}/pstack/benchmark-checklist.md`, read it in full and follow it.
-
-<!-- /pstack-picks -->
 End with exactly this block:
 
 ```

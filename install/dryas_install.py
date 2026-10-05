@@ -18,12 +18,13 @@ import platform_util as pu  # noqa: E402
 import ruflo_helpers  # noqa: E402
 import settings_merge as sm  # noqa: E402
 import upgrade  # noqa: E402
-from render import chain_bytes, rendered as _rendered  # noqa: E402
+from render import chain_bytes, gate_blocks, rendered as _rendered  # noqa: E402
 from hookcheck import hook_problems  # noqa: E402
 from claude_md_block import START, END, claude_md, remove_claude_md  # noqa: E402,F401
 
 RECORD = ".dryas-installed.json"
 SKIP = {"settings.fragment.json", "CLAUDE.md.template"}
+COMPONENT_DIRS = {"ruflo": ("ruflo/",), "pstack-picks": ("pstack/", "skills/interrogate/", "skills/benchmark-checklist/")}
 PY = pu.python_exe()
 PYX = [PY, "-X", "utf8"]
 USER_DATA = {"jev/thresholds.json"}
@@ -86,7 +87,7 @@ def _plan_files(repo: Path, comps: List[str]):
         rel = f.relative_to(src).as_posix()
         if "__pycache__" in rel.split("/") or rel.endswith(".pyc"):
             continue
-        if rel in SKIP or (rel.startswith("ruflo/") and "ruflo" not in comps):
+        if rel in SKIP or any(rel.startswith(d) and c not in comps for c, ds in COMPONENT_DIRS.items() for d in ds):
             continue
         yield rel, f
     wf = repo / "docs" / "workflow.md"
@@ -170,11 +171,12 @@ def copy_files(repo: Path, cd: Path, comps: List[str], rec: dict, force: bool, t
                mapping: Optional[Dict[str, str]] = None) -> dict:
     mapping = mapping if mapping is not None else _mapping(comps, Path.home(), cd)
     rep = {"new": [], "replace": [], "written": [], "skipped": []}
+    text_comps = sorted(set(rec.get("components", [])) | set(comps))
     for rel, f in _plan_files(repo, comps):
         if f.is_symlink():
             _put(cd, rel, rec, force, ts, rep, dry, link=os.readlink(str(f)))
         else:
-            _put(cd, rel, rec, force, ts, rep, dry, data=_rendered(rel, f, comps, mapping, cd), mode_src=f)
+            _put(cd, rel, rec, force, ts, rep, dry, data=_rendered(rel, f, text_comps if rel.endswith(".md") else comps, mapping, cd), mode_src=f)
     if "ruflo" in comps:
         target = (mapping or {}).get("RUFLO_CLI_DIST")
         if target:
@@ -218,6 +220,9 @@ def _prevalidate(repo: Path, comps: List[str], mapping: Dict[str, str], cd: Opti
     for rel, f in _plan_files(repo, comps):
         if not f.is_symlink() and (rel == "jev/chain.json" or rel.endswith(".md")):
             _rendered(rel, f, comps, mapping, cd)
+    tpl = repo / "claude" / "CLAUDE.md.template"
+    if tpl.exists():
+        gate_blocks(tpl.read_text(encoding="utf-8"), comps)
 
 
 def _unique(p: Path) -> Path:
@@ -314,7 +319,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
             if claude and tpl.exists():
                 print("would add or update the Dryas block in CLAUDE.md")
         elif claude and tpl.exists():
-            claude_md(cd, tpl.read_text(encoding="utf-8"), rec)
+            claude_md(cd, gate_blocks(tpl.read_text(encoding="utf-8"), comps_all), rec)
         if not claude or apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes, comps_all=comps_all):
             _remove_stale_files(repo, cd, comps_all, rec, dry)
         if "ruflo" in comps:
