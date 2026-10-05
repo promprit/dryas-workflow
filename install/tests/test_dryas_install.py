@@ -21,7 +21,7 @@ FRAG = {"core": {"env": {"CORE": "1"}, "hooks": {"PreToolUse": [{"matcher": "*",
 def fixture_repo():
     r = Path(tempfile.mkdtemp())
     files = {"claude/agents/executor.md": "exec", "claude/jev/chain.json": json.dumps(CHAIN),
-             "claude/jev/x.py": "print(1)", "claude/ruflo/run.sh": "#!/bin/sh\n", "claude/hooks/pretool-chain.sh": "#!/bin/sh\nexit 0\n",
+             "claude/jev/x.py": "print(1)", "claude/jev/thresholds.json": "{\"a\": 1}", "claude/ruflo/run.sh": "#!/bin/sh\n", "claude/hooks/pretool-chain.sh": "#!/bin/sh\nexit 0\n",
              "claude/CLAUDE.md.template": "POLICY", "claude/settings.fragment.json": json.dumps(FRAG),
              "docs/workflow.md": "# W\n"}
     for rel, t in files.items():
@@ -64,6 +64,38 @@ class InstallTest(unittest.TestCase):
         self.assertTrue((self.home / ".dryas").is_dir())
         self.assertIn(["claude", "mcp", "add", "--scope", "user", "jev", "--", di.PY, "-X", "utf8",
                        di.pu.fwd(self.cd / "jev/jev_mcp.py")], self.calls)
+
+    def test_thresholds_kept_on_reinstall(self):
+        self.install(["core", "jev"])
+        th = self.cd / "jev/thresholds.json"
+        th.write_text('{"a": 99}')
+        self.install(["core", "jev"])
+        self.assertEqual(th.read_text(), '{"a": 99}')
+        self.install(["core", "jev"], force=True)
+        self.assertEqual(th.read_text(), '{"a": 99}')
+        self.assertIn("jev/thresholds.json", json.loads((self.cd / ".dryas-installed.json").read_text())["files"])
+        th.unlink()
+        self.install(["core", "jev"])
+        self.assertEqual(th.read_text(), '{"a": 1}')
+
+    def test_unselected_stage_keeps_installed_state(self):
+        self.install(["core", "jev"])
+        cp = self.cd / "jev/chain.json"
+        c = json.loads(cp.read_text())
+        fo = [x for x in c["pretool"] if x["name"] == "flowobserve"][0]
+        self.assertIs(fo.get("enabled"), False)
+        fo["enabled"] = True
+        fo["cmd"] = ["custom"]
+        for x in c["pretool"]:
+            if x["name"] == "scope-lock":
+                x["cmd"] = ["tampered"]
+        cp.write_text(json.dumps(c))
+        self.install(["core", "jev"])
+        st = {x["name"]: x for x in json.loads(cp.read_text())["pretool"]}
+        self.assertIs(st["flowobserve"].get("enabled"), True)
+        self.assertEqual(st["flowobserve"]["cmd"], ["custom"])
+        self.assertEqual(st["scope-lock"]["cmd"], ["true"])
+        self.assertIs(st["ruflo-pre-bash"].get("enabled"), False)
 
     def test_no_ruflo_disables_stage_and_skips_files(self):
         self.install(["core", "jev"])

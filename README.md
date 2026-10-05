@@ -72,3 +72,5 @@ Third-party code is not vendored here. The installer fetches it from upstream.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+After installing on a new machine, run the [release check](docs/release-check.md).

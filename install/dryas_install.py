@@ -18,6 +18,7 @@ import platform_util as pu  # noqa: E402
 import ruflo_helpers  # noqa: E402
 import settings_merge as sm  # noqa: E402
 import upgrade  # noqa: E402
+from render import chain_bytes, rendered as _rendered  # noqa: E402
 from hookcheck import hook_problems  # noqa: E402
 from claude_md_block import START, END, claude_md, remove_claude_md  # noqa: E402,F401
 
@@ -25,6 +26,7 @@ RECORD = ".dryas-installed.json"
 SKIP = {"settings.fragment.json", "CLAUDE.md.template"}
 PY = pu.python_exe()
 PYX = [PY, "-X", "utf8"]
+USER_DATA = {"jev/thresholds.json"}
 SHIM_LINK = "ruflo/mcp-shim/dist"
 KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUTER_API_KEY=...  "
             "(not stored by this installer)")
@@ -92,28 +94,6 @@ def _plan_files(repo: Path, comps: List[str]):
         yield "docs/dryas-workflow.md", wf
 
 
-def _chain_bytes(f: Path, comps: List[str], mapping: Dict[str, str]) -> bytes:
-    c = json.loads(f.read_text(encoding="utf-8"))
-    for stages in c.values():
-        for st in stages:
-            comp = st.get("component")
-            if comp and comp != "core" and comp not in comps:
-                st["enabled"] = False
-            where = "chain.json stage " + str(st.get("name", "?"))
-            st["cmd"] = [sm.render_str(str(x), mapping, where) for x in st.get("cmd", [])]
-            if "requires_path" in st:
-                st["requires_path"] = sm.render_str(str(st["requires_path"]), mapping, where)
-    return (json.dumps(c, indent=2) + "\n").encode("utf-8")
-
-
-def _rendered(rel: str, f: Path, comps: List[str], mapping: Dict[str, str]) -> bytes:
-    if rel == "jev/chain.json":
-        return _chain_bytes(f, comps, mapping)
-    if rel.endswith(".md"):
-        return sm.render_tokens(f.read_text(encoding="utf-8"), mapping).encode("utf-8")
-    return f.read_bytes()
-
-
 def _mkdirs(cd: Path, d: Path, rec: dict) -> None:
     """Create d (under cd) and record every directory this installer created."""
     missing = []
@@ -132,6 +112,8 @@ def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bo
          mode: Optional[int] = None, dir_link: bool = False) -> None:
     dest = cd / rel
     backup = None
+    if rel in USER_DATA and os.path.lexists(str(dest)):
+        return  # user data after the first install (e.g. /tune edits); never overwritten, even with --force
     if os.path.lexists(str(dest)):
         cur_link = pu.read_dir_link(str(dest))
         if link is not None:
@@ -192,7 +174,7 @@ def copy_files(repo: Path, cd: Path, comps: List[str], rec: dict, force: bool, t
         if f.is_symlink():
             _put(cd, rel, rec, force, ts, rep, dry, link=os.readlink(str(f)))
         else:
-            _put(cd, rel, rec, force, ts, rep, dry, data=_rendered(rel, f, comps, mapping), mode_src=f)
+            _put(cd, rel, rec, force, ts, rep, dry, data=_rendered(rel, f, comps, mapping, cd), mode_src=f)
     if "ruflo" in comps:
         target = (mapping or {}).get("RUFLO_CLI_DIST")
         if target:
@@ -230,12 +212,12 @@ def _fragment(repo: Path, comps: List[str], mapping: Dict[str, str]) -> dict:
     return sm.render(frag, mapping)
 
 
-def _prevalidate(repo: Path, comps: List[str], mapping: Dict[str, str]) -> None:
+def _prevalidate(repo: Path, comps: List[str], mapping: Dict[str, str], cd: Optional[Path] = None) -> None:
     """Render everything once so unmapped placeholders or tokens abort before any write."""
     _fragment(repo, comps, mapping)
     for rel, f in _plan_files(repo, comps):
         if not f.is_symlink() and (rel == "jev/chain.json" or rel.endswith(".md")):
-            _rendered(rel, f, comps, mapping)
+            _rendered(rel, f, comps, mapping, cd)
 
 
 def _unique(p: Path) -> Path:
@@ -303,7 +285,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
     rec = load_record(cd)
     comps_all = sorted(set(rec.get("components", [])) | set(comps))
     mapping = _mapping(comps_all, home, cd)
-    _prevalidate(repo, comps, mapping)  # unmapped placeholders or tokens abort here, before any write
+    _prevalidate(repo, comps, mapping, cd)  # unmapped placeholders or tokens abort here, before any write
     helpers = {}
     if "ruflo" in comps:
         if dry:
