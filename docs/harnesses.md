@@ -6,4 +6,8 @@ Supported. This is where the whole workflow runs: commands, agents, the scope lo
 
 ## Codex
 
-Coming. The process rules apply in any harness: brainstorm first, plan, work in a git worktree, keep to the task's file scope, review before merge. The hooks and the Jev chain are Claude Code only for now, so with Codex you follow those rules by hand.
+Supported: rules, skills, MCP, and the safety and routing hooks. Install with `--harness codex` or `--harness both` (see [install.md](install.md)).
+
+Codex gets: the `AGENTS.md` rules block; the skills `$orchestrate`, `$wplan`, `$wreview`, `$commit`, `$tune`; the scope lock (including `apply_patch` edits, which are checked file by file and denied when the patch cannot be read), the Jev gate and the Jev route hint (`escalate: yes/no` instead of `opus: yes/no`); the `jev` and `ruflo` MCP servers.
+
+Claude Code only: context-window warnings, compaction keep/restore, `/handoff`, the Ruflo hooks, the `executor` agent and the Sonnet → Opus → Fable ladder, FlowObserve. In Codex, use its own sub-agents and models: cheaper first, stronger on failure, every step logged with `log_escalation`.

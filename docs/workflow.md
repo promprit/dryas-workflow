@@ -83,7 +83,7 @@ Last updated: 2026-10-03.
 6. **TDD gate.** If no failing test exists, a **tester** executor goes first, and the coder runs only after that test fails for the right reason.
 7. **Dispatch.**
    - Write `.orchestrate/active.json`, which arms the scope lock.
-   - Each executor receives **only its own section** (`/usr/bin/python3 $HOME/.claude/jev/planfile.py section .orchestrate/PLAN.md N`, absolute path to match the allow rule) plus the worktree path, never the whole plan.
+   - Each executor receives **only its own section** (`"<python>" -X utf8 "~/.claude/jev/planfile.py" section .orchestrate/PLAN.md <N>`, where `<python>` is the interpreter the installer recorded; the allow rule is rendered with the same absolute paths) plus the worktree path, never the whole plan.
    - Independent tasks run in parallel through Ruflo's hierarchical swarm. Agents spawn via Claude Code's Agent tool, so they run on the subscription.
 8. **On return.** Jev checks `done` (done-criteria met?) and `risk` (routine / worth a look / incident).
    - Only incidents, failures and escalations reach Opus in full; everything else becomes one summary line.
@@ -98,7 +98,7 @@ Last updated: 2026-10-03.
 
 ## 5. Hooks and their order
 
-Claude Code runs all matching hooks in parallel, so the order of our stages comes from one **chain script per event**. The scripts are `~/.claude/hooks/pretool-chain.sh` and `prompt-chain.sh`, which symlink into `~/.claude/jev/hooks/`. They run the stages listed in `~/.claude/jev/chain.json` in sequence.
+Claude Code runs all matching hooks in parallel, so the order of our stages comes from one **chain script per event**. Each event's hook runs `~/.claude/jev/chain.py` (`pretool` or `prompt`) directly with the Python the installer was started with. `chain.py` runs the stages listed in `~/.claude/jev/chain.json` in sequence.
 
 **PreToolUse** (matcher `*`, 20 s):
 1. **Scope lock** (`scope_lock.py`). A pure path check with no model call.
@@ -133,7 +133,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
 ## 6. Jev details
 
-- **Code** lives in `~/.claude/jev/` (a local git repo on the Mac). Python 3.9 stdlib only; tests run with `cd ~/.claude/jev && /usr/bin/python3 -m unittest discover -s tests`.
+- **Code** lives in `~/.claude/jev/` (a local git repo on the Mac). Python 3.9 stdlib only; tests run with `cd ~/.claude/jev && python -m unittest discover -s tests`.
   - `jev_client.py`: `POST https://openrouter.ai/api/v1/systemone`, model `typesafe/jev-1.13`, timeout 3 s. It redacts the state first.
   - `redact.py`: removes keys and tokens, `NAME=secret`, bearer/authorization headers, PEM blocks, URL passwords and `--token` flags.
   - `gate.py`, `route.py`, `scope_lock.py`, `planfile.py`, `chain.py`, `jevlog.py`, `compact_keep.py`, `compact_restore.py`, `transcript_items.py`, `handoff.py`, `handoff_paths.py`, `handoff_restore.py`, `context_watch.py`, `tune.py`.
@@ -187,7 +187,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - **Topology:** hierarchical, passed in `swarm_init` arguments (the plugin MCP defaults to hierarchical-mesh, so the orchestrator always passes it).
 - **MCP launch:** the Ruflo MCP runs through the `RUFLO_MCP_CLI_OVERRIDE` shim, with cwd `Dev/_caches/ruflo/<main repo name>`. `RUFLO_DAEMON_AUTOSTART=0`. The memory namespace is the main repo folder name.
 - **Memory MCP tools** (from the ruflo-core plugin, named `mcp__plugin_ruflo-core_ruflo__<tool>`): `memory_search`, `memory_store` and `swarm_init`. The namespace is the main repo folder name.
-- **Memory and data** go to `$DRYAS_DATA_ROOT/ruflo` (SSD), per project. Every lifted Ruflo hook is wrapped by `~/.claude/ruflo/run.sh`, so it's a silent no-op when the SSD or a helper is missing.
+- **Memory and data** go to `$DRYAS_DATA_ROOT/ruflo` (SSD), per project. Every lifted Ruflo hook is wrapped by `~/.claude/ruflo/run.py`, so it's a silent no-op when the SSD or a helper is missing.
 - **Hooks:**
   - **Lifted by us:** pre-bash (an observe-only chain stage), session-restore, auto-memory import (import only, no Stop sync), helper post-edit, helper session-end on SessionEnd and on PreCompact (manual and auto), and SubagentStop post-task.
   - **ruflo-core's own plugin hooks also run** (modify-bash, modify-file, post-command, post-edit, PreCompact guidance and Stop session-end), through the pinned CLI override. pre-edit and post-bash have no handler in Ruflo 3.51.0.
@@ -271,8 +271,7 @@ An optional, separate observer app (closed source). The workflow runs fully with
 The main agent (orchestrator) does not have to be Claude Code. Claude Code on Opus is the default, but another harness such as Codex (or any agent CLI that can follow these rules) may run the session.
 
 - **Always applies, any harness:** the ground rules (§1), brainstorm first, worktree per multi-step task, plan-as-a-file format, TDD gate, design rule (§4 step 1), `/wreview`-style two-stage review, verification before completion, commit only after review, never push without asking.
-- **Claude Code only today:** the hook chain (§5: scope lock, Jev gate, Jev route, context watch, compaction/handoff), Claude Code slash commands and skills, the `executor` agent and the Sonnet → Opus → Fable ladder. Another harness does not get these automatically.
-- **Jev and Ruflo in another harness:** usable only if that harness supports MCP and is configured with the `jev` and Ruflo servers. Same billing rule: no `ANTHROPIC_API_KEY`; Jev still uses only `OPENROUTER_API_KEY` from the shell environment.
-- **Instructions file:** another harness reads its own file (e.g. Codex reads `AGENTS.md`). Point it at this file rather than copying the rules.
-- **Executors and escalation:** in another harness, use its own sub-agent mechanism if it has one and keep the same idea (cheaper model first, escalate on failure, log the reason). Note the harness used in commit messages or the plan when it is not Claude Code.
+- Codex: rules, skills, MCP and the scope-lock / Jev gate / Jev route hooks are installed by `--harness codex`. Details: [harnesses.md](harnesses.md).
+  - Known limit: an edit made by a shell command (for example `apply_patch` run through Bash, or `sed -i`) is not seen by the scope lock, in Claude Code or Codex.
+- **Billing, any harness:** Jev and Ruflo follow the same billing rule: no `ANTHROPIC_API_KEY`; Jev uses only `OPENROUTER_API_KEY` from the shell environment.
 - **FlowObserve** only sees Claude Code sessions (it reads Claude Code hook events).

@@ -6,6 +6,8 @@ cd dryas-workflow
 ./install/install.sh
 ```
 
+On Windows, use `.\install\install.ps1` (see [Windows](#windows-native)).
+
 The installer asks before it changes anything. Use `--dry-run` first to see what it would do.
 
 ## Components
@@ -18,7 +20,7 @@ The installer asks before it changes anything. Use `--dry-run` first to see what
 | Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), pinned 6.4.1) | `--no-superpowers` skips |
 | Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (pinned 4.3.1) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
 
-You need [Claude Code](https://docs.claude.com/en/docs/claude-code) installed first.
+You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex CLI, or both, installed first.
 
 ## Flags
 
@@ -31,9 +33,32 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code) installed fi
 | `--yes` | Run the third-party install commands without asking |
 | `--force` | Replace your existing files (originals are backed up first) |
 | `--dry-run` | Print the plan and the settings diff, change nothing (skips third-party installs and verify) |
-| `--uninstall` | Remove what the installer added |
+| `--uninstall` | Remove what the installer added (both the Claude and the Codex install) |
+| `--preflight-only` | Run the prerequisite checks and stop |
+| `--harness claude\|codex\|both` | Choose what to install for. Claude Code is the default |
 
 `--yes` does not skip the settings merge confirmation. The installer always asks before it edits `~/.claude/settings.json`.
+
+## Windows (native)
+
+Prerequisites: Python 3.9 or newer (python.org installer or `winget install Python.Python.3.12`), Git for Windows, Node.js 20+ (for Ruflo), and the Claude Code and/or Codex CLI.
+
+```powershell
+git clone https://github.com/promprit/dryas-workflow.git
+cd dryas-workflow
+.\install\install.ps1
+```
+
+If PowerShell refuses to run scripts: `powershell -ExecutionPolicy Bypass -File .\install\install.ps1`.
+If your user folder or Python path contains a space and Windows has no short (8.3) name for it, Ruflo and the Codex hooks cannot be installed. The installer says so and suggests `--no-ruflo` / `--harness claude`.
+
+## WSL
+
+Inside WSL, follow the Linux steps (`./install/install.sh`). WSL and native Windows installs are separate: each has its own home folder.
+
+## Codex
+
+`--harness codex` installs for Codex only, `--harness both` for Claude Code and Codex. For Codex the installer adds a rules block to `~/.codex/AGENTS.md` (or `$CODEX_HOME`), the skills `$orchestrate`, `$wplan`, `$wreview`, `$commit` and `$tune` to `~/.agents/skills`, the scope-lock / Jev gate / Jev route hooks to `~/.codex/hooks.json`, and the `jev` and `ruflo` MCP servers (via `codex mcp add`, or a marked block in `config.toml`). Superpowers for Codex is not installed; the installer tells you if it is missing.
 
 ## Existing files
 
@@ -65,7 +90,7 @@ The Ruflo helpers are generated locally by `ruflo init` and patched (data root, 
 
 The installer ends with a verify step. Each check prints `PASS`, `FAIL` or `SKIP`:
 
-- **Jev tests**: runs the tests in `~/.claude/jev/tests`. They need `pytest`. If `pytest` is missing the check prints `SKIP (install pytest to run the Jev tests)`; install it (`/usr/bin/python3 -m pip install pytest`) and re-run the installer.
+- **Jev tests**: runs the tests in `~/.claude/jev/tests` with the Python the installer was started with. They need `pytest`. If `pytest` is missing the check prints `SKIP (install pytest to run the Jev tests)`; install it (`python3 -m pip install pytest`) and re-run the installer.
 - **jev MCP server registered** (only with Jev): `claude mcp list` shows `jev:`.
 - **scope lock blocks an out-of-scope write**: a write outside an active task's scope is denied in a temporary folder.
 

@@ -1,0 +1,24 @@
+# Dryas Workflow (Codex)
+Process rules for coding sessions on this machine. Full reference: `{{CD}}/docs/dryas-workflow.md`.
+
+## Always
+- Brainstorm first: before new work, clarify intent and get the user's approval of a design (use Superpowers' brainstorming skill if it is installed).
+- Multi-step work runs in its own git worktree; merge only after review and verification.
+- Plans are files: `.orchestrate/PLAN.md` in the worktree, sections `## Task N:` with Goal, Scope (globs), Done and Failing test first. Never commit `.orchestrate/`.
+- Test first. Never claim a pass you did not see.
+- Review before merge: spec compliance first, then code quality (`$wreview`).
+- Commit only after review, as Conventional Commits; never push without asking.
+- Do what was asked, nothing more. Read a file before editing it. Never commit secrets or `.env` files.
+
+## Skills
+`$orchestrate` (multi-step tasks), `$wplan` (write a plan), `$wreview` (two-stage review), `$commit` (Jev-gated commit), `$tune` (weekly Jev calibration).
+
+## Jev and Ruflo (MCP servers `jev` and `ruflo`)
+- Jev answers narrow typed questions only (`jev_judge`); it never writes code or plans. When it is below threshold, escalates or is unavailable, you decide; log any disagreement with `log_override`.
+- Models: start a task on a cheaper model and move to a stronger one when it fails. Log every step with `log_escalation` (task, reason, decided_by, from_model, to_model).
+- Ruflo is the memory: `memory_search` before a task, `memory_store` after success; namespace = the main repo's folder name.
+- Hooks enforce the scope lock (while `.orchestrate/active.json` exists, edits outside the active tasks' Scope are denied), the Jev gate on risky commands, and a Jev route hint on each prompt.
+- On Windows PowerShell, put `& ` before a command that starts with a quoted path.
+
+## Not available in Codex
+Context-window warnings, compaction handoff, `$handoff` and the Ruflo hooks run only in Claude Code.

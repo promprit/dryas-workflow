@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PY\" -X utf8 \"$CD/jev/chain.py\" pretool --harness codex",
+            "commandWindows": "$PY_SAFE -X utf8 $CD_SAFE/jev/chain.py pretool --harness codex",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$PY\" -X utf8 \"$CD/jev/chain.py\" prompt --harness codex",
+            "commandWindows": "$PY_SAFE -X utf8 $CD_SAFE/jev/chain.py prompt --harness codex",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -35,6 +35,150 @@ class ChainTest(unittest.TestCase):
         p = os.path.join(self.tmp, name)
         return p, "import sys;sys.stdin.read();open(%r,'w').write('x')" % p
 
+    SMOKE_PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
+
+    def _worktree(self):
+        wt = os.path.join(self.tmp, "wt")
+        os.makedirs(os.path.join(wt, ".orchestrate"))
+        with open(os.path.join(wt, ".orchestrate", "PLAN.md"), "w", encoding="utf-8") as f:
+            f.write(self.SMOKE_PLAN)
+        with open(os.path.join(wt, ".orchestrate", "active.json"), "w", encoding="utf-8") as f:
+            json.dump({"active": ["1"]}, f)
+        return wt
+
+    def test_load_stages_filters_by_harness(self):
+        cfg = os.path.join(self.tmp, "chain.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"pretool": [{"name": "c", "cmd": ["x"]}, {"name": "both", "cmd": ["x"], "harness": ["claude", "codex"]}]}, f)
+        os.environ["JEV_CHAIN_CONFIG"] = cfg
+        try:
+            self.assertEqual([s["name"] for s in chain.load_stages("pretool")], ["c", "both"])
+            self.assertEqual([s["name"] for s in chain.load_stages("pretool", "codex")], ["both"])
+        finally:
+            del os.environ["JEV_CHAIN_CONFIG"]
+
+    def test_codex_patch_denies_out_of_scope_file(self):
+        code = ("import sys,json;e=json.load(sys.stdin);p=e['tool_input']['file_path'];"
+                "print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','permissionDecision':'deny',"
+                "'permissionDecisionReason':'out: '+p}}) if p.startswith('out/') else '')")
+        patch = "*** Begin Patch\n*** Update File: src/ok.py\n@@\n-a\n+b\n*** Add File: out/bad.py\n+x\n*** End Patch\n"
+        ev = {"tool_name": "apply_patch", "tool_input": {"command": patch}, "cwd": self.tmp}
+        out = chain.pretool_codex(ev, [stage("lock", code, harness=["claude", "codex"], per_file=True)])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("out/bad.py", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_codex_unparseable_patch_denied(self):
+        out = chain.pretool_codex({"tool_name": "apply_patch", "tool_input": {"command": "garbage"}}, [])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("[codex-patch]", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_codex_patch_outside_worktree_denied_by_real_scope_lock(self):
+        wt = self._worktree()
+        lock = {"name": "scope-lock", "cmd": [sys.executable, os.path.join(HERE, "scope_lock.py")],
+                "match": "Edit|Write|MultiEdit|NotebookEdit", "harness": ["claude", "codex"], "per_file": True}
+        ok = "*** Begin Patch\n*** Update File: src/feature/a.py\n+x\n*** End Patch\n"
+        self.assertIsNone(chain.pretool_codex({"tool_name": "apply_patch", "tool_input": {"command": ok}, "cwd": wt}, [lock]))
+        bad = ("*** Begin Patch\n*** Update File: src/feature/a.py\n+x\n"
+               "*** Update File: ../../etc/evil\n+y\n*** End Patch\n")
+        out = chain.pretool_codex({"tool_name": "apply_patch", "tool_input": {"command": bad}, "cwd": wt}, [lock])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("evil", out["hookSpecificOutput"]["permissionDecisionReason"])
+        other = "*** Begin Patch\n*** Add File: src/other.py\n+x\n*** End Patch\n"
+        out = chain.pretool_codex({"tool_name": "apply_patch", "tool_input": {"command": other}, "cwd": wt}, [lock])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def _counter(self, name, then=""):
+        p = os.path.join(self.tmp, name)
+        code = ("import sys,json;e=json.load(sys.stdin);open(%r,'a').write(e['tool_input']['file_path']+'\\n');" % p) + then
+        return p, code
+
+    def _lines(self, p):
+        if not os.path.exists(p):
+            return []
+        with open(p) as f:
+            return f.read().splitlines()
+
+    def test_codex_per_file_deny_on_first_stops_further_runs(self):
+        cnt, code = self._counter("cnt", "print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse',"
+                                         "'permissionDecision':'deny','permissionDecisionReason':'no'}}))")
+        later, later_code = self._counter("later")
+        patch = "*** Begin Patch\n" + "".join("*** Add File: f%d.py\n+x\n" % i for i in range(5)) + "*** End Patch\n"
+        out = chain.pretool_codex({"tool_name": "apply_patch", "tool_input": {"command": patch}, "cwd": self.tmp},
+                                  [stage("lock", code, per_file=True), stage("gate", later_code)])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("[lock] no", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertEqual(self._lines(cnt), ["f0.py"])
+        self.assertEqual(self._lines(later), [])
+
+    def test_codex_scope_lock_name_is_per_file_without_flag(self):
+        code = ("import sys,json;e=json.load(sys.stdin);p=e['tool_input']['file_path'];"
+                "print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','permissionDecision':'deny',"
+                "'permissionDecisionReason':'out: '+p}}) if p == 'out/bad.py' else '')")
+        patch = "*** Begin Patch\n*** Update File: src/ok.py\n+b\n*** Add File: out/bad.py\n+x\n*** End Patch\n"
+        out = chain.pretool_codex({"tool_name": "apply_patch", "tool_input": {"command": patch}}, [stage("scope-lock", code)])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("out/bad.py", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_codex_observers_run_once_on_pass1_deny(self):
+        obs, obs_code = self._counter("obs", "print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse',"
+                                              "'permissionDecision':'ask','permissionDecisionReason':'o'}}))")
+        gate, gate_code = self._counter("gate")
+        patch = "*** Begin Patch\n*** Add File: a.py\n+1\n*** Add File: b.py\n+2\n*** End Patch\n"
+        out = chain.pretool_codex({"tool_name": "apply_patch", "tool_input": {"command": patch}},
+                                  [stage("lock", decision("deny", "no"), per_file=True), stage("gate", gate_code),
+                                   stage("obs", obs_code, observe=True)])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("[lock] no", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertEqual(self._lines(obs), ["a.py"])
+        self.assertEqual(self._lines(gate), [])
+
+    def test_codex_non_per_file_stage_runs_once(self):
+        cnt, code = self._counter("cnt")
+        seen = os.path.join(self.tmp, "seen.json")
+        code += "open(%r,'w').write(json.dumps(e))" % seen
+        lock, lock_code = self._counter("lock")
+        patch = "*** Begin Patch\n*** Add File: a.py\n+1\n*** Update File: b.py\n+2\n*** Delete File: c.py\n*** End Patch\n"
+        out = chain.pretool_codex({"tool_name": "apply_patch", "tool_input": {"command": patch}, "cwd": self.tmp},
+                                  [stage("lock", lock_code, per_file=True), stage("gate", code, match="Bash|Write|Edit")])
+        self.assertIsNone(out)
+        self.assertEqual(self._lines(lock), ["a.py", "b.py", "c.py"])
+        self.assertEqual(self._lines(cnt), ["a.py"])
+        with open(seen) as f:
+            e = json.load(f)
+        self.assertEqual(e["tool_name"], "Write")
+        self.assertEqual(e["tool_input"], {"file_path": "a.py", "content": patch})
+        self.assertEqual(e["cwd"], self.tmp)
+
+    def test_codex_strictest_decision_across_passes(self):
+        ask = stage("lock", decision("ask", "hm"), per_file=True)
+        deny = stage("gate", decision("deny", "no"))
+        patch = "*** Begin Patch\n*** Add File: a.py\n+1\n*** Add File: b.py\n+2\n*** End Patch\n"
+        ev = {"tool_name": "apply_patch", "tool_input": {"command": patch}}
+        out = chain.pretool_codex(ev, [ask, deny])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("[gate] no", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertEqual(chain.pretool_codex(ev, [ask])["hookSpecificOutput"]["permissionDecision"], "ask")
+
+    def test_codex_non_patch_runs_all_stages_once(self):
+        cnt = os.path.join(self.tmp, "c")
+        code = "import sys;sys.stdin.read();open(%r,'a').write('x\\n')" % cnt
+        out = chain.pretool_codex(self.ev, [stage("a", code, per_file=True), stage("b", code)])
+        self.assertIsNone(out)
+        self.assertEqual(self._lines(cnt), ["x", "x"])
+
+    def test_main_exports_harness_to_stages(self):
+        cfg = os.path.join(self.tmp, "chain.json")
+        code = ("import os,sys,json;sys.stdin.read();print(json.dumps({'hookSpecificOutput':{'hookEventName':"
+                "'UserPromptSubmit','additionalContext':'h='+os.environ.get('DRYAS_HARNESS','')}}))")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"prompt": [{"name": "p", "cmd": [sys.executable, "-c", code], "harness": ["claude", "codex"]},
+                                  {"name": "claude-only", "cmd": [sys.executable, "-c", code.replace("h=", "c=")]}]}, f)
+        env = dict(os.environ, JEV_CHAIN_CONFIG=cfg)
+        p = subprocess.run([sys.executable, os.path.join(HERE, "chain.py"), "prompt", "--harness", "codex"],
+                           input=json.dumps({"prompt": "x"}), capture_output=True, text=True, env=env)
+        ctx = json.loads(p.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertEqual(ctx, "h=codex")
+
     def test_no_stages_no_decision(self):
         self.assertIsNone(chain.pretool(self.ev, self.raw, []))
 
@@ -131,13 +275,29 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertIn("[d] final", out["hookSpecificOutput"]["permissionDecisionReason"])
 
-    def test_wrapper_missing_chain_exits_zero(self):
-        # Test that if chain.py is missing, the wrapper still exits 0. Set HOME to empty temp dir.
+    @unittest.skipIf(sys.platform == "win32", "POSIX shell script")
+    def test_string_cmd_is_skipped_not_split(self):
+        bindir = tempfile.mkdtemp()
+        fake = os.path.join(bindir, "n")
+        with open(fake, "w") as f:
+            f.write("#!/bin/sh\ncat >/dev/null\necho '%s'\n" % json.dumps(
+                {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "ran n"}}))
+        os.chmod(fake, 0o755)
+        old = os.environ["PATH"]
+        os.environ["PATH"] = bindir + os.pathsep + old
+        try:
+            out = chain.pretool(self.ev, self.raw, [stage("s", "dummy", cmd="not-a-list")])
+        finally:
+            os.environ["PATH"] = old
+        self.assertIsNone(out)
+
+    def test_main_exits_zero_on_garbage_stdin(self):
         cfg = os.path.join(self.tmp, "chain.json")
         with open(cfg, "w") as f:
             json.dump({"pretool": []}, f)
-        env = dict(os.environ, HOME=self.tmp, JEV_CHAIN_CONFIG=cfg)
-        p = subprocess.run(["/bin/sh", os.path.join(HERE, "hooks", "pretool-chain.sh")], input="{}", capture_output=True, text=True, env=env)
+        env = dict(os.environ, JEV_CHAIN_CONFIG=cfg)
+        p = subprocess.run([sys.executable, os.path.join(HERE, "chain.py"), "pretool"], input="not json",
+                           capture_output=True, text=True, env=env)
         self.assertEqual(p.returncode, 0)
         self.assertEqual(p.stdout, "")
 

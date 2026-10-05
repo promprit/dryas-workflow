@@ -11,14 +11,42 @@ FRAG = {
 }
 
 class RenderTest(unittest.TestCase):
-    def test_env_only(self):
+    def test_env_and_hooks(self):
         r = sm.render(FRAG, {"DRYAS_DATA_ROOT": "/d", "HOME": "/h"})
         self.assertEqual(r["env"]["ROOT"], "/d/x")
-        self.assertEqual(r["hooks"]["PreToolUse"][0]["hooks"][0]["command"], "/bin/sh \"$HOME/h.sh\"")
+        self.assertEqual(r["hooks"]["PreToolUse"][0]["hooks"][0]["command"], "/bin/sh \"/h/h.sh\"")
 
     def test_unmapped_fails(self):
         with self.assertRaises(ValueError):
             sm.render(FRAG, {"HOME": "/h"})
+
+    def test_render_quotes_paths_with_spaces(self):
+        frag = {"permissions": {"allow": ['Bash("$PY" -X utf8 "$CD/jev/planfile.py":*)', "mcp__jev"]},
+                "hooks": {"PreToolUse": [{"matcher": "*", "hooks": [
+                    {"type": "command", "command": '"$PY" -X utf8 "$CD/jev/chain.py" pretool',
+                     "commandWindows": "$PY_SAFE -X utf8 $CD_SAFE/jev/chain.py pretool"}]}]}}
+        m = {"PY": "C:/Program Files/Python312/python.exe", "CD": "C:/Users/Ana Silva/.claude",
+             "PY_SAFE": "C:/PROGRA~1/Python312/python.exe", "CD_SAFE": "C:/Users/ANASIL~1/.claude"}
+        r = sm.render(frag, m)
+        h = r["hooks"]["PreToolUse"][0]["hooks"][0]
+        self.assertEqual(h["command"], '"C:/Program Files/Python312/python.exe" -X utf8 "C:/Users/Ana Silva/.claude/jev/chain.py" pretool')
+        self.assertEqual(h["commandWindows"], "C:/PROGRA~1/Python312/python.exe -X utf8 C:/Users/ANASIL~1/.claude/jev/chain.py pretool")
+        self.assertEqual(r["permissions"]["allow"],
+                         ['Bash("C:/Program Files/Python312/python.exe" -X utf8 "C:/Users/Ana Silva/.claude/jev/planfile.py":*)', "mcp__jev"])
+        self.assertIn("$PY", frag["hooks"]["PreToolUse"][0]["hooks"][0]["command"])  # input not mutated
+
+    def test_unmapped_in_hook_fails(self):
+        frag = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "$NOPE/x"}]}]}}
+        with self.assertRaises(ValueError) as cm:
+            sm.render(frag, {})
+        self.assertIn("$NOPE", str(cm.exception))
+
+    def test_render_tokens(self):
+        t = 'Run `"{{PY}}" "{{CD}}/jev/handoff.py" save --cwd "$PWD"` and {braces} stay'
+        self.assertEqual(sm.render_tokens(t, {"PY": "/p", "CD": "/c"}),
+                         'Run `"/p" "/c/jev/handoff.py" save --cwd "$PWD"` and {braces} stay')
+        with self.assertRaises(ValueError):
+            sm.render_tokens("{{NOPE}}", {"PY": "/p"})
 
 class MergeTest(unittest.TestCase):
     def setUp(self):
@@ -28,7 +56,7 @@ class MergeTest(unittest.TestCase):
         merged, added, conflicts = sm.merge({}, self.frag)
         self.assertEqual(merged["env"]["A"], "1")
         self.assertEqual(merged["model"], "opus")
-        self.assertEqual(added["hooks"], [["PreToolUse", "*", "/bin/sh \"$HOME/h.sh\""]])
+        self.assertEqual(added["hooks"], [["PreToolUse", "*", "/bin/sh \"/h/h.sh\""]])
         self.assertEqual(conflicts, [])
 
     def test_conflict_keeps_user_value_not_recorded(self):

@@ -77,6 +77,7 @@ class HelperInstallTest(_Base):
                 raise rh.HelperError("rc=%s" % rc)
         self.assertFalse(self.hdir.exists() and any(self.hdir.iterdir()))
 
+    @unittest.skipIf(os.name == "nt", "POSIX file modes")
     def test_patched_output_written_with_mode_and_recorded(self):
         rh.generate = lambda b: fake(mode=0o755)
         self.assertEqual(self.install(["core", "ruflo"]), 0)
@@ -155,6 +156,7 @@ class HelperInstallTest(_Base):
         for n in NAMES:
             self.assertFalse((self.hdir / n).exists())
 
+    @unittest.skipIf(os.name == "nt", "POSIX file modes")
     def test_skipped_user_helper_keeps_mode(self):
         rh.generate = lambda b: fake(mode=0o755)
         self.hdir.mkdir(parents=True)
@@ -165,6 +167,7 @@ class HelperInstallTest(_Base):
         self.assertEqual(mine.read_text(), "mine")
         self.assertEqual(stat.S_IMODE(mine.stat().st_mode), 0o600)
 
+    @unittest.skipIf(os.name == "nt", "symlinks need admin rights on Windows")
     def test_dangling_symlink_helper_does_not_crash(self):
         rh.generate = lambda b: fake(mode=0o755)
         self.hdir.mkdir(parents=True)
@@ -177,6 +180,7 @@ class HelperInstallTest(_Base):
 FAKE_OK = "#!/bin/sh\nmkdir -p .claude/helpers\ncd .claude/helpers\n%s"
 
 
+@unittest.skipIf(os.name == "nt", "fake ruflo binaries are sh scripts")
 class GenerateTest(unittest.TestCase):
     def setUp(self):
         self.d = Path(tempfile.mkdtemp())

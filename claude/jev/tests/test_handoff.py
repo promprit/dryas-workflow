@@ -76,6 +76,7 @@ class DiscoveryTest(HandoffBase):
         open(os.path.join(d, "c.txt"), "w").write("x")
         self.assertEqual(handoff.find_transcript(self.cwd), new)
 
+    @unittest.skipIf(os.name == "nt", "symlinks need admin rights on Windows")
     def test_realpath_fallback(self):
         link = os.path.join(self.tmp, "link")
         os.symlink(self.cwd, link)
@@ -185,16 +186,17 @@ class SaveTest(HandoffBase):
     def test_permissions(self):
         write_jsonl(self.tp, [user("u")])
         handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True))
-        self.assertEqual(stat.S_IMODE(os.stat(self.hdir).st_mode), 0o700)
-        self.assertEqual(stat.S_IMODE(os.stat(handoff.handoff_path(self.cwd)).st_mode), 0o600)
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(os.stat(self.hdir).st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(os.stat(handoff.handoff_path(self.cwd)).st_mode), 0o600)
 
     def test_cap_keeps_newest(self):
         write_jsonl(self.tp, [assistant("%03d " % i + "z" * 900) for i in range(40)])
         handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True))
         b = self.body()
         self.assertLessEqual(len(b), 12000)
-        self.assertIn("039 ", b)
-        self.assertNotIn("000 ", b)
+        self.assertIn("**assistant:** 039 ", b)
+        self.assertNotIn("**assistant:** 000 ", b)
         self.assertTrue(b.startswith("<!-- handoff"))
 
     def test_joblog_no_text(self):
@@ -220,7 +222,7 @@ class SaveTest(HandoffBase):
     def test_cli_unavailable_exit0(self):
         write_jsonl(self.tp, [assistant("x")])
         env = dict(os.environ, OPENROUTER_API_KEY="")
-        p = subprocess.run([sys.executable, os.path.join(HERE, "handoff.py"), "save", "--cwd", self.cwd, "--transcript", self.tp],
+        p = subprocess.run([sys.executable, "-X", "utf8", os.path.join(HERE, "handoff.py"), "save", "--cwd", self.cwd, "--transcript", self.tp],
                            capture_output=True, text=True, env=env)
         self.assertEqual(p.returncode, 0)
         self.assertEqual(len(p.stdout.strip().splitlines()), 1)

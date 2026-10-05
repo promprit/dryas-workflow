@@ -124,7 +124,8 @@ class CompactTest(unittest.TestCase):
 
     def test_file_mode_0600(self):
         compact_keep.run(self.ev(), keep_all)
-        self.assertEqual(stat.S_IMODE(os.stat(self.fname()).st_mode), 0o600)
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(os.stat(self.fname()).st_mode), 0o600)
 
     def test_redacted_and_truncated_state(self):
         write_jsonl(self.tp, [assistant("x" * 990 + "PASSWORD=secret123")])

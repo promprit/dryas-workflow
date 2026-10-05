@@ -24,6 +24,14 @@ class RouteTest(unittest.TestCase):
         self.assertEqual(route.run({"prompt": "build x", "cwd": "/p"}, lambda s, q: answers()),
                          "Jev route: swarm (0.82); opus: no (0.91)")
 
+    def test_codex_wording(self):
+        os.environ["DRYAS_HARNESS"] = "codex"
+        try:
+            self.assertEqual(route.run({"prompt": "build x", "cwd": "/p"}, lambda s, q: answers()),
+                             "Jev route: swarm (0.82); escalate: no (0.91)")
+        finally:
+            del os.environ["DRYAS_HARNESS"]
+
     def test_single_agent_label(self):
         line = route.run({"prompt": "fix typo"}, lambda s, q: answers("single_agent", 0.9, 0.95))
         self.assertEqual(line, "Jev route: single-agent (0.90); opus: yes (0.95)")

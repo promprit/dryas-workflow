@@ -64,7 +64,7 @@ def check(root: str, path: str, has_agent_id: bool = False) -> Optional[str]:
     globs = [g for t in active for g in planfile.scope(secs.get(str(t), ""))]
     if planfile.in_scope(rel, globs):
         return None
-    return "scope lock: %s is outside the scope of active task(s) %s" % (rel, ",".join(map(str, active)))
+    return "scope lock: %s is outside the scope of active task(s) %s" % (rel.replace(os.sep, "/"), ",".join(map(str, active)))
 
 
 def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:

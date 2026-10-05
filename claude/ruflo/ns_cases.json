@@ -1,0 +1,14 @@
+[
+  {"start": "/x/myrepo", "common": "/x/myrepo/.git", "expect": "myrepo"},
+  {"start": "/x/myrepo/.worktrees/main", "common": "/x/myrepo/.git", "expect": "myrepo"},
+  {"start": "/x/myrepo/sub/dir", "common": "/x/myrepo/.git", "expect": "myrepo"},
+  {"start": "/x/bare.git", "common": "/x/bare.git", "expect": "bare.git"},
+  {"start": "/tmp/plain", "common": null, "expect": "plain"},
+  {"start": "/tmp/plain/", "common": null, "expect": "plain"},
+  {"start": "/tmp/we ird", "common": null, "expect": "we_ird"},
+  {"start": "/tmp/café", "common": null, "expect": "caf_"},
+  {"start": "/", "common": null, "expect": "_unknown"},
+  {"start": "/tmp/..", "common": null, "expect": "_unknown"},
+  {"start": "C:\\Users\\ana\\proj", "common": "C:/Users/ana/proj/.git", "expect": "proj"},
+  {"start": "C:\\Users\\ana\\proj\\.worktrees\\x", "common": "C:/Users/ana/proj/.git", "expect": "proj"}
+]

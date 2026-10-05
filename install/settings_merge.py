@@ -11,16 +11,43 @@ from typing import Dict, List, Tuple
 _PH = re.compile(r"\$\{?([A-Z_][A-Z0-9_]*)\}?")
 
 
+_TOK = re.compile(r"\{\{([A-Z_][A-Z0-9_]*)\}\}")
+
+
+def render_str(s: str, mapping: Dict[str, str], where: str) -> str:
+    def sub(m):
+        name = m.group(1)
+        if name not in mapping:
+            raise ValueError("unmapped placeholder $%s in %s" % (name, where))
+        return mapping[name]
+    return _PH.sub(sub, s)
+
+
 def render(fragment: dict, mapping: Dict[str, str]) -> dict:
     out = copy.deepcopy(fragment)
     for k, v in out.get("env", {}).items():
-        def sub(m, k=k):
-            name = m.group(1)
-            if name not in mapping:
-                raise ValueError("unmapped placeholder $%s in env %s" % (name, k))
-            return mapping[name]
-        out["env"][k] = _PH.sub(sub, v)
+        out["env"][k] = render_str(v, mapping, "env " + k)
+    for kind in ("allow", "deny"):
+        rules = out.get("permissions", {}).get(kind)
+        if rules:
+            out["permissions"][kind] = [render_str(r, mapping, "permissions." + kind) for r in rules]
+    for ev, groups in out.get("hooks", {}).items():
+        for g in groups:
+            for h in g.get("hooks", []):
+                for key in ("command", "commandWindows"):
+                    if key in h:
+                        h[key] = render_str(h[key], mapping, "hooks." + ev)
     return out
+
+
+def render_tokens(text: str, mapping: Dict[str, str]) -> str:
+    """{{NAME}} tokens in copied .md files. Shell variables such as "$PWD" stay literal."""
+    def sub(m):
+        name = m.group(1)
+        if name not in mapping:
+            raise ValueError("unmapped token {{%s}}" % name)
+        return mapping[name]
+    return _TOK.sub(sub, text)
 
 
 def _hook_entries(hooks: dict):
@@ -28,6 +55,9 @@ def _hook_entries(hooks: dict):
         for g in groups:
             for h in g.get("hooks", []):
                 yield ev, g.get("matcher"), h
+
+
+hook_entries = _hook_entries
 
 
 def merge(settings: dict, fragment: dict) -> Tuple[dict, dict, List[str]]:
