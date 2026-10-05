@@ -64,6 +64,7 @@ Last updated: 2026-10-03.
 3. **Memory first.** `/orchestrate` searches Ruflo memory (`memory_search`, with the main repo folder name as the namespace) and writes down the top 3 past outcomes (what worked, what failed).
 4. **Plan as a file.**
    - Create a git worktree (`superpowers:using-git-worktrees`).
+   - **One agent per worktree.** A worktree belongs to exactly one orchestrator session (one loop). Never run two sessions in the same worktree, and never dispatch into a worktree another session owns. To run more work on the same project at once, start another session in a new worktree on its own branch: loops run in parallel and never collide, and each merges only after its own review and verification. Executors inside one loop share their loop's worktree, kept apart by non-overlapping `Scope:` globs.
    - Write `.orchestrate/PLAN.md` in the worktree, one section per task, in this format:
      ```
      ## Task N: <title>
@@ -270,7 +271,7 @@ An optional, separate observer app (closed source). The workflow runs fully with
 
 The main agent (orchestrator) does not have to be Claude Code. Claude Code on Opus is the default, but another harness such as Codex (or any agent CLI that can follow these rules) may run the session.
 
-- **Always applies, any harness:** the ground rules (§1), brainstorm first, worktree per multi-step task, plan-as-a-file format, TDD gate, design rule (§4 step 1), `/wreview`-style two-stage review, verification before completion, commit only after review, never push without asking.
+- **Always applies, any harness:** the ground rules (§1), brainstorm first, worktree per multi-step task, one agent (orchestrator session) per worktree, plan-as-a-file format, TDD gate, design rule (§4 step 1), `/wreview`-style two-stage review, verification before completion, commit only after review, never push without asking.
 - Codex: rules, skills, MCP and the scope-lock / Jev gate / Jev route hooks are installed by `--harness codex`. Details: [harnesses.md](harnesses.md).
   - Known limit: an edit made by a shell command (for example `apply_patch` run through Bash, or `sed -i`) is not seen by the scope lock, in Claude Code or Codex.
 - **Billing, any harness:** Jev and Ruflo follow the same billing rule: no `ANTHROPIC_API_KEY`; Jev uses only `OPENROUTER_API_KEY` from the shell environment.

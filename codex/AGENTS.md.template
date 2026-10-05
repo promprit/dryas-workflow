@@ -4,6 +4,7 @@ Process rules for coding sessions on this machine. Full reference: `{{CD}}/docs/
 ## Always
 - Brainstorm first: before new work, clarify intent and get the user's approval of a design (use Superpowers' brainstorming skill if it is installed).
 - Multi-step work runs in its own git worktree; merge only after review and verification.
+- One agent per worktree: never run two sessions in the same worktree. Parallel loops on one project each get their own worktree and branch.
 - Plans are files: `.orchestrate/PLAN.md` in the worktree, sections `## Task N:` with Goal, Scope (globs), Done and Failing test first. Never commit `.orchestrate/`.
 - Test first. Never claim a pass you did not see.
 - Review before merge: spec compliance first, then code quality (`$wreview`).
