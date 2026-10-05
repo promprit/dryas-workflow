@@ -1,5 +1,17 @@
 # Dryas Workflow
-- The user's dev workflow, called the Dryas Workflow (layers, model ladder Sonnet→Opus→Fable, brainstorm-first flow, hook order, Jev/Ruflo/Superpowers rules, file locations) is documented in `~/.claude/docs/dryas-workflow.md`. Read it before multi-step work or when asked about the workflow. Keep it in sync when the workflow changes.
+- The user's dev workflow, called the Dryas Workflow, is documented in `~/.claude/docs/dryas-workflow.md` (installed from the dryas-workflow repo). Machine-specific notes, if present: `~/.claude/docs/dryas-local.md`. Read them before multi-step work or when asked about the workflow.
+- The repo is the source of truth for these rules and that doc. Edit the repo (`claude/CLAUDE.md.template`, `docs/workflow.md`), merge, then re-run the installer. Never hand-edit the installed copies or this block.
+
+# Workflow rules
+- Brainstorm first, always (superpowers:brainstorming). Nothing is built or dispatched before the user approves the design.
+- Design work (UI/UX, layout, visual style, components, on-screen copy) uses both `ui-ux-pro-max` and `impeccable`.
+- Single-file fix: plain Claude on Opus. Anything multi-step: `/orchestrate <task>` on the approved design.
+- Every multi-step task runs in its own git worktree. One agent per worktree: never two sessions in one worktree; parallel loops each get their own worktree and branch. Merge only after `/wreview` and superpowers:verification-before-completion.
+- Layers: Jev = decision support (gates, routing; never writes code or plans), Ruflo = orchestration and the only memory/learning layer, Superpowers = process.
+- Hook order per event: scope lock -> Jev -> Ruflo -> observer (observe-only, last). Stages: `~/.claude/jev/chain.json`.
+- `.orchestrate/` (incl. `.orchestrate/PLAN.md`) in a worktree is orchestration scratch: globally git-ignored, never committed.
+- Ask before any install, move, delete or overwrite, including any change to `~/.claude/settings.json`. Show a dry-run or diff first.
+- Commands: `/orchestrate`, `/wplan`, `/wreview`, `/commit` (Jev-gated, never pushes), `/tune` (weekly calibration), `/handoff` (Jev-scored context reset: run it, then `/clear`).
 
 # Model policy (super workflow)
 - Orchestrator: Opus, always (`"model": "opus"` in ~/.claude/settings.json).

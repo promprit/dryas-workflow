@@ -1,8 +1,8 @@
 # Dryas Workflow
 
-This is your development workflow on this Mac: what each layer does, the order things run in, where files live, and the rules. Claude reads it before doing multi-step work, and when asked "how does our workflow work".
+This is the Dryas Workflow: what each layer does, the order things run in, where files live, and the rules. Claude reads it before doing multi-step work, and when asked "how does our workflow work".
 
-- **Canonical copy:** `~/.claude/DryasWorkflow.md`, on the Mac, so it's available even when the SSD is unplugged.
+- **Source of truth:** this file in the dryas-workflow repo. The installer copies it to `~/.claude/docs/dryas-workflow.md`; the always-loaded rules come from `claude/CLAUDE.md.template`. Change both in the repo (or your fork) and re-run the installer. Machine-specific notes can go in `~/.claude/docs/dryas-local.md`, which the installer never touches.
 
 Last updated: 2026-10-05.
 
@@ -14,7 +14,7 @@ Last updated: 2026-10-05.
   - Never set or use `ANTHROPIC_API_KEY`.
   - Executors spawn through Claude Code's own Agent/Task tool, never through Ruflo's provider layer.
 - **The only API key is `OPENROUTER_API_KEY`, and only Jev uses it.**
-  - It lives only in the shell environment (`~/.zshrc`). Never write it to any file, config, log or test.
+  - It lives only in the shell environment (your shell profile, for example `~/.zshrc`). Never write it to any file, config, log or test.
   - Claude Code passes the environment on to hooks and MCP servers, so never use `claude mcp add -e` with the key.
 - **User scope only.** Shared skills, agents, commands, hooks and MCP servers live in `~/.claude`. Nothing shared is copied into projects.
 - **Ask you before any install, move, delete or overwrite.** That includes any change to `~/.claude/settings.json` or `~/.zshrc`. Show a dry-run or diff first.
@@ -24,6 +24,7 @@ Last updated: 2026-10-05.
   - Merge into `Dev/CLAUDE.md`; never overwrite it.
   - `~/.claude/CLAUDE.md` only gets appended sections (model policy and the pointer to this file).
   - Never touch a project's `CLAUDE.md`.
+  - The always-loaded workflow rules come from the repo's `claude/CLAUDE.md.template`; the installer writes them into a marked block of `~/.claude/CLAUDE.md`. Change them in the repo and re-install.
 
 ## 2. The layers
 
@@ -54,10 +55,10 @@ Last updated: 2026-10-05.
 
 1. **Brainstorm first, always.** The orchestrator runs `superpowers:brainstorming` with you:
    - it asks questions and proposes approaches
-   - you approves the design
+   - you approve the design
    - for architectural work, a written spec follows
 
-   Nothing is dispatched to executors before you approves.
+   Nothing is dispatched to executors before you approve.
 
    **Design work.** Anything that needs design (UI, UX, layout, visual style, components, pages, design systems, copy on screen) uses both design skills: `ui-ux-pro-max` for design intelligence (style, palette, font pairing, UX guidelines, stack-specific patterns) and `impeccable` to shape, critique and polish the result. Use them while designing and again as a review pass before `/wreview`. Design executors get the same instruction in their task section.
 2. **Route.** On every prompt, the Jev route hook may add one line such as `Jev route: swarm (0.82); opus: no (0.91)`. This is advisory, and it's silent below 0.7.
@@ -183,7 +184,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   - the swarm-vs-plain token ratio
   - Jev spend
 
-  It **proposes** threshold changes, and they're applied only after you approves each one.
+  It **proposes** threshold changes, and they're applied only after you approve each one.
 - **Cost.** $0.042 per million input tokens, with free output. Each response carries `usage.cost`, which is summed in `/tune`.
 
 ## 7. Ruflo details
@@ -235,15 +236,17 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
 ## 10. Where things live
 
+This is the maintainer's example layout (a Mac plus a dev SSD at `$DEV_ROOT`); only `~/.claude` is required, the rest is optional.
+
 | Mac (`~`) | SSD (`$DEV_ROOT`) |
 |---|---|
 | `~/.claude/` (settings, skills, agents, commands, hooks, jev code and logs, ruflo helpers, plugins, Claude memory per project) | `projects/<name>` |
-| `~/.claude/DryasWorkflow.md` (this file) | `CLAUDE.md` (workspace rules, inherited by every project) |
+| `~/.claude/docs/dryas-workflow.md` (this file, installed) | `CLAUDE.md` (workspace rules, inherited by every project) |
 | `ruflo` CLI (nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, **Ruflo memory**) |
 | `~/.zshrc` (`OPENROUTER_API_KEY`, guarded cache block, `dev` alias) | `_tools/` (settings_merge.py, relink_claude.py) |
 | `~/.claude/release/` (private export pipeline, never published) | `projects/dryas-workflow` (public repo clone; installer `install/install.sh` generates Ruflo helpers with `ruflo init` + pinned patches) |
 | | `projects/flowobserve` (the observer app) |
-| | `docs/` (specs, plans, reports, backup copy of this file), `_archive/` |
+| | `docs/` (specs, plans, reports, workspace docs), `_archive/` |
 
 **If the SSD is unplugged:**
 - **Breaks:** projects, `Dev/CLAUDE.md`, Ruflo memory, caches and the FlowObserve server.
@@ -252,9 +255,9 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
 ## 11. Orca
 
-Everything is user scope, so Claude sessions launched by Orca get the same hooks, skills, agents and the `jev` MCP server. Orca's own hooks are kept.
+Example of a GUI launcher. Everything is user scope, so Claude sessions launched by Orca get the same hooks, skills, agents and the `jev` MCP server. Orca's own hooks are kept.
 
-If the gate logs `JevUnavailable` inside Orca, Orca's environment lacks `OPENROUTER_API_KEY`, because GUI apps don't read `~/.zshrc`. Launch Orca from a terminal, or set the variable in Orca's own environment settings. Never put the key in a file.
+If the gate logs `JevUnavailable` inside Orca, Orca's environment lacks `OPENROUTER_API_KEY`, because GUI apps don't read your shell profile (for example `~/.zshrc`). Launch Orca from a terminal, or set the variable in Orca's own environment settings. Never put the key in a file.
 
 ## 12. FlowObserve (observer)
 
@@ -265,7 +268,7 @@ An optional, separate observer app (closed source). The workflow runs fully with
 
 ## 13. Known trade-offs
 
-- The OpenRouter key is never written by this workflow; it lives in `~/.zshrc` (pre-existing).
+- The OpenRouter key is never written by this workflow; it lives in your shell profile, for example `~/.zshrc` (pre-existing).
 - Commands are redacted before leaving the Mac, and file contents are never sent.
 - The gate fails open to normal permissions and never auto-allows.
 - Ruflo is pinned, with the `@latest` fallback forbidden.
