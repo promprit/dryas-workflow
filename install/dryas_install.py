@@ -139,6 +139,11 @@ def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bo
         else:
             same = cur_link is None and dest.is_file() and dest.read_bytes() == data
         if same:
+            if rel not in rec["files"] and not dry:
+                entry = {"backup": None, "adopted": True}
+                if link is not None:
+                    entry["link"] = "symlink"
+                rec["files"][rel] = entry
             return
         ours = rel in rec["files"]
         if dest.is_dir() and cur_link is None:
