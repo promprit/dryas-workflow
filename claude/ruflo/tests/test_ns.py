@@ -22,7 +22,7 @@ class NsTest(unittest.TestCase):
         shutil.rmtree(str(self.tmp), ignore_errors=True)
 
     def test_vectors(self):
-        for c in json.loads((HERE / "ns_cases.json").read_text(encoding="utf-8")):
+        for c in json.loads((HERE / "tests" / "ns_cases.json").read_text(encoding="utf-8")):
             self.assertEqual(ns.ns_from(c["start"], c["common"]), c["expect"], c)
 
     def test_live_repo_and_worktree(self):

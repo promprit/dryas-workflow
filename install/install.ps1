@@ -17,6 +17,7 @@ foreach ($c in $candidates) {
   if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { continue }
   & $exe @pre -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>$null
   if ($LASTEXITCODE -eq 0) {
+    if ($exe -ne 'py') { $env:DRYAS_PYTHON_PATH = (Get-Command $exe).Source }
     & $exe @pre $script run --repo $repo @args
     exit $LASTEXITCODE
   }

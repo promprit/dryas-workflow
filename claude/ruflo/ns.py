@@ -1,4 +1,4 @@
-"""Ruflo data namespace and data root. Same rules as mcp-shim/bin/cli.js (shared vectors: ns_cases.json).
+"""Ruflo data namespace and data root. Same rules as mcp-shim/bin/cli.js (shared vectors: tests/ns_cases.json).
 
 Namespace = folder name of the MAIN repo (worktrees map to their main repo), else the basename of the
 project dir; sanitized to [A-Za-z0-9._-] per character. Data root: DRYAS_DATA_ROOT, default ~/.dryas

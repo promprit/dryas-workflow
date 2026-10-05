@@ -4,7 +4,7 @@
 // `.swarm/`, `ruvector.db` land in the data root, not in the project) and runs the PINNED ruflo CLI (no npx).
 // Unlike hooks, MCP must fail loudly: data root or pinned CLI missing -> exit 1 (Claude shows the server disconnected).
 // (../dist is a symlink or a Windows junction so the launcher's isRunnableCli() check passes.)
-// Namespace rules match ../../ns.py; shared vectors: ../../ns_cases.json.
+// Namespace rules match ../../ns.py; shared vectors: ../../tests/ns_cases.json.
 'use strict';
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');

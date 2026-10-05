@@ -12,8 +12,28 @@ def fwd(p) -> str:
     return str(p).replace("\\", "/")
 
 
+_PYTHON_EXE: Optional[str] = None
+
+
 def python_exe() -> str:
-    return fwd(sys.executable)
+    """Interpreter path for hooks: the path the installer was launched with (DRYAS_PYTHON_PATH) when it is the
+    same major.minor as this one, else sys.executable (on macOS that can sit inside a movable Xcode.app)."""
+    global _PYTHON_EXE
+    if _PYTHON_EXE is not None:
+        return _PYTHON_EXE
+    result = fwd(sys.executable)
+    try:
+        launch = os.environ.get("DRYAS_PYTHON_PATH", "")
+        if launch and os.path.isfile(launch):
+            import subprocess
+            out = subprocess.run([launch, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
+                                 capture_output=True, text=True, timeout=10).stdout.strip()
+            if out == "%d.%d" % sys.version_info[:2]:
+                result = fwd(launch)
+    except Exception:
+        pass
+    _PYTHON_EXE = result
+    return result
 
 
 def space_free(p) -> Optional[str]:

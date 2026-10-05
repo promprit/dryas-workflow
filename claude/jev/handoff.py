@@ -147,12 +147,12 @@ def render(cwd: str, session: str, always: List[str], jev: List[str], total: int
 def write_private(path: str, text: str) -> None:
     d = os.path.dirname(path)
     os.makedirs(d, mode=0o700, exist_ok=True)
-    os.chmod(d, 0o700)
+    os.chmod(d, 0o700)  # portable-ok: POSIX file privacy; no-op on Windows
     fd, tmp = tempfile.mkstemp(dir=d, prefix=".handoff-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)
-        os.chmod(tmp, 0o600)
+        os.chmod(tmp, 0o600)  # portable-ok: POSIX file privacy; no-op on Windows
         os.replace(tmp, path)
     except Exception:
         try:
