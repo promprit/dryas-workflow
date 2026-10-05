@@ -42,6 +42,16 @@ Works on macOS, Linux, WSL and Windows, with Claude Code and Codex (`--harness c
 
 Details, flags and troubleshooting: [docs/install.md](docs/install.md). Other agent harnesses: [docs/harnesses.md](docs/harnesses.md).
 
+## Use it for yourself
+
+Fork this repo and make the workflow yours:
+
+1. Fork it and clone your fork.
+2. Edit `claude/CLAUDE.md.template` (the rules every session loads) and `docs/workflow.md` (the full reference).
+3. Run `./install/install.sh` (or `.\install\install.ps1` on Windows). Every re-install brings your `~/.claude` back in step with your fork.
+
+Keep notes that only fit your machine in `~/.claude/docs/dryas-local.md`. The installer never touches that file.
+
 ## Recommended stack
 
 All parts are on by default. Each can be skipped with a flag.
