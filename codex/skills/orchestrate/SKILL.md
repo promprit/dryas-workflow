@@ -7,7 +7,7 @@ description: Run a multi-step coding task with a plan file, scope-locked workers
 
 0. **Brainstorm first.** Plan only from a design the user approved.
 1. **Memory.** Call `memory_search` (server `ruflo`, namespace = main repo folder name) for similar tasks. Write the top 3 as `Past: <what worked> / <what failed>`, or say none were found.
-2. **Plan as a file.** Create a git worktree for the work (`git worktree add ../<repo>-<topic> -b <branch>`). Write `.orchestrate/PLAN.md` there, one section per task:
+2. **Plan as a file.** Create a git worktree for the work (`git worktree add ../<repo>-<topic> -b <branch>`). One agent per worktree: this session owns it alone; parallel loops each get their own worktree and branch. Write `.orchestrate/PLAN.md` there, one section per task:
 
    ```
    ## Task <N>: <title>

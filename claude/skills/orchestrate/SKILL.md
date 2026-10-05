@@ -16,7 +16,7 @@ You (Opus) plan, dispatch, judge and integrate. You never edit project files you
 Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project folder name) for tasks similar to the request. Take the top 3 outcomes and write them down as `Past: <what worked> / <what failed>` before planning. None found → say so.
 
 ## 2. Plan as a file
-1. Create a worktree with superpowers:using-git-worktrees.
+1. Create a worktree with superpowers:using-git-worktrees. One agent per worktree: this session owns it alone. Never reuse a worktree another session is working in; parallel loops on the same project each get their own worktree and branch.
 2. Write `.orchestrate/PLAN.md` in the worktree, one section per task, exactly:
 
    ```

@@ -24,6 +24,7 @@ Brainstorm → Plan → Judge → Build → Escalate → Review → Ship
 
 - **Escalation ladder.** Sonnet, then Opus, then Fable. Each step is logged with a reason.
 - **Scope lock.** An executor can only edit the files its task names. A hook blocks other edits.
+- **Parallel loops.** One project can run many loops at once. The rule is one agent per git worktree: each loop has its own worktree and branch, so loops never collide, and each merges only after its own review.
 - **Jev gating.** Jev is a small model that answers narrow, typed questions. It never writes code or plans. If it is unsure, the main model decides.
 - **Design rule.** UI work goes through Impeccable and UI UX Pro Max.
 
