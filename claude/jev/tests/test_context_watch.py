@@ -153,9 +153,10 @@ class WatchTest(unittest.TestCase):
         write_jsonl(self.tp, [with_usage(130000)])
         context_watch.run(self.ev())
         wd = os.path.join(self.tmp, "handoff", ".warned")
-        self.assertEqual(stat.S_IMODE(os.stat(wd).st_mode), 0o700)
         f = os.path.join(wd, os.listdir(wd)[0])
-        self.assertEqual(stat.S_IMODE(os.stat(f).st_mode), 0o600)
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(os.stat(wd).st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(os.stat(f).st_mode), 0o600)
 
     def test_reads_only_tail(self):
         with open(self.tp, "w") as f:

@@ -1,5 +1,7 @@
 # Dryas Workflow
 
+![ci](https://github.com/promprit/dryas-workflow/actions/workflows/ci.yml/badge.svg)
+
 A Claude Code workflow: brainstorm first, plan, gate risky steps with a cheap judge, build with Sonnet executors under a file-scope lock, escalate only when needed, review, ship.
 
 This repo is public but not promoted. Expect rough edges.
@@ -30,8 +32,11 @@ Brainstorm → Plan → Judge → Build → Escalate → Review → Ship
 ```
 git clone https://github.com/promprit/dryas-workflow
 cd dryas-workflow
-./install/install.sh
+./install/install.sh      # macOS, Linux, WSL
+.\install\install.ps1     # Windows (PowerShell)
 ```
+
+Works on macOS, Linux, WSL and Windows, with Claude Code and Codex (`--harness codex|both`).
 
 Details, flags and troubleshooting: [docs/install.md](docs/install.md). Other agent harnesses: [docs/harnesses.md](docs/harnesses.md).
 
@@ -49,9 +54,9 @@ All parts are on by default. Each can be skipped with a flag.
 
 ## Requirements
 
-- A Claude subscription with Claude Code.
+- A Claude subscription with Claude Code, or the Codex CLI.
 - An OpenRouter API key for Jev. Without it Jev makes no decisions and everything else still works.
-- macOS or Linux.
+- macOS, Linux, WSL or Windows.
 - Python 3.9+, Node and npm (for Ruflo), git.
 
 ## Credits

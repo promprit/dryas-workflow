@@ -52,7 +52,8 @@ def run(event: Dict[str, Any], judge_fn=judge) -> Optional[str]:
         if r["confidence"] >= need and r["value"] in route_criteria and r["value"] != "none_of_these":
             parts.append("route: %s (%.2f)" % (str(r["value"]).replace("_", "-"), r["confidence"]))
         if f["confidence"] >= t["min_confidence"]:
-            parts.append("opus: %s (%.2f)" % ("yes" if float(f["value"]) >= 0.5 else "no", f["confidence"]))
+            label = "escalate" if os.environ.get("DRYAS_HARNESS") == "codex" else "opus"
+            parts.append("%s: %s (%.2f)" % (label, "yes" if float(f["value"]) >= 0.5 else "no", f["confidence"]))
         line = ("Jev " + "; ".join(parts)) if parts else None
         jevlog.append("route", {"route": str(r["value"]), "route_conf": round(r["confidence"], 3), "opus_p": round(f["value"], 3),
                                 "opus_conf": round(f["confidence"], 3), "injected": bool(line),

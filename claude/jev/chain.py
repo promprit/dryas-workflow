@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import codex_event
 import jevlog
 
 RANK = {"ask": 1, "deny": 2}
@@ -23,12 +24,13 @@ def config_path() -> str:
     return os.environ.get("JEV_CHAIN_CONFIG", os.path.join(HERE, "chain.json"))
 
 
-def load_stages(kind: str) -> List[Dict[str, Any]]:
+def load_stages(kind: str, harness: str = "claude") -> List[Dict[str, Any]]:
     try:
         with open(config_path(), encoding="utf-8") as f:
-            return list(json.load(f).get(kind, []))
+            stages = list(json.load(f).get(kind, []))
     except (OSError, ValueError):
         return []
+    return [s for s in stages if isinstance(s, dict) and harness in s.get("harness", ["claude"])]
 
 
 def _expand(s: str) -> Optional[str]:
@@ -103,6 +105,56 @@ def pretool(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Op
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision, "permissionDecisionReason": reason}}
 
 
+def _deny(reason: str) -> Dict[str, Any]:
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                   "permissionDecisionReason": reason}}
+
+
+def _stricter(a: Optional[Dict[str, Any]], b: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if b is None:
+        return a
+    if a is None:
+        return b
+    rb = RANK.get(b["hookSpecificOutput"]["permissionDecision"], 0)
+    return b if rb > RANK.get(a["hookSpecificOutput"]["permissionDecision"], 0) else a
+
+
+def pretool_codex(event: Dict[str, Any], stages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Codex apply_patch: per_file stages run once per touched file (stop at the first deny), the rest run once
+    on one combined Write event (first path, whole patch). Other events: one pass with all stages."""
+    try:
+        events = codex_event.expand(event)
+        patch = codex_event.patch_text(event.get("tool_input")) if event.get("tool_name") == "apply_patch" else None
+    except codex_event.PatchError as e:
+        return _deny("[codex-patch] unparseable apply_patch (%s)" % e)
+    if patch is None:
+        best: Optional[Dict[str, Any]] = None
+        for ev in events:
+            best = _stricter(best, pretool(ev, json.dumps(ev), stages))
+        return best
+    is_pf = lambda st: bool(st.get("per_file")) or st.get("name") == "scope-lock"  # name: fail closed without the flag
+    per_file = [s for s in stages if is_pf(s)]
+    rest = [s for s in stages if not is_pf(s)]
+    combined = {k: v for k, v in event.items() if k not in ("tool_name", "tool_input")}
+    combined["tool_name"] = "Write"
+    combined["tool_input"] = {"file_path": events[0]["tool_input"]["file_path"], "content": patch}
+    best = None
+    for ev in events:
+        best = _stricter(best, pretool(ev, json.dumps(ev), per_file))
+        if best is not None and best["hookSpecificOutput"]["permissionDecision"] == "deny":
+            pretool(combined, json.dumps(combined), [s for s in rest if s.get("observe")])  # observers only; output ignored
+            return best
+    return _stricter(best, pretool(combined, json.dumps(combined), rest))
+
+
+def _harness(argv: List[str]) -> str:
+    if "--harness" in argv:
+        i = argv.index("--harness")
+        if i + 1 < len(argv):
+            return argv[i + 1]
+    return "claude"
+
+
 def prompt(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     parts: List[str] = []
     for st in stages:
@@ -132,6 +184,8 @@ def prompt(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Opt
 
 def main(argv: List[str]) -> int:
     kind = argv[1] if len(argv) > 1 else ""
+    harness = _harness(argv)
+    os.environ["DRYAS_HARNESS"] = harness  # inherited by every stage subprocess
     raw = sys.stdin.read()
     try:
         event = json.loads(raw) if raw.strip() else {}
@@ -145,9 +199,10 @@ def main(argv: List[str]) -> int:
             os.environ[env] = v  # inherited by every stage subprocess; read by jevlog.append
     if kind == "pretool":
         jevlog.append("calls", {"tool": str(event.get("tool_name", ""))})
-        out = pretool(event, raw, load_stages("pretool"))
+        stages = load_stages("pretool", harness)
+        out = pretool_codex(event, stages) if harness == "codex" else pretool(event, raw, stages)
     elif kind == "prompt":
-        out = prompt(event, raw, load_stages("prompt"))
+        out = prompt(event, raw, load_stages("prompt", harness))
     else:
         return 0
     if out:

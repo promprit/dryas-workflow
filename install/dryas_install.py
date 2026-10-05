@@ -13,13 +13,17 @@ from typing import Dict, List, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import platform_util as pu  # noqa: E402
 import ruflo_helpers  # noqa: E402
 import settings_merge as sm  # noqa: E402
+import upgrade  # noqa: E402
+from hookcheck import hook_problems  # noqa: E402
 from claude_md_block import START, END, claude_md, remove_claude_md  # noqa: E402,F401
 
 RECORD = ".dryas-installed.json"
 SKIP = {"settings.fragment.json", "CLAUDE.md.template"}
-PY = "/usr/bin/python3"
+PY = pu.python_exe()
+PYX = [PY, "-X", "utf8"]
 SHIM_LINK = "ruflo/mcp-shim/dist"
 KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUTER_API_KEY=...  "
             "(not stored by this installer)")
@@ -27,14 +31,15 @@ KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUT
 
 def run(argv: List[str]) -> int:
     try:
-        return subprocess.call(argv)
+        return subprocess.call(pu.resolve_argv(argv))
     except OSError:
         return 127
 
 
 def capture(argv: List[str], input_text: Optional[str] = None, env: Optional[dict] = None) -> Tuple[int, str]:
     try:
-        p = subprocess.run(argv, input=input_text, capture_output=True, text=True, env=env)
+        p = subprocess.run(pu.resolve_argv(argv), input=input_text, capture_output=True, text=True, env=env,
+                           encoding="utf-8", errors="replace")
     except OSError:
         return 127, ""
     return p.returncode, p.stdout
@@ -48,30 +53,36 @@ def confirm(prompt: str) -> bool:
 
 
 def detect() -> Dict[str, str]:
-    def sh(c):
-        return subprocess.run(["/bin/sh", "-lc", c], capture_output=True, text=True).stdout.strip()
-    nm = sh("npm root -g")
-    return {"RUFLO_BIN": sh("command -v ruflo"), "RUFLO_JS": os.path.join(nm, "ruflo", "bin", "ruflo.js"),
-            "RUFLO_NODE_FALLBACK": sh("command -v node"), "RUFLO_NODE_MODULES": os.path.join(nm, "ruflo", "node_modules"),
-            "RUFLO_CLI_DIST": os.path.join(nm, "ruflo", "node_modules", "@claude-flow", "cli", "dist")}
+    npm, nm = pu.which("npm"), ""
+    if npm:
+        rc, out = capture([npm, "root", "-g"])
+        nm = out.strip() if rc == 0 else ""
+
+    def under(*parts):
+        return os.path.join(nm, *parts) if nm else ""
+    return {"RUFLO_BIN": pu.which("ruflo"), "RUFLO_JS": under("ruflo", "bin", "ruflo.js"),
+            "RUFLO_NODE_FALLBACK": pu.which("node"), "RUFLO_NODE_MODULES": under("ruflo", "node_modules"),
+            "RUFLO_CLI_DIST": under("ruflo", "node_modules", "@claude-flow", "cli", "dist")}
 
 
 def load_record(cd: Path) -> dict:
     p = cd / RECORD
     if p.exists():
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     return {"components": [], "files": {}, "settings": {"env": {}, "allow": [], "deny": [], "hooks": [], "top": {}},
             "settings_backup": None, "claude_md": False, "mcp": []}
 
 
 def save_record(cd: Path, rec: dict) -> None:
-    (cd / RECORD).write_text(json.dumps(rec, indent=2) + "\n")
+    (cd / RECORD).write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
 
 
 def _plan_files(repo: Path, comps: List[str]):
     src = repo / "claude"
     for f in sorted(p for p in src.rglob("*") if p.is_file() or p.is_symlink()):
         rel = f.relative_to(src).as_posix()
+        if "__pycache__" in rel.split("/") or rel.endswith(".pyc"):
+            continue
         if rel in SKIP or (rel.startswith("ruflo/") and "ruflo" not in comps):
             continue
         yield rel, f
@@ -80,14 +91,26 @@ def _plan_files(repo: Path, comps: List[str]):
         yield "docs/dryas-workflow.md", wf
 
 
-def _chain_bytes(f: Path, comps: List[str]) -> bytes:
-    c = json.loads(f.read_text())
+def _chain_bytes(f: Path, comps: List[str], mapping: Dict[str, str]) -> bytes:
+    c = json.loads(f.read_text(encoding="utf-8"))
     for stages in c.values():
         for st in stages:
             comp = st.get("component")
             if comp and comp != "core" and comp not in comps:
                 st["enabled"] = False
-    return (json.dumps(c, indent=2) + "\n").encode()
+            where = "chain.json stage " + str(st.get("name", "?"))
+            st["cmd"] = [sm.render_str(str(x), mapping, where) for x in st.get("cmd", [])]
+            if "requires_path" in st:
+                st["requires_path"] = sm.render_str(str(st["requires_path"]), mapping, where)
+    return (json.dumps(c, indent=2) + "\n").encode("utf-8")
+
+
+def _rendered(rel: str, f: Path, comps: List[str], mapping: Dict[str, str]) -> bytes:
+    if rel == "jev/chain.json":
+        return _chain_bytes(f, comps, mapping)
+    if rel.endswith(".md"):
+        return sm.render_tokens(f.read_text(encoding="utf-8"), mapping).encode("utf-8")
+    return f.read_bytes()
 
 
 def _mkdirs(cd: Path, d: Path, rec: dict) -> None:
@@ -105,18 +128,19 @@ def _mkdirs(cd: Path, d: Path, rec: dict) -> None:
 
 def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bool,
          data: Optional[bytes] = None, link: Optional[str] = None, mode_src: Optional[Path] = None,
-         mode: Optional[int] = None) -> None:
+         mode: Optional[int] = None, dir_link: bool = False) -> None:
     dest = cd / rel
     backup = None
     if os.path.lexists(str(dest)):
+        cur_link = pu.read_dir_link(str(dest))
         if link is not None:
-            same = dest.is_symlink() and os.readlink(str(dest)) == link
+            same = cur_link is not None and pu.same_path(cur_link, link)
         else:
-            same = not dest.is_symlink() and dest.is_file() and dest.read_bytes() == data
+            same = cur_link is None and dest.is_file() and dest.read_bytes() == data
         if same:
             return
         ours = rel in rec["files"]
-        if dest.is_dir() and not dest.is_symlink():
+        if dest.is_dir() and cur_link is None:
             rep["skipped"].append(rel)
             return
         if not ours and not force:
@@ -127,7 +151,7 @@ def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bo
             return
         if ours:
             backup = rec["files"][rel]["backup"]
-            dest.unlink()
+            pu.remove_path(str(dest))
         else:
             b = cd / (".dryas-backup-" + ts) / rel
             b.parent.mkdir(parents=True, exist_ok=True)
@@ -137,39 +161,52 @@ def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bo
         rep["new"].append(rel)
         return
     _mkdirs(cd, dest.parent, rec)
+    entry = {"backup": backup}
     if link is not None:
-        os.symlink(link, str(dest))
+        if dir_link:
+            entry["link"] = pu.make_dir_link(link, str(dest))
+        else:
+            os.symlink(link, str(dest))
+            entry["link"] = "symlink"
     else:
         dest.write_bytes(data)
         if mode_src is not None:
             shutil.copymode(str(mode_src), str(dest))
         if mode is not None:
             os.chmod(str(dest), mode)
-    rec["files"][rel] = {"backup": backup}
+    rec["files"][rel] = entry
     rep["written"].append(rel)
 
 
 def copy_files(repo: Path, cd: Path, comps: List[str], rec: dict, force: bool, ts: str, dry: bool = False,
                mapping: Optional[Dict[str, str]] = None) -> dict:
+    mapping = mapping if mapping is not None else _mapping(comps, Path.home(), cd)
     rep = {"new": [], "replace": [], "written": [], "skipped": []}
     for rel, f in _plan_files(repo, comps):
         if f.is_symlink():
             _put(cd, rel, rec, force, ts, rep, dry, link=os.readlink(str(f)))
-        elif rel == "jev/chain.json":
-            _put(cd, rel, rec, force, ts, rep, dry, data=_chain_bytes(f, comps), mode_src=f)
         else:
-            _put(cd, rel, rec, force, ts, rep, dry, data=f.read_bytes(), mode_src=f)
+            _put(cd, rel, rec, force, ts, rep, dry, data=_rendered(rel, f, comps, mapping), mode_src=f)
     if "ruflo" in comps:
         target = (mapping or {}).get("RUFLO_CLI_DIST")
         if target:
-            _put(cd, SHIM_LINK, rec, force, ts, rep, dry, link=target)
+            _put(cd, SHIM_LINK, rec, force, ts, rep, dry, link=target, dir_link=True)
         else:
             print("warning: could not find the Ruflo CLI dist folder; %s not linked" % SHIM_LINK)
     return rep
 
 
-def _mapping(comps: List[str], home: Path) -> Dict[str, str]:
-    m = {"HOME": str(home), "DRYAS_DATA_ROOT": os.environ.get("DRYAS_DATA_ROOT", str(home / ".dryas"))}
+def _remove_stale_files(repo: Path, cd: Path, comps_all: List[str], rec: dict, dry: bool) -> None:
+    shipped = {rel for rel, _ in _plan_files(repo, comps_all)}
+    if "ruflo" in comps_all:
+        shipped |= {r for r in rec["files"] if r.startswith("ruflo/helpers/")} | {SHIM_LINK}
+    upgrade.remove_stale_files(cd, rec, shipped, dry)
+
+
+def _mapping(comps: List[str], home: Path, cd: Path) -> Dict[str, str]:
+    m = {"HOME": pu.fwd(home), "DRYAS_DATA_ROOT": pu.fwd(os.environ.get("DRYAS_DATA_ROOT", str(Path(home) / ".dryas"))),
+         "PY": PY, "CD": pu.fwd(cd),
+         "PY_SAFE": pu.fwd(pu.space_free(sys.executable) or ""), "CD_SAFE": pu.fwd(pu.space_free(cd) or "")}
     if "ruflo" in comps:
         m.update(detect())
     return m
@@ -179,7 +216,7 @@ def _fragment(repo: Path, comps: List[str], mapping: Dict[str, str]) -> dict:
     p = repo / "claude" / "settings.fragment.json"
     if not p.exists():
         return {}
-    by_comp = json.loads(p.read_text())
+    by_comp = json.loads(p.read_text(encoding="utf-8"))
     frag = {}
     for c in comps:
         if by_comp.get(c):
@@ -187,34 +224,46 @@ def _fragment(repo: Path, comps: List[str], mapping: Dict[str, str]) -> dict:
     return sm.render(frag, mapping)
 
 
+def _prevalidate(repo: Path, comps: List[str], mapping: Dict[str, str]) -> None:
+    """Render everything once so unmapped placeholders or tokens abort before any write."""
+    _fragment(repo, comps, mapping)
+    for rel, f in _plan_files(repo, comps):
+        if not f.is_symlink() and (rel == "jev/chain.json" or rel.endswith(".md")):
+            _rendered(rel, f, comps, mapping)
+
+
 def _unique(p: Path) -> Path:
     n, cand = 0, p
     while cand.exists():
-        n += 1
-        cand = p.with_name("%s-%d" % (p.name, n))
+        n, cand = n + 1, p.with_name("%s-%d" % (p.name, n + 1))
     return cand
 
 
 def apply_settings(repo: Path, cd: Path, comps: List[str], rec: dict, home: Path, ts: str = "",
-                   mapping: Optional[Dict[str, str]] = None, dry: bool = False, yes: bool = False) -> None:
-    mapping = mapping if mapping is not None else _mapping(comps, home)
+                   mapping: Optional[Dict[str, str]] = None, dry: bool = False, yes: bool = False,
+                   comps_all: Optional[List[str]] = None) -> bool:
+    mapping = mapping if mapping is not None else _mapping(comps, home, cd)
     frag = _fragment(repo, comps, mapping)
+    stale = upgrade.stale_settings(rec.get("settings", {}), _fragment(repo, comps_all or comps, mapping))
     path = cd / "settings.json"
-    cur = sm.load_settings(path)
-    merged, added, conflicts = sm.merge(cur, frag)
+    orig = sm.load_settings(path)
+    base = sm.unmerge(orig, stale) if upgrade.has_any(stale) else orig
+    merged, added, conflicts = sm.merge(base, frag)
     for c in conflicts:
         print("kept your value for %s" % c)
-    diff = sm.diff_text(cur, merged)
+    diff = sm.diff_text(orig, merged)
     if not diff:
+        if not dry and upgrade.has_any(stale):
+            rec["settings"] = upgrade.subtract(rec.get("settings", {}), stale)
         print("settings.json: nothing to change")
-        return
+        return True
     print(diff)
     if dry:
         print("dry run: settings.json not changed")
-        return
+        return False
     if not (yes or confirm("Apply these settings changes?")):
         print("settings.json not changed")
-        return
+        return False
     if path.exists():
         b = _unique(cd / ("settings.json.dryas-bak-" + (ts or _ts())))
         shutil.copy2(str(path), str(b))
@@ -223,13 +272,15 @@ def apply_settings(repo: Path, cd: Path, comps: List[str], rec: dict, home: Path
         rec.setdefault("settings_created", False)
     else:
         rec["settings_created"] = True
-    path.write_text(json.dumps(merged, indent=2) + "\n")
-    acc = rec.setdefault("settings", {})
+    path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    rec["settings"] = upgrade.subtract(rec.get("settings", {}), stale)
+    acc = rec["settings"]
     for k, v in added.items():
         if isinstance(v, list):
             acc.setdefault(k, []).extend(x for x in v if x not in acc.get(k, []))
         else:
             acc.setdefault(k, {}).update(v)
+    return True
 
 
 def _ts() -> str:
@@ -237,11 +288,16 @@ def _ts() -> str:
 
 
 def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = False, dry: bool = False,
-            yes: bool = False) -> int:
+            yes: bool = False, claude: bool = True) -> int:
     repo, cd, home, ts = Path(repo), Path(cd), Path(home), _ts()
+    if sys.prefix != sys.base_prefix:
+        print("warning: installing with a virtual-environment Python (%s); hooks will break if that environment is "
+              "removed. Re-run with a system Python to avoid this." % PY)
     sm.load_settings(cd / "settings.json")  # malformed settings.json aborts here, before any write
-    mapping = _mapping(comps, home)
-    _fragment(repo, comps, mapping)  # unmapped placeholders abort here too
+    rec = load_record(cd)
+    comps_all = sorted(set(rec.get("components", [])) | set(comps))
+    mapping = _mapping(comps_all, home, cd)
+    _prevalidate(repo, comps, mapping)  # unmapped placeholders or tokens abort here, before any write
     helpers = {}
     if "ruflo" in comps:
         if dry:
@@ -252,52 +308,63 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
             except ruflo_helpers.HelperError as e:
                 print("error: Ruflo helpers: %s" % e)
                 return 1
-    rec = load_record(cd)
     if dry:
         print("dry run: nothing will be written")
     elif not cd.exists():
         cd.mkdir(parents=True)
         rec["claude_dir_created"] = True
-    rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping)
-    for n, (data, mode) in helpers.items():
-        _put(cd, "ruflo/helpers/" + n, rec, force, ts, rep, dry, data=data, mode=mode)
-    tpl = repo / "claude" / "CLAUDE.md.template"
-    if dry:
-        for rel in rep["new"]:
-            print("would add: %s" % rel)
-        for rel in rep["replace"]:
-            print("would replace: %s" % rel)
-        if tpl.exists():
-            print("would add or update the Dryas block in CLAUDE.md")
-    elif tpl.exists():
-        claude_md(cd, tpl.read_text(), rec)
-    apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes)
-    if "ruflo" in comps:
-        root = Path(mapping["DRYAS_DATA_ROOT"])
+    try:
+        rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping)
+        for n, (data, mode) in helpers.items():
+            _put(cd, "ruflo/helpers/" + n, rec, force, ts, rep, dry, data=data, mode=mode)
+        tpl = repo / "claude" / "CLAUDE.md.template"
         if dry:
-            print("would create data root: %s" % root)
-        elif not root.exists():
-            root.mkdir(parents=True)
-            rec["data_root_created"] = True
-            rec["data_root"] = str(root)
-    if "jev" in comps and "jev" not in rec["mcp"]:
-        argv = ["claude", "mcp", "add", "--scope", "user", "jev", "--", PY, str(cd / "jev/jev_mcp.py")]
-        if dry:
-            print("would run: %s" % " ".join(argv))
-        elif run(argv) == 0:
-            rec["mcp"].append("jev")
-        else:
-            print("warning: could not register the jev MCP server; re-run the installer to retry")
-    for rel in rep["skipped"]:
-        print("kept your file: %s (use --force to replace, original is backed up)" % rel)
+            for rel in rep["new"]:
+                print("would add: %s" % rel)
+            for rel in rep["replace"]:
+                print("would replace: %s" % rel)
+            if claude and tpl.exists():
+                print("would add or update the Dryas block in CLAUDE.md")
+        elif claude and tpl.exists():
+            claude_md(cd, tpl.read_text(encoding="utf-8"), rec)
+        if not claude or apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes, comps_all=comps_all):
+            _remove_stale_files(repo, cd, comps_all, rec, dry)
+        if "ruflo" in comps:
+            root = Path(mapping["DRYAS_DATA_ROOT"])
+            if dry:
+                print("would create data root: %s" % root)
+            elif not root.exists():
+                root.mkdir(parents=True)
+                rec["data_root_created"] = True
+                rec["data_root"] = str(root)
+        if claude and "jev" in comps and "jev" not in rec["mcp"]:
+            argv = ["claude", "mcp", "add", "--scope", "user", "jev", "--"] + PYX + [pu.fwd(cd / "jev/jev_mcp.py")]
+            if dry:
+                print("would run: %s" % " ".join(argv))
+            elif run(argv) == 0:
+                rec["mcp"].append("jev")
+            else:
+                print("warning: could not register the jev MCP server; re-run the installer to retry")
+        for rel in rep["skipped"]:
+            print("kept your file: %s (use --force to replace, original is backed up)" % rel)
+    finally:
+        if not dry:
+            rec["components"] = sorted(set(rec["components"]) | set(comps))
+            save_record(cd, rec)
     if dry:
         return 0
-    rec["components"] = sorted(set(rec["components"]) | set(comps))
-    save_record(cd, rec)
     print("installed %d file(s) into %s" % (len(rep["written"]), cd))
     if "jev" in comps:
         print(KEY_LINE)
     return 0
+
+
+def mapping_for(comps: List[str], home: Path, cd: Path) -> Dict[str, str]:
+    return _mapping(comps, home, cd)
+
+
+def ruflo_env(repo: Path, mapping: Dict[str, str]) -> Dict[str, str]:
+    return _fragment(repo, ["ruflo"], mapping).get("env", {})
 
 
 def _prune(d: Path) -> None:
@@ -316,8 +383,8 @@ def uninstall(cd: Path) -> int:
     cur = sm.load_settings(spath)  # malformed settings.json aborts before anything is removed
     for rel, info in rec["files"].items():
         dest = cd / rel
-        if os.path.lexists(str(dest)) and (dest.is_symlink() or not dest.is_dir()):
-            dest.unlink()
+        if info.get("link") or (os.path.lexists(str(dest)) and (dest.is_symlink() or not dest.is_dir())):
+            pu.remove_path(str(dest))
         b = info.get("backup")
         if b and os.path.lexists(b):
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -335,7 +402,7 @@ def uninstall(cd: Path) -> int:
         if rec.get("settings_created") and new == {}:
             spath.unlink()
         elif new != cur:
-            spath.write_text(json.dumps(new, indent=2) + "\n")
+            spath.write_text(json.dumps(new, indent=2) + "\n", encoding="utf-8")
     if rec.get("data_root_created") and rec.get("data_root"):
         root = Path(rec["data_root"])
         if root.is_dir() and not os.listdir(str(root)):
@@ -353,36 +420,6 @@ def uninstall(cd: Path) -> int:
     return 0
 
 
-def thirdparty(comps: List[str], yes: bool, home: Optional[Path] = None) -> int:
-    table = json.loads((HERE / "components.json").read_text())
-    sel = [c for c in comps if c in table]
-    cmds = [argv for c in sel for argv in table[c]["commands"]]
-    if cmds:
-        print("Third-party installs:")
-        for argv in cmds:
-            print("  " + " ".join(argv))
-        if yes or confirm("Run these?"):
-            for argv in cmds:
-                rc = run(argv)
-                if rc != 0:
-                    print("failed (exit %d): %s" % (rc, " ".join(argv)))
-                    return rc
-        else:
-            print("skipped third-party installs")
-    p = Path(home or Path.home()) / ".claude" / "plugins" / "installed_plugins.json"
-    try:
-        plugins = json.loads(p.read_text()).get("plugins", {})
-    except (OSError, ValueError):
-        plugins = {}
-    for c in sel:
-        want, name = table[c]["version"], table[c]["plugin"]
-        have = [e.get("version") for e in plugins.get(name, []) if isinstance(e, dict)]
-        if want not in have:
-            print("warning: %s is %s; Dryas Workflow is tested with %s"
-                  % (name, ", ".join(str(h) for h in have) or "not installed", want))
-    return 0
-
-
 SMOKE_PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 
 
@@ -396,27 +433,28 @@ def verify(cd: Path, comps: List[str]) -> int:
     tdir = cd / "jev" / "tests"
     if not tdir.is_dir():
         fails += say("SKIP", "Jev tests", "no jev/tests folder")
-    elif run([PY, "-c", "import pytest"]) != 0:
+    elif run(PYX + ["-c", "import pytest"]) != 0:
         fails += say("SKIP", "Jev tests", "install pytest to run the Jev tests")
     else:
-        fails += say("PASS" if run([PY, "-m", "pytest", "-q", str(tdir)]) == 0 else "FAIL", "Jev tests")
+        fails += say("PASS" if run(PYX + ["-m", "pytest", "-q", str(tdir)]) == 0 else "FAIL", "Jev tests")
     if "jev" in comps:
         rc, out = capture(["claude", "mcp", "list"])
         fails += say("PASS" if "jev:" in out else "FAIL", "jev MCP server registered")
     if "ruflo" in comps:
         probs = ruflo_helpers.check(cd / "ruflo" / "helpers")
         fails += say("FAIL" if probs else "PASS", "Ruflo helpers patched", "; ".join(probs))
-    hook = cd / "hooks" / "pretool-chain.sh"
+    probs = hook_problems(load_record(cd).get("settings", {}).get("hooks", []))
+    fails += say("FAIL" if probs else "PASS", "hook commands point at existing files", "; ".join(probs))
     wt = Path(tempfile.mkdtemp())
     try:
         (wt / ".orchestrate").mkdir()
-        (wt / ".orchestrate" / "PLAN.md").write_text(SMOKE_PLAN)
-        (wt / ".orchestrate" / "active.json").write_text(json.dumps({"active": ["1"]}))
+        (wt / ".orchestrate" / "PLAN.md").write_text(SMOKE_PLAN, encoding="utf-8")
+        (wt / ".orchestrate" / "active.json").write_text(json.dumps({"active": ["1"]}), encoding="utf-8")
         event = {"tool_name": "Write", "tool_input": {"file_path": str(wt / "src/other.ts"), "content": "x"}, "cwd": str(wt)}
         env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
         env["HOME"] = str(cd.parent)
         env["JEV_LOG_DIR"] = str(wt / "logs")
-        rc, out = capture(["/bin/sh", str(hook)], json.dumps(event), env)
+        rc, out = capture(PYX + [str(cd / "jev" / "chain.py"), "pretool"], json.dumps(event), env)
         try:
             ok = json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
         except (ValueError, KeyError, TypeError):
@@ -429,6 +467,10 @@ def verify(cd: Path, comps: List[str]) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in ("run", "preflight"):
+        import run_cmd
+        return run_cmd.main(argv[1:] + (["--preflight-only"] if argv[0] == "preflight" else []))
     ap = argparse.ArgumentParser(prog="dryas_install.py")
     sub = ap.add_subparsers(dest="cmd")
     sub.required = True
@@ -439,9 +481,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     pi.add_argument("--force", action="store_true")
     pi.add_argument("--yes", action="store_true")
     pi.add_argument("--dry-run", action="store_true")
-    pt = sub.add_parser("thirdparty")
-    pt.add_argument("--components", required=True)
-    pt.add_argument("--yes", action="store_true")
     pu = sub.add_parser("uninstall")
     pu.add_argument("--claude-dir", required=True)
     pv = sub.add_parser("verify")
@@ -451,8 +490,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     comps = [c for c in getattr(a, "components", "").split(",") if c]
     if a.cmd == "install":
         return install(Path(a.repo), Path(a.claude_dir), comps, home=Path.home(), force=a.force, dry=a.dry_run, yes=a.yes)
-    if a.cmd == "thirdparty":
-        return thirdparty(comps, a.yes)
     if a.cmd == "uninstall":
         return uninstall(Path(a.claude_dir))
     return 1 if verify(Path(a.claude_dir), comps) else 0

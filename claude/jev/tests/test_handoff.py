@@ -76,6 +76,7 @@ class DiscoveryTest(HandoffBase):
         open(os.path.join(d, "c.txt"), "w").write("x")
         self.assertEqual(handoff.find_transcript(self.cwd), new)
 
+    @unittest.skipIf(os.name == "nt", "symlinks need admin rights on Windows")
     def test_realpath_fallback(self):
         link = os.path.join(self.tmp, "link")
         os.symlink(self.cwd, link)
@@ -185,8 +186,9 @@ class SaveTest(HandoffBase):
     def test_permissions(self):
         write_jsonl(self.tp, [user("u")])
         handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True))
-        self.assertEqual(stat.S_IMODE(os.stat(self.hdir).st_mode), 0o700)
-        self.assertEqual(stat.S_IMODE(os.stat(handoff.handoff_path(self.cwd)).st_mode), 0o600)
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(os.stat(self.hdir).st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(os.stat(handoff.handoff_path(self.cwd)).st_mode), 0o600)
 
     def test_cap_keeps_newest(self):
         write_jsonl(self.tp, [assistant("%03d " % i + "z" * 900) for i in range(40)])

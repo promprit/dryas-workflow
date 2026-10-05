@@ -62,7 +62,7 @@ If `failing_test_exists` is not confidently true: dispatch a **tester** executor
 ## 5. Dispatch
 1. Initialise the Ruflo swarm once (swarm_init from ruflo-tools.md). Call it with topology "hierarchical" (the plugin default is hierarchical-mesh).
 2. Write `.orchestrate/active.json` = `{"active": [<task ids being dispatched now>]}` before dispatching; this arms the scope lock. On EVERY exit path — success, failure handed to the user (§7.3/§7.4), user abort, or any error — delete `.orchestrate/active.json` before stopping; the scope lock stays armed while it exists.
-3. Give each executor ONLY its section: `/usr/bin/python3 "$HOME/.claude/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
+3. Give each executor ONLY its section: `"{{PY}}" -X utf8 "{{CD}}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
 4. Dispatch with the Agent tool, `subagent_type: executor` (model sonnet from its frontmatter). Independent tasks go out in one message, in parallel.
 5. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus` on that dispatch, after `mcp__jev__log_escalation` (from_model sonnet, to_model opus). Never dispatch Fable here: Fable is only reached through §7.
 
