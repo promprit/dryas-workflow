@@ -275,6 +275,22 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertIn("[d] final", out["hookSpecificOutput"]["permissionDecisionReason"])
 
+    @unittest.skipIf(sys.platform == "win32", "POSIX shell script")
+    def test_string_cmd_is_skipped_not_split(self):
+        bindir = tempfile.mkdtemp()
+        fake = os.path.join(bindir, "n")
+        with open(fake, "w") as f:
+            f.write("#!/bin/sh\ncat >/dev/null\necho '%s'\n" % json.dumps(
+                {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "ran n"}}))
+        os.chmod(fake, 0o755)
+        old = os.environ["PATH"]
+        os.environ["PATH"] = bindir + os.pathsep + old
+        try:
+            out = chain.pretool(self.ev, self.raw, [stage("s", "dummy", cmd="not-a-list")])
+        finally:
+            os.environ["PATH"] = old
+        self.assertIsNone(out)
+
     def test_main_exits_zero_on_garbage_stdin(self):
         cfg = os.path.join(self.tmp, "chain.json")
         with open(cfg, "w") as f:

@@ -53,7 +53,10 @@ def _applies(stage: Dict[str, Any], event: Dict[str, Any]) -> bool:
 
 
 def _run(stage: Dict[str, Any], raw: str) -> Tuple[Optional[int], str, str]:
-    cmd = [_expand(str(c)) for c in stage["cmd"]]
+    raw_cmd = stage.get("cmd")
+    if not isinstance(raw_cmd, list) or not raw_cmd or not all(isinstance(c, str) for c in raw_cmd):
+        return None, "", ""
+    cmd = [_expand(c) for c in raw_cmd]
     if any(c is None for c in cmd):
         return None, "", ""
     try:

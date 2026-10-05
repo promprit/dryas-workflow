@@ -222,7 +222,7 @@ class SaveTest(HandoffBase):
     def test_cli_unavailable_exit0(self):
         write_jsonl(self.tp, [assistant("x")])
         env = dict(os.environ, OPENROUTER_API_KEY="")
-        p = subprocess.run([sys.executable, os.path.join(HERE, "handoff.py"), "save", "--cwd", self.cwd, "--transcript", self.tp],
+        p = subprocess.run([sys.executable, "-X", "utf8", os.path.join(HERE, "handoff.py"), "save", "--cwd", self.cwd, "--transcript", self.tp],
                            capture_output=True, text=True, env=env)
         self.assertEqual(p.returncode, 0)
         self.assertEqual(len(p.stdout.strip().splitlines()), 1)
