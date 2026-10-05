@@ -100,6 +100,8 @@ It ends with `verify: N failed`. The installer exits non-zero if any check faile
 
 Pull the repo and run `./install/install.sh` again. Files the installer added before are updated. Your own files are still kept unless you pass `--force`. You can add a component you skipped earlier (for example, re-run without `--no-ruflo`); one `--uninstall` later removes everything from all runs.
 
+After the first install, `~/.claude/jev/thresholds.json` is yours (`/tune` changes it); re-installing never overwrites it. Optional stages you enabled yourself in `jev/chain.json` (for example an observer) keep their settings.
+
 ## Uninstall
 
 ```
