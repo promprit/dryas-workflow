@@ -24,6 +24,7 @@ Last updated: 2026-10-05.
   - Merge into `Dev/CLAUDE.md`; never overwrite it.
   - `~/.claude/CLAUDE.md` only gets appended sections (model policy and the pointer to this file).
   - Never touch a project's `CLAUDE.md`.
+  - The always-loaded workflow rules come from the repo's `claude/CLAUDE.md.template`; the installer writes them into a marked block of `~/.claude/CLAUDE.md`. Change them in the repo and re-install.
 
 ## 2. The layers
 
@@ -54,10 +55,10 @@ Last updated: 2026-10-05.
 
 1. **Brainstorm first, always.** The orchestrator runs `superpowers:brainstorming` with you:
    - it asks questions and proposes approaches
-   - you approves the design
+   - you approve the design
    - for architectural work, a written spec follows
 
-   Nothing is dispatched to executors before you approves.
+   Nothing is dispatched to executors before you approve.
 
    **Design work.** Anything that needs design (UI, UX, layout, visual style, components, pages, design systems, copy on screen) uses both design skills: `ui-ux-pro-max` for design intelligence (style, palette, font pairing, UX guidelines, stack-specific patterns) and `impeccable` to shape, critique and polish the result. Use them while designing and again as a review pass before `/wreview`. Design executors get the same instruction in their task section.
 2. **Route.** On every prompt, the Jev route hook may add one line such as `Jev route: swarm (0.82); opus: no (0.91)`. This is advisory, and it's silent below 0.7.
@@ -183,7 +184,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   - the swarm-vs-plain token ratio
   - Jev spend
 
-  It **proposes** threshold changes, and they're applied only after you approves each one.
+  It **proposes** threshold changes, and they're applied only after you approve each one.
 - **Cost.** $0.042 per million input tokens, with free output. Each response carries `usage.cost`, which is summed in `/tune`.
 
 ## 7. Ruflo details
