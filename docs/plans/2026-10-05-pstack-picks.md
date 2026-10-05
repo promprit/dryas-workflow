@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Upstream: `https://github.com/michael-denyer/pstack-claude` at commit `dc8e617179cf0bdc68b61e672f33e9eb64c20cf`, MIT. `deslop` is cursor-team-kit, MIT.
+- Upstream: `https://github.com/michael-denyer/pstack-claude` at commit `dc8e617f179cf0bdc68b61e672f33e9eb64c20cf`, MIT. `deslop` is cursor-team-kit, MIT.
 - Component name `pstack-picks`, flag `--no-pstack-picks`, on by default. Not added to `install/components.json`.
 - Marker lines are exactly `<!-- pstack-picks -->` and `<!-- /pstack-picks -->`, each alone on its line.
 - Vendored and entry-point text never contains `poteto`, `pstack:`, `setup-pstack`, `pstack-models`, `effort-`, whole-word `opus|fable|sonnet|haiku`, `just do it`, `never block`, `readonly` (case-insensitive). Exempt: `claude/pstack/LICENSE`, `claude/pstack/LICENSE-cursor-team-kit`, `claude/pstack/NOTICE.md`, `claude/pstack/UPSTREAM.md`. The Claude orchestrate skill already owns model policy and may name models inside its blocks.
@@ -118,7 +118,7 @@ class PstackContentTest(unittest.TestCase):
 
     def test_upstream_lists_every_vendored_file(self):
         up = (PSTACK / "UPSTREAM.md").read_text(encoding="utf-8")
-        self.assertIn("dc8e617179cf0bdc68b61e672f33e9eb64c20cf", up)
+        self.assertIn("dc8e617f179cf0bdc68b61e672f33e9eb64c20cf", up)
         for rel in LAYOUT:
             if rel not in EXEMPT:
                 self.assertIn("`%s`" % rel, up, rel)
@@ -146,7 +146,7 @@ Expected: FAIL in `test_layout_complete` (`claude/pstack` does not exist, so `ha
 ```bash
 S="$(python3 -c 'import tempfile;print(tempfile.mkdtemp())')"
 git clone -q https://github.com/michael-denyer/pstack-claude "$S/pstack"
-git -C "$S/pstack" checkout -q dc8e617179cf0bdc68b61e672f33e9eb64c20cf
+git -C "$S/pstack" checkout -q dc8e617f179cf0bdc68b61e672f33e9eb64c20cf
 U="$S/pstack/plugins/pstack/skills"
 mkdir -p claude/pstack/interrogate claude/pstack/principles
 cp "$S/pstack/LICENSE" claude/pstack/LICENSE
@@ -240,7 +240,7 @@ Create `claude/pstack/UPSTREAM.md`:
 ```markdown
 # Upstream
 
-Source: https://github.com/michael-denyer/pstack-claude at `dc8e617179cf0bdc68b61e672f33e9eb64c20cf`. Paths are relative to `plugins/pstack/` there.
+Source: https://github.com/michael-denyer/pstack-claude at `dc8e617f179cf0bdc68b61e672f33e9eb64c20cf`. Paths are relative to `plugins/pstack/` there.
 
 To update: check out the new upstream commit, diff each upstream path below against it, re-apply the listed edits, and change the commit above.
 

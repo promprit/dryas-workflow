@@ -10,7 +10,7 @@ Add a few of pstack's best ideas to the Dryas Workflow without weakening the loo
 
 Success means:
 
-- With `--no-pstack-picks`, the installed files are byte-identical to today's install.
+- With `--no-pstack-picks`, the installed agent, skill and rules files are byte-identical to today's install. Two labeled exceptions: the installed workflow doc describes the optional pstack steps, and `jev/thresholds.py` carries the `interrogate.min_confidence` default.
 - A default `/orchestrate` run adds one Jev question and one default-model cleanup executor, nothing more. Interrogate reviewers run only when gated (section 5.4). The escalation RCA step adds no agents.
 - No vendored text names a model, a pstack agent or pstack configuration, and none of it grants autonomy beyond our ground rules.
 
@@ -81,7 +81,7 @@ Orchestrate gains one line for guard-the-context-window (route bulk output to ex
 
 Before re-dispatching Sonnet -> Opus, and again before Opus -> Fable, the orchestrator runs `superpowers:systematic-debugging` with the fix-root-causes principle on the failing reports. It reads; it does not edit project files.
 
-- If the root cause is a plan defect (scope too narrow, vague or wrong `Done:`, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the **same** model. This does not count as a climb and does not reset the failure counter.
+- If the root cause is a plan defect (scope too narrow, vague or wrong `Done:`, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the **same** model. This does not count as a climb and does not reset the failure counter. At most once per model: a second failure on that model climbs, so a plan-blaming loop cannot stall the ladder.
 - Otherwise climb as today, with the root cause in the re-dispatch prompt and in the `log_escalation` reason.
 
 Codex runs the same step if Superpowers is installed for Codex; otherwise it applies the fix-root-causes principle directly.
@@ -99,11 +99,11 @@ After every task has returned and passed, and before cleanup:
 
 New order: build tasks done -> interrogate if gated (5.4) -> **cleanup task** -> delete `active.json` -> `/wreview` -> `superpowers:verification-before-completion` -> `/commit`.
 
-The cleanup task is one executor on its default model. Its `Scope:` is the files in the diff; its section points to `{{CD}}/pstack/cleanup.md`; `Done:` includes "behavior unchanged" and the project's test command passing. It is skipped when the diff touches only documentation. It runs before review because it changes code.
+The cleanup task is one executor on its default model. Its `Scope:` is the files in the diff; its section points to `{{CD}}/pstack/cleanup.md`; `Done:` includes "behavior unchanged" and the project's test command passing. It is skipped when the diff touches only documentation. It runs before review because it changes code. Both passes touch only what the branch added or changed; older comments in the same files are left alone.
 
 ### 5.6 Codex
 
-`codex/skills/orchestrate/SKILL.md` gets the same steps: RCA before switching to the stronger model, `needs_interrogate`, a two-reviewer panel of Codex sub-agents (cheaper model, then stronger), cleanup before `$wreview`. Without sub-agents, Codex runs one review pass itself with the interrogate prompt and rubric, and states that it did. The review section's empty `Scope:` still applies through Codex's scope-lock hook.
+`codex/skills/orchestrate/SKILL.md` gets the same steps: RCA before switching to the stronger model, `needs_interrogate`, a two-reviewer panel of Codex sub-agents (cheaper model, then stronger), cleanup before `$wreview`. Without sub-agents, Codex runs one review pass itself with the interrogate prompt and rubric, and states that it did. Inside `$orchestrate`, `$interrogate` adds the same review sections with an empty `Scope:` and puts their ids in `active.json`, so Codex's scope-lock hook makes the reviewers read-only by structure. Codex workers get the four principle lines in their prompt, since Codex has no `executor.md`. Codex installs gate text and skills with the recorded plus current components, like the Claude side.
 
 New Codex skills `$interrogate` and `$benchmark-checklist` read the same files under `{{CD}}/pstack/`.
 
