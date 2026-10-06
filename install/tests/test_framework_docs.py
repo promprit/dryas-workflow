@@ -42,6 +42,11 @@ class FrameworkDocsTest(unittest.TestCase):
         for s in ("docs/operating-model.md", "docs/architecture.md", "spec/dryas-spec-v1.md", "reference/README.md", "docs/adoption-guide.md"):
             self.assertIn(s, t, s)
 
+    def test_compound_gate_documented(self):
+        self.assertIn("gate.compound", read("docs/governance.md"))
+        self.assertIn("compound true", read("docs/workflow.md"))
+        self.assertIn("gate.compound", read("docs/metrics.md"))
+
     def test_metrics_status_matches_logging(self):
         t = read("docs/metrics.md")
         self.assertNotIn("| planned |", t)              # no KPI row left as planned

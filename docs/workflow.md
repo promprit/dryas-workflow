@@ -159,7 +159,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
   | Area | Setting |
   |---|---|
-  | gate | deny_safe_below 0.2, min_confidence 0.7, ask_risk destructive, allowlist |
+  | gate | deny_safe_below 0.2, min_confidence 0.7, ask_risk destructive, allowlist, compound true |
   | route | 0.7 (swarm needs max(swarm_min 0.7, min_confidence); `/tune` proposes raising swarm_min when swarm costs >3x plain over ≥3 comparisons) |
   | dispatch | 0.7 |
   | escalation | executor_confidence_below 0.5, sonnet_failures_before_opus 2, opus_failures_before_fable 1 |
