@@ -44,7 +44,47 @@ class McpTest(unittest.TestCase):
 
     def test_tools_list(self):
         r = jev_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-        self.assertEqual(sorted(t["name"] for t in r["result"]["tools"]), ["jev_judge", "log_escalation", "log_override"])
+        self.assertEqual(sorted(t["name"] for t in r["result"]["tools"]),
+                         ["jev_judge", "log_dispatch", "log_escalation", "log_merge", "log_override", "log_review"])
+
+    def test_log_dispatch(self):
+        r = call("log_dispatch", {"task": "t1", "tier": "sonnet", "role": "coder", "attempt": "1", "extra": "x"})
+        self.assertFalse(r["result"]["isError"])
+        rec = self.read("dispatch")[0]
+        self.assertEqual({k: rec[k] for k in ("task", "tier", "role", "attempt")},
+                         {"task": "t1", "tier": "sonnet", "role": "coder", "attempt": 1})
+        self.assertNotIn("extra", rec)
+
+    def test_log_review(self):
+        call("log_review", {"task": "feat-x", "round": 2, "critical": 0, "important": 3, "minor": 1})
+        rec = self.read("review")[0]
+        self.assertEqual((rec["round"], rec["important"]), (2, 3))
+
+    def test_log_merge_with_and_without_cost(self):
+        call("log_merge", {"task": "feat-x", "branch": "feat-x", "tasks_merged": 5, "cost_usd": 4.2})
+        call("log_merge", {"task": "feat-y", "branch": "feat-y", "tasks_merged": 2})
+        a, b = self.read("merge")
+        self.assertEqual(a["cost_usd"], 4.2)
+        self.assertNotIn("cost_usd", b)
+
+    def test_log_tools_reject_bad_input_and_write_nothing(self):
+        bad = [("log_dispatch", {"task": "t1", "tier": "sonnet", "role": "coder"}),              # missing attempt
+               ("log_dispatch", {"task": "", "tier": "sonnet", "role": "coder", "attempt": 1}),  # empty task
+               ("log_dispatch", {"task": "t1", "tier": "sonnet", "role": "coder", "attempt": True}),
+               ("log_dispatch", {"task": "t1", "tier": "sonnet", "role": "coder", "attempt": 1.5}),
+               ("log_review", {"task": "b", "round": 0, "critical": 0, "important": 0, "minor": 0}),
+               ("log_review", {"task": "b", "round": 1, "critical": -1, "important": 0, "minor": 0}),
+               ("log_merge", {"task": "b", "branch": "b", "tasks_merged": "many"})]
+        for name, args in bad:
+            r = call(name, args)
+            self.assertTrue(r["result"]["isError"], (name, args))
+        for f in ("dispatch", "review", "merge"):
+            self.assertFalse(os.path.exists(os.path.join(self.tmp, f + ".jsonl")), f)
+
+    def test_log_merge_ignores_bad_cost(self):
+        call("log_merge", {"task": "b", "branch": "b", "tasks_merged": 1, "cost_usd": "nan"})
+        call("log_merge", {"task": "c", "branch": "c", "tasks_merged": 1, "cost_usd": -3})
+        self.assertTrue(all("cost_usd" not in r for r in self.read("merge")))
 
     def test_judge_marks_escalations_and_logs(self):
         r = call("jev_judge", {"state": {"x": 1}, "questions": VALID_QUESTIONS}, lambda s, q: RES)
