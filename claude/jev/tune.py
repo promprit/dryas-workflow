@@ -58,8 +58,11 @@ def _cost(recs: List[Dict[str, Any]]) -> float:
     return total
 
 
-def _steps(esc: List[Dict[str, Any]], to_model: str) -> Dict[str, Any]:
-    hits = [r for r in esc if r.get("to_model") == to_model]
+def _steps(esc: List[Dict[str, Any]], to_model: str, from_model: Optional[str] = None,
+           skipped: bool = False) -> Dict[str, Any]:
+    # skipped=True selects steps to to_model that did NOT come from from_model (ladder violations)
+    hits = [r for r in esc if r.get("to_model") == to_model
+            and (from_model is None or (r.get("from_model") != from_model) == skipped)]
     return {"count": len(hits), "reasons": dict(Counter(str(r.get("reason")) for r in hits))}
 
 
@@ -121,7 +124,8 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "route_injected": sum(1 for r in route if r.get("injected")),
         "questions": questions,
         "opus_escalations": _steps(esc, "opus"),
-        "fable": _steps(esc, "fable"),
+        "fable": _steps(esc, "fable", "opus"),
+        "fable_without_opus": _steps(esc, "fable", "opus", skipped=True),
         "compare_count": len(ratios),
         "swarm_vs_plain": round(sum(ratios) / len(ratios), 3) if ratios else None,
         "jev_spend_usd": _cost(gate) + _cost(route) + _cost(mcp) + _cost(compact),
@@ -175,6 +179,7 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
              "- Route: %d calls, %d injected" % (rep["route_calls"], rep["route_injected"]),
              "- Escalations sonnet->opus: %d %s" % (rep["opus_escalations"]["count"], json.dumps(rep["opus_escalations"]["reasons"])),
              "- Fable dispatches (opus->fable only): %d %s" % (rep["fable"]["count"], json.dumps(rep["fable"]["reasons"])),
+             "- Fable without a prior Opus step (should be 0): %d %s" % (rep["fable_without_opus"]["count"], json.dumps(rep["fable_without_opus"]["reasons"])),
              "- Swarm vs plain token ratio: %s" % rep["swarm_vs_plain"],
              "- Jev spend: $%.6f" % rep["jev_spend_usd"], "", "| question | calls | below thr | overrides | override rate |", "|---|---|---|---|---|"]
     for q, v in sorted(rep["questions"].items()):

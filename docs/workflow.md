@@ -1,6 +1,6 @@
 # Dryas Workflow
 
-This is the Dryas Workflow: what each layer does, the order things run in, where files live, and the rules. Claude reads it before doing multi-step work, and when asked "how does our workflow work".
+This is the operational reference for the Dryas reference implementation (the method itself is in `architecture.md` and the spec in the repo): what each layer does, the order things run in, where files live, and the rules. Claude reads it before doing multi-step work, and when asked "how does our workflow work".
 
 - **Source of truth:** this file in the dryas-workflow repo. The installer copies it to `~/.claude/docs/dryas-workflow.md`; the always-loaded rules come from `claude/CLAUDE.md.template`. Change both in the repo (or your fork) and re-run the installer. Machine-specific notes can go in `~/.claude/docs/dryas-local.md`, which the installer never touches.
 

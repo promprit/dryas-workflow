@@ -1,0 +1,47 @@
+# A Codex-only edition, as installed by `install.sh --harness codex`.
+dryas: "1.0-draft"
+edition: dryas-codex
+harness: [codex]
+conformance: {level: core, table: ../../reference/README.md}
+
+workflow:
+  stages: [brainstorm, plan, judge, build, escalate, review, ship]
+  brainstorm: {required: true, approval: human, provider: superpowers:brainstorming}
+  plan: {required: true, format: plan-file, path: .orchestrate/PLAN.md}
+  judge: {required: false, provider: jev}
+  rules_source: codex/AGENTS.md.template
+
+memory:
+  provider: ruflo
+  namespace: main-repo
+  read: before-plan
+  write: after-task
+
+governance:
+  scope_lock: {required: true, provider: dryas-scope-lock, covers: [edit, apply_patch]}
+  gate: {provider: jev, auto_allow: false, on_failure: no-decision}
+  judge: {provider: jev, min_confidence: 0.7, below_threshold: orchestrator}
+  human_approval: [design, install, move, delete, overwrite, settings, push, release]
+
+execution:
+  orchestrator: codex-strong
+  executor: codex-cheap
+  isolation: worktree
+  one_agent_per_worktree: true
+  tdd: required
+  parallel: codex-sub-agents
+
+escalation:
+  ladder: [codex-cheap, codex-strong]
+  climb_after_failures: {codex-cheap: 2}
+  log: required
+  after_top: human
+
+review:
+  mandatory: true
+  stages: [spec-compliance, code-quality]
+  command: $wreview
+  verification: required
+  adversarial: {command: $interrogate}
+  merge_after: [review, verification]
+  push: human
