@@ -6,6 +6,7 @@ CLI: tune.py report | tune.py apply KEY JSON_VALUE | tune.py record-compare TASK
 import json
 import os
 import re
+import statistics
 import sys
 from collections import Counter
 from typing import Any, Dict, List, Optional
@@ -66,11 +67,75 @@ def _steps(esc: List[Dict[str, Any]], to_model: str, from_model: Optional[str] =
     return {"count": len(hits), "reasons": dict(Counter(str(r.get("reason")) for r in hits))}
 
 
+CANONICAL = ("executor", "specific", "failing_test_exists", "needs_opus", "needs_stronger_model",
+             "done", "risk", "safe_to_commit", "needs_interrogate")
+_ALIASES = {"failing_tests_exist": "failing_test_exists", "failing_test": "failing_test_exists"}
+
+
+def canonical(name: str) -> str:
+    """Fold '<question>.<task>' and legacy task-affixed names onto CANONICAL; unknown names pass through."""
+    base = str(name).split(".", 1)[0]
+    if base in CANONICAL:
+        return base
+    s = re.sub(r"^t\d+_", "", base)
+    s = re.sub(r"(_t\d+|_\d+|\d+|_any|_all|_kind)$", "", s)
+    s = _ALIASES.get(s, s)
+    return s if s in CANONICAL else str(name)
+
+
+def _int(v: Any) -> Optional[int]:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str) and v.strip().isdigit():
+        return int(v.strip())
+    return None
+
+
+def _num(v: Any) -> Optional[float]:
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    return float(v) if v == v and v >= 0 else None
+
+
+def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
+             review: List[Any], merge: List[Any]) -> Dict[str, Any]:
+    dispatch = [r for r in dispatch if isinstance(r, dict)]
+    review = [r for r in review if isinstance(r, dict)]
+    merge = [r for r in merge if isinstance(r, dict) and r.get("task") is not None]
+    tasks = {str(r["task"]) for r in dispatch if r.get("task") is not None and _int(r.get("attempt")) == 1}
+    n = len(tasks)
+    denials = sum(1 for r in scope if isinstance(r, dict))
+    climbs = _steps(esc, "opus", "sonnet")["count"]
+    rounds: Dict[str, int] = {}
+    for r in review:
+        k, v = r.get("task"), _int(r.get("round"))
+        if k is not None and v is not None:
+            rounds[str(k)] = max(rounds.get(str(k), 0), v)
+    reviewed = {str(r.get("task")) for r in review if r.get("task") is not None}
+    costed = [(c, _int(r.get("tasks_merged")) or 0) for r in merge for c in [_num(r.get("cost_usd"))] if c is not None]
+    merged_tasks = sum(t for _, t in costed)
+    return {
+        "tasks_dispatched": n,
+        "scope_denials": denials,
+        "scope_per_task": round(denials / n, 4) if n else None,
+        "climb_rate": round(climbs / n, 4) if n else None,
+        "review_rounds_median": float(statistics.median(rounds.values())) if rounds else None,
+        "merges": len(merge),
+        "merges_without_review": sum(1 for r in merge if str(r["task"]) not in reviewed),
+        "cost_per_task": round(sum(c for c, _ in costed) / merged_tasks, 4) if merged_tasks else None,
+        "merges_without_cost": len(merge) - len(costed),
+    }
+
+
 def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
     th = thresholds.load()
     calls, gate, route = read("calls", log_dir), read("gate", log_dir), read("route", log_dir)
     mcp, over, esc = read("mcp", log_dir), read("overrides", log_dir), read("escalations", log_dir)
     compare, compact = read("compare", log_dir), read("compact", log_dir)
+    dispatch, scope = read("dispatch", log_dir), read("scope", log_dir)
+    review, merge = read("review", log_dir), read("merge", log_dir)
     judged = [r for r in gate if "latency_ms" in r]
     q_calls: Counter = Counter()
     q_below: Counter = Counter()
@@ -80,6 +145,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         if not isinstance(answers, dict):
             continue
         for q, a in answers.items():
+            q = canonical(q)
             q_calls[q] += 1
             # Tolerate missing or invalid confidence values
             if not isinstance(a, dict):
@@ -91,7 +157,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
                 conf = 0.0
             if conf < th["dispatch"]["min_confidence"]:
                 q_below[q] += 1
-    q_over = Counter(str(r.get("question")) for r in over)
+    q_over = Counter(canonical(str(r.get("question"))) for r in over)
     questions = {q: {"calls": n, "below_threshold": q_below[q], "overrides": q_over[q],
                      "override_rate": round(q_over[q] / n, 4) if n else 0.0} for q, n in q_calls.items()}
     ratios: List[float] = []
@@ -123,9 +189,10 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "route_calls": len(route),
         "route_injected": sum(1 for r in route if r.get("injected")),
         "questions": questions,
-        "opus_escalations": _steps(esc, "opus"),
+        "opus_escalations": _steps(esc, "opus", "sonnet"),
         "fable": _steps(esc, "fable", "opus"),
         "fable_without_opus": _steps(esc, "fable", "opus", skipped=True),
+        "delivery": delivery(dispatch, scope, esc, review, merge),
         "compare_count": len(ratios),
         "swarm_vs_plain": round(sum(ratios) / len(ratios), 3) if ratios else None,
         "jev_spend_usd": _cost(gate) + _cost(route) + _cost(mcp) + _cost(compact),
@@ -169,18 +236,32 @@ def proposals(rep: Dict[str, Any], th: Dict[str, Dict[str, Any]]) -> List[Dict[s
             out.append({"key": "route.swarm_min", "old": cur, "new": round(min(0.95, cur + 0.1), 2),
                         "why": "Swarm runs used %.1fx the tokens of plain Opus over %d comparisons; route to swarm only when Jev is more sure"
                                % (rep["swarm_vs_plain"], rep["compare_count"])})
-    return out
+    return [p for p in out if p["new"] != p["old"]]
 
 
 def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
+    d = rep["delivery"]
+
+    def na(v: Any, fmt: str = "%.2f") -> str:
+        return "n/a" if v is None else fmt % v
+
+    delivery_lines = [
+        "- Tasks dispatched: %d" % d["tasks_dispatched"],
+        "- Scope-lock denials per task (healthy 0-1): %s (%d denials)" % (na(d["scope_per_task"]), d["scope_denials"]),
+        "- Sonnet->Opus climb rate (healthy under 20%%): %s" % ("n/a" if d["climb_rate"] is None else "%.0f%%" % (d["climb_rate"] * 100)),
+        "- Median review rounds per branch (healthy <= 1): %s" % na(d["review_rounds_median"], "%.1f"),
+        "- Merges without a review (should be 0): %d of %d" % (d["merges_without_review"], d["merges"]),
+        "- Cost per merged task: %s (%d of %d merges had no cost)" % (na(d["cost_per_task"], "$%.2f"), d["merges_without_cost"], d["merges"]),
+    ]
     lines = ["# Jev calibration", "",
              "- Tool calls: %d; Jev judged %d (%.0f%%, target ~20%%)" % (rep["tool_calls"], rep["gate_judged"], rep["judged_share"] * 100),
              "- Gate decisions: %s" % json.dumps(rep["gate_decisions"]),
              "- Route: %d calls, %d injected" % (rep["route_calls"], rep["route_injected"]),
              "- Escalations sonnet->opus: %d %s" % (rep["opus_escalations"]["count"], json.dumps(rep["opus_escalations"]["reasons"])),
              "- Fable dispatches (opus->fable only): %d %s" % (rep["fable"]["count"], json.dumps(rep["fable"]["reasons"])),
-             "- Fable without a prior Opus step (should be 0): %d %s" % (rep["fable_without_opus"]["count"], json.dumps(rep["fable_without_opus"]["reasons"])),
-             "- Swarm vs plain token ratio: %s" % rep["swarm_vs_plain"],
+             "- Fable without a prior Opus step (should be 0): %d %s" % (rep["fable_without_opus"]["count"], json.dumps(rep["fable_without_opus"]["reasons"]))]
+    lines += delivery_lines
+    lines += ["- Swarm vs plain token ratio: %s" % rep["swarm_vs_plain"],
              "- Jev spend: $%.6f" % rep["jev_spend_usd"], "", "| question | calls | below thr | overrides | override rate |", "|---|---|---|---|---|"]
     for q, v in sorted(rep["questions"].items()):
         lines.append("| %s | %d | %d | %d | %.0f%% |" % (q, v["calls"], v["below_threshold"], v["overrides"], v["override_rate"] * 100))
