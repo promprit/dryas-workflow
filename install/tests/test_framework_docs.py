@@ -39,7 +39,7 @@ class FrameworkDocsTest(unittest.TestCase):
 
     def test_readme_links_framework(self):
         t = read("README.md")
-        for s in ("docs/architecture.md", "spec/dryas-spec-v1.md", "reference/README.md", "docs/adoption-guide.md"):
+        for s in ("docs/operating-model.md", "docs/architecture.md", "spec/dryas-spec-v1.md", "reference/README.md", "docs/adoption-guide.md"):
             self.assertIn(s, t, s)
 
 

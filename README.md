@@ -2,7 +2,7 @@
 
 ![ci](https://github.com/promprit/dryas-workflow/actions/workflows/ci.yml/badge.svg)
 
-**The Dryas Workflow Framework (Dryas for short) is an opinionated operating model for delivering software with AI agents.** It says who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
+**The Dryas Workflow Framework (Dryas for short) is a target operating model for AI-assisted software delivery.** It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
 
 The method is the asset; the tools are replaceable. This repo holds both:
 
@@ -23,9 +23,12 @@ Review       nothing merges unverified; a human ships
 
 | Read | For |
 | --- | --- |
+| [Operating model](docs/operating-model.md) | The whole model on one page: dimensions, layers, roles, metrics |
 | [Why Dryas](docs/why-dryas.md) | The problems it solves, and what it is not |
 | [Architecture](docs/architecture.md) | The five layers, the loop, design principles |
 | [Memory](docs/memory-model.md) · [Governance](docs/governance.md) · [Execution](docs/execution-model.md) · [Escalation](docs/escalation-model.md) · [Review](docs/review-model.md) | One model doc per layer |
+| [Roles](docs/roles.md) | Who holds each human decision, solo and in a team, with a RACI |
+| [Metrics](docs/metrics.md) | KPIs per layer with healthy ranges, sources and cadence |
 | [Dryas Workflow Framework Specification v1 (draft)](spec/dryas-spec-v1.md) | Numbered MUST / SHOULD rules and the `dryas.yaml` manifest |
 | [Reference map](reference/README.md) | How this repo implements each rule, with a conformance table |
 | [Examples](examples/README.md) | A feature walked through the loop, a plan file, manifests |

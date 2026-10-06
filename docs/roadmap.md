@@ -35,7 +35,7 @@ Make the method readable without the tools, and complete it as an operating mode
 - [ ] Log the planned metrics: `scope`, `dispatch`, `review` and `merge` records ([metrics.md](metrics.md#planned-logging)), and report them in `/tune`
 - [x] One page mapping layers, roles and metrics onto the operating-model dimensions: [operating-model.md](operating-model.md)
 - [x] Maturity levels L0–L4, each earned by its metrics: [adoption-guide.md](adoption-guide.md#maturity-levels)
-- [ ] Re-lead README and why-dryas.md with "target operating model for AI-assisted software delivery"
+- [x] Re-lead README and why-dryas.md with "target operating model for AI-assisted software delivery"
 
 ## Phase 2: the specification and manifest
 
