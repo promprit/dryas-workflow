@@ -57,8 +57,18 @@ class PatchTableTest(unittest.TestCase):
         with self.assertRaises(rh.HelperError) as cm:
             rh.patch_text("intelligence.cjs", "const SESSION_DIR = path.join(PROJECT_ROOT, '.claude-flow', 'sessions');\n")
         self.assertIn("patches are tested with ruflo %s" % rh.tested_ruflo(), str(cm.exception))
-        self.assertIn("falls back to that version automatically", str(cm.exception))
+        self.assertIn("offers to switch to that version", str(cm.exception))
         self.assertIn("--no-ruflo", str(cm.exception))
+        self.assertIsInstance(cm.exception, rh.PatchError)
+
+    def test_patch_error_is_helper_error_and_generate_errors_are_not_patch_errors(self):
+        self.assertTrue(issubclass(rh.PatchError, rh.HelperError))
+        with self.assertRaises(rh.HelperError) as cm:
+            REAL_GENERATE("")
+        self.assertNotIsInstance(cm.exception, rh.PatchError)
+
+    def test_import_does_not_read_components(self):
+        self.assertFalse(hasattr(rh, "HINT"))
 
 
 def expected_src(n):

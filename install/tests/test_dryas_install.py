@@ -392,18 +392,27 @@ class FallbackTest(unittest.TestCase):
 
     def setUp(self):
         InstallTest.setUp(self)
-        self.saved = (rh.patched_helpers, di.pu.which)
+        self.saved = (rh.patched_helpers, di.pu.which, di.capture)
         self.tested = rh.tested_ruflo()
         self.attempts = []
         self.out = {n: (b"x\n", 0o644) for n in rh.HELPERS}
+        di.capture = lambda argv, *a, **k: (0, "3.99.0\n") if argv[-1] == "--version" else (1, "")
 
     def tearDown(self):
-        rh.patched_helpers, di.pu.which = self.saved
+        rh.patched_helpers, di.pu.which, di.capture = self.saved
+
+    def printed(self, **kw):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = self.install(["core", "ruflo"], **kw)
+        return rc, buf.getvalue()
 
     def fail_first(self, bin_):
         self.attempts.append(bin_)
         if len(self.attempts) == 1:
-            raise rh.HelperError("anchor mismatch")
+            raise rh.PatchError("anchor mismatch")
         return self.out
 
     def test_fallback_installs_tested_version_and_retries(self):
@@ -413,6 +422,25 @@ class FallbackTest(unittest.TestCase):
         self.assertIn(["npm", "install", "-g", "ruflo@" + self.tested], self.calls)
         self.assertEqual(self.attempts, ["/b/ruflo", "/new/ruflo"])
         self.assertTrue((self.cd / "ruflo/helpers/hook-handler.cjs").exists())
+        s = json.loads((self.cd / "settings.json").read_text())
+        self.assertEqual(s["env"]["RUFLO_BIN"], di.pu.fwd("/new/ruflo"))
+
+    def test_prompt_names_current_and_tested(self):
+        rh.patched_helpers = self.fail_first
+        di.pu.which = lambda n: "/new/ruflo"
+        prompts = []
+        di.confirm = lambda prompt: prompts.append(prompt) or True
+        self.install(["core", "ruflo"])
+        want = "Ruflo 3.99.0 does not match Dryas's patches. Replace your global ruflo 3.99.0 with the tested %s?" % self.tested
+        self.assertTrue(any(want in p for p in prompts), prompts)
+
+    def test_unknown_current_version(self):
+        rh.patched_helpers = self.fail_first
+        di.capture = lambda argv, *a, **k: (127, "")
+        prompts = []
+        di.confirm = lambda prompt: prompts.append(prompt) or False
+        self.install(["core", "ruflo"])
+        self.assertTrue(any("Ruflo unknown does not match" in p and "ruflo unknown with" in p for p in prompts), prompts)
 
     def test_fallback_declined_returns_1_and_writes_no_helpers(self):
         rh.patched_helpers = self.fail_first
@@ -428,14 +456,40 @@ class FallbackTest(unittest.TestCase):
         di.pu.which = lambda n: "/new/ruflo"
         self.assertEqual(self.install(["core", "ruflo"], yes=True), 0)
 
-    def test_retry_failure_returns_1(self):
+    def test_retry_failure_is_honest(self):
         def always(bin_):
             self.attempts.append(bin_)
-            raise rh.HelperError("still bad")
+            raise rh.PatchError("still bad", hint=" (HINTTEXT)")
         rh.patched_helpers = always
         di.pu.which = lambda n: "/new/ruflo"
-        self.assertEqual(self.install(["core", "ruflo"]), 1)
+        rc, out = self.printed()
+        self.assertEqual(rc, 1)
         self.assertEqual(len(self.attempts), 2)
+        self.assertFalse((self.cd / "ruflo/helpers").exists())
+        self.assertIn("still bad", out)
+        self.assertNotIn("HINTTEXT", out.rsplit("still bad", 1)[1])
+        self.assertNotIn("falls back", out)
+        self.assertIn("Your global ruflo is now %s; run `npm install -g ruflo` to restore the latest." % self.tested, out)
+
+    def test_npm_failure_returns_1(self):
+        rh.patched_helpers = self.fail_first
+        di.run = lambda argv, cwd=None: self.calls.append(argv) or 7
+        rc, out = self.printed(yes=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("npm install -g ruflo@%s failed (exit 7)" % self.tested, out)
+        self.assertEqual(len(self.attempts), 1)
+        self.assertFalse((self.cd / "ruflo/helpers").exists())
+
+    def test_plain_helper_error_does_not_fall_back(self):
+        def missing(bin_):
+            self.attempts.append(bin_)
+            raise rh.HelperError("ruflo binary not found")
+        rh.patched_helpers = missing
+        rc, out = self.printed(yes=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("ruflo binary not found", out)
+        self.assertEqual(len(self.attempts), 1)
+        self.assertFalse(any(c[:2] == ["npm", "install"] for c in self.calls))
         self.assertFalse((self.cd / "ruflo/helpers").exists())
 
 

@@ -280,19 +280,27 @@ def _ts() -> str:
     return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
-def _ruflo_fallback(err: Exception, mapping: Dict[str, str], yes: bool) -> Optional[dict]:
-    """Patches did not apply to the newest Ruflo: offer the tested version and retry once. None = give up."""
+def _ruflo_fallback(err: "ruflo_helpers.PatchError", mapping: Dict[str, str], yes: bool) -> Optional[dict]:
+    """Patches did not match the installed Ruflo: offer to replace it with the tested version and retry once.
+    None = give up (the caller returns 1)."""
     tested = ruflo_helpers.tested_ruflo()
-    print("Ruflo helpers: %s. Falling back to tested ruflo %s." % (err, tested))
-    if yes or confirm("Install ruflo@%s?" % tested):
-        if run(["npm", "install", "-g", "ruflo@" + tested]) == 0:
-            mapping["RUFLO_BIN"] = pu.which("ruflo")
-            try:
-                return ruflo_helpers.patched_helpers(mapping["RUFLO_BIN"])
-            except ruflo_helpers.HelperError as e2:
-                err = e2
+    rc, out = capture([mapping.get("RUFLO_BIN", ""), "--version"])
+    current = out.strip().splitlines()[0] if rc == 0 and out.strip() else "unknown"
     print("error: Ruflo helpers: %s" % err)
-    return None
+    if not (yes or confirm("Ruflo %s does not match Dryas's patches. Replace your global ruflo %s with the tested %s?"
+                           % (current, current, tested))):
+        return None
+    rc = run(["npm", "install", "-g", "ruflo@" + tested])
+    if rc != 0:
+        print("npm install -g ruflo@%s failed (exit %d)" % (tested, rc))
+        return None
+    mapping["RUFLO_BIN"] = pu.which("ruflo")
+    try:
+        return ruflo_helpers.patched_helpers(mapping["RUFLO_BIN"])
+    except ruflo_helpers.HelperError as e2:
+        print("error: Ruflo helpers: %s" % getattr(e2, "detail", e2))
+        print("Your global ruflo is now %s; run `npm install -g ruflo` to restore the latest." % tested)
+        return None
 
 
 def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = False, dry: bool = False,
@@ -313,10 +321,13 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
         else:
             try:
                 helpers = ruflo_helpers.patched_helpers(mapping.get("RUFLO_BIN", ""))
-            except ruflo_helpers.HelperError as e:
+            except ruflo_helpers.PatchError as e:
                 helpers = _ruflo_fallback(e, mapping, yes)
                 if helpers is None:
                     return 1
+            except ruflo_helpers.HelperError as e:
+                print("error: Ruflo helpers: %s" % e)
+                return 1
     if dry:
         print("dry run: nothing will be written")
     elif not cd.exists():

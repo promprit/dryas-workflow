@@ -92,13 +92,14 @@ def thirdparty(comps: List[str], yes: bool, home: Optional[Path] = None) -> int:
     except (OSError, ValueError):
         plugins = {}
     for c in sel:
-        want, name = table[c]["tested"], table[c]["plugin"]
+        want, name = table[c].get("plugin_tested", table[c]["tested"]), table[c]["plugin"]
         have = [e.get("version") for e in plugins.get(name, []) if isinstance(e, dict)]
         if not have:
             print("warning: %s is not installed; Dryas Workflow is tested with %s" % (name, want))
             continue
         nums = [_vtuple(h) for h in have]
-        if all(nums) and max(nums) < _vtuple(want):
+        wt = _vtuple(want)
+        if wt is not None and all(nums) and max(nums) < wt:
             print("warning: %s is %s; Dryas Workflow is tested with %s (older than tested)"
                   % (name, ", ".join(str(h) for h in have), want))
     return 0

@@ -128,6 +128,37 @@ class ThirdpartyWarnTest(unittest.TestCase):
         self.assertNotIn("warning", self.out(["1.0.0", "99.0.0"]))
         self.assertIn("older than tested", self.out(["1.0.0", "2.0.0"]))
 
+    def test_ruflo_plugin_compared_to_plugin_tested(self):
+        import io
+        from contextlib import redirect_stdout
+        table = json.loads((HERE.parent / "components.json").read_text())
+        self.assertEqual(table["ruflo"]["plugin_tested"], "0.2.6")
+        self.assertEqual(table["superpowers"]["plugin_tested"], "6.4.2")
+        self.assertEqual(table["design"]["plugin_tested"], "4.5.0")
+        (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(
+            json.dumps({"plugins": {"ruflo-core@ruflo": [{"version": "0.2.6"}]}}))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(run_cmd.thirdparty(["ruflo"], True, home=self.home), 0)
+        self.assertNotIn("older than tested", buf.getvalue())
+
+    def test_unparseable_tested_never_warns(self):
+        import io
+        import json as _j
+        from contextlib import redirect_stdout
+        real = run_cmd.json.loads
+        def fake_loads(t, *a, **k):
+            d = real(t, *a, **k)
+            if "superpowers" in d:
+                d["superpowers"]["plugin_tested"] = "4.6.0-rc1"
+            return d
+        run_cmd.json.loads = fake_loads
+        try:
+            o = self.out(["1.0.0"])
+        finally:
+            run_cmd.json.loads = real
+        self.assertNotIn("warning", o)
+
     def test_warns_when_not_installed(self):
         self.assertIn("superpowers@claude-plugins-official is not installed", self.out(None))
 

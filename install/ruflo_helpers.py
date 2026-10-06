@@ -19,8 +19,9 @@ def tested_ruflo() -> str:
     return table["ruflo"]["tested"]
 
 
-HINT = (" (patches are tested with ruflo %s; Dryas falls back to that version automatically, or use --no-ruflo)"
-        % tested_ruflo())
+def _hint() -> str:
+    return (" (patches are tested with ruflo %s; Dryas offers to switch to that version, or use --no-ruflo)"
+            % tested_ruflo())
 
 PATCHES = [
     ("hook-handler.cjs",
@@ -51,6 +52,14 @@ class HelperError(Exception):
     pass
 
 
+class PatchError(HelperError):
+    """The generated helpers do not match the patch table (a Ruflo version mismatch)."""
+
+    def __init__(self, detail: str, hint: str = None):
+        self.detail = detail
+        super().__init__(detail + (_hint() if hint is None else hint))
+
+
 def init_argv(ruflo_bin: str) -> List[str]:
     return [ruflo_bin] + INIT_FLAGS
 
@@ -62,7 +71,7 @@ def patch_text(name: str, text: str, strict: bool = True) -> str:
     counts = [text.count(old) for old, _ in mine]
     for (old, _), n in zip(mine, counts):
         if n > 1 or (n == 0 and (strict or not any(counts))):
-            raise HelperError("%s: patch anchor must occur exactly once (found %d): %r%s" % (name, n, old, HINT))
+            raise PatchError("%s: patch anchor must occur exactly once (found %d): %r" % (name, n, old))
     for (old, new), n in zip(mine, counts):
         if n:
             text = text.replace(old, new)
@@ -106,7 +115,7 @@ def patched_helpers(ruflo_bin: str) -> Dict[str, Tuple[bytes, int]]:
     out = {}
     for n in HELPERS:
         if n not in gen:
-            raise HelperError("generator did not produce helper %s" % n)
+            raise PatchError("generator did not produce helper %s" % n)
         data, mode = gen[n]
         out[n] = (patch_text(n, data.decode("utf-8"), strict=True).encode("utf-8"), mode)
     return out
