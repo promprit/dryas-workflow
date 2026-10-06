@@ -9,7 +9,7 @@ The method is the asset; the tools are replaceable. This repo holds both:
 - **The framework:** why it exists, five layers, one loop, and a draft specification any harness can implement.
 - **A reference implementation** for Claude Code and Codex, built on Superpowers, Ruflo, Jev and a few design skills.
 
-This repo is public but not promoted. Expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
+This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
 
 ## The framework
 
