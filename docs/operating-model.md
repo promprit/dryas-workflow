@@ -18,7 +18,7 @@ The scope is deliberate: software delivery, not every use of AI in an organisati
 | Scale within a team | One agent per worktree, parallel loops, shared memory per repo | [execution-model.md](execution-model.md), [memory-model.md](memory-model.md) | Loop owner | none |
 | People and organisation | Roles as hats, separation rules, RACI across the loop | [roles.md](roles.md) | All roles | none |
 | Metrics | KPIs with range, source, cadence and status | [metrics.md](metrics.md) | Threshold owner | All |
-| Current → target transition | Staged rollout; maturity levels to come | [adoption-guide.md](adoption-guide.md) | Design approver | none |
+| Current → target transition | Staged rollout and maturity levels L0–L4 | [adoption-guide.md](adoption-guide.md) | Design approver | none |
 
 Status of each dimension and the work still open: [roadmap.md](roadmap.md).
 

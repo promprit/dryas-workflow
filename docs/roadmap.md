@@ -18,7 +18,7 @@ The scope is deliberate: software delivery, not every use of AI in an organisati
 | Scale within a team | Covered |
 | People and organisation | Covered |
 | Metrics | Partial (model defined; some KPIs need new logging) |
-| Current → target transition | Partial (rollout defined; maturity levels next) |
+| Current → target transition | Covered |
 
 ## Phase 1: the framework (now)
 
@@ -34,7 +34,7 @@ Make the method readable without the tools, and complete it as an operating mode
 - [x] KPIs with a definition, healthy range, source log, cadence and live/planned status: [metrics.md](metrics.md)
 - [ ] Log the planned metrics: `scope`, `dispatch`, `review` and `merge` records ([metrics.md](metrics.md#planned-logging)), and report them in `/tune`
 - [x] One page mapping layers, roles and metrics onto the operating-model dimensions: [operating-model.md](operating-model.md)
-- [ ] Maturity levels (current → target) in [adoption-guide.md](adoption-guide.md)
+- [x] Maturity levels L0–L4, each earned by its metrics: [adoption-guide.md](adoption-guide.md#maturity-levels)
 - [ ] Re-lead README and why-dryas.md with "target operating model for AI-assisted software delivery"
 
 ## Phase 2: the specification and manifest

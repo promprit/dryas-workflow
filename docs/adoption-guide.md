@@ -38,21 +38,22 @@ For: running Dryas in a harness this repo does not support (OpenCode, Roo, Curso
 
 The [reference map](../reference/README.md) shows how this repo implements each rule; reuse what you can. The scope lock (`claude/jev/scope_lock.py`) and plan-file tools are plain Python and harness-agnostic.
 
-## Rolling it out to a team
-
-| Week | Do | Watch |
-| --- | --- | --- |
-| 1 | Brainstorm-first and review-before-merge only. | How often design changes after approval. |
-| 2 | Plan files, worktrees and the scope lock. | Scope-lock denials: are scopes too tight, or tasks too big? |
-| 3 | Cheap executors and the escalation ladder. | Climb rate and reasons in the escalation log. |
-| 4 | Judge and memory. | Judge override rate per question. |
+## Maturity levels
 
 Turn layers on one at a time. Each one is useful alone, and a team that adopts all five on day one cannot tell which one caused a problem.
 
+A level is earned by its metrics, not by the calendar. Move up only when the exit test has held for four weeks running. Metric IDs are defined in [metrics.md](metrics.md).
+
+| Level | Turn on | Ready to move up when |
+| --- | --- | --- |
+| L0 Ad hoc | An AI assistant, no loop. | Starting point. |
+| L1 Gated | Brainstorm-first, review-before-merge, only humans push. | Every merged change had an approved design and a review (REV-M1 ≤ 1; check by hand until it is logged). |
+| L2 Scoped | Plan files, worktrees and the scope lock. | GOV-M4 ≤ 1 denial per task (by hand until it is logged). |
+| L3 Laddered | Cheap executors and the escalation ladder. | ESC-M1 under 20% and ESC-M2 = 0. |
+| L4 Target | The judge, memory and a weekly tune. | Stay here: GOV-M1 10–30%, GOV-M2 5–25%, EXE-M1 ≤ 3×. |
+
+Installing is not a level. The reference implementation turns on every L4 tool at once; the level is reached only when the metrics hold.
+
 ## Measuring it
 
-- **Escalation rate** per tier, and the top reasons.
-- **Judge override rate** per question. High means the threshold or the question is wrong.
-- **Scope-lock denials** per task. High means tasks are badly scoped.
-- **Rework after review.** High means brainstorm or planning is too thin.
-- **Cost per merged task**, split by tier.
+KPIs, healthy ranges, sources and cadence: [metrics.md](metrics.md). Who owns each one: [roles.md](roles.md).
