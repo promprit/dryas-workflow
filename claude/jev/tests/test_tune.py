@@ -43,6 +43,15 @@ class TuneTest(unittest.TestCase):
         self.assertAlmostEqual(r["jev_spend_usd"], 0.000042 + 1000 * 0.042 / 1e6)
         self.assertEqual(r["top_judged_heads"], ["make"])
 
+    def test_fable_counts_only_after_opus(self):
+        write(self.d, "escalations", [{"reason": "opus failed", "from_model": "opus", "to_model": "fable"},
+                                      {"reason": "skipped opus", "from_model": "sonnet", "to_model": "fable"},
+                                      {"reason": "no from", "to_model": "fable"}])
+        r = tune.build()
+        self.assertEqual(r["fable"], {"count": 1, "reasons": {"opus failed": 1}})
+        self.assertEqual(r["fable_without_opus"], {"count": 2, "reasons": {"skipped opus": 1, "no from": 1}})
+        self.assertIn("Fable without a prior Opus step (should be 0): 2", tune.render(r, []))
+
     def test_empty_logs(self):
         r = tune.build()
         self.assertEqual((r["tool_calls"], r["judged_share"], r["swarm_vs_plain"]), (0, 0.0, None))

@@ -26,7 +26,7 @@
 | ID | KPI | Definition | Healthy | Source | Cadence | Status | If out of range |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ESC-M1 | Strong-tier escalation rate | Cheap → strong climbs ÷ tasks dispatched | Under 20% | `escalations` + task count (planned) | Weekly | partial: count live, denominator planned | Read the logged reasons. One recurring reason usually points to a plan or prompt defect ([escalation-model.md](escalation-model.md)). |
-| ESC-M2 | Frontier dispatches without a strong-tier failure | Frontier-tier dispatches with no prior strong-tier failure on the same task | 0 | `escalations` | Weekly | partial: `/tune` counts every frontier record; checking `from_model` is the strong tier is by hand | Any value above 0 breaks "stop at the first success". Treat it as a compliance finding. |
+| ESC-M2 | Frontier dispatches without a strong-tier failure | Escalation records to the frontier tier whose from-tier is not the strong tier. An unlogged dispatch is invisible, so this also relies on every climb being logged | 0 | `escalations` | Weekly | live: `/tune` reports "Fable without a prior Opus step" | Any value above 0 breaks "stop at the first success". Treat it as a compliance finding. |
 
 ## Execution and cost
 
