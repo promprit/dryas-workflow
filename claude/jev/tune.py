@@ -4,6 +4,7 @@
 CLI: tune.py report | tune.py apply KEY JSON_VALUE | tune.py record-compare TASK SWARM_TOK PLAIN_TOK SWARM_S PLAIN_S
 """
 import json
+import math
 import os
 import re
 import statistics
@@ -187,7 +188,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "tool_calls": len(calls),
         "gate_judged": len(judged),
         "judged_share": round(len(judged) / len(calls), 4) if calls else 0.0,
-        "judge_latency_ms_median": statistics.median(lat) if (lat := [r["latency_ms"] for r in gate if isinstance(r.get("latency_ms"), (int, float)) and not isinstance(r.get("latency_ms"), bool)]) else None,
+        "judge_latency_ms_median": statistics.median(lat) if (lat := [r["latency_ms"] for r in gate if isinstance(r.get("latency_ms"), (int, float)) and not isinstance(r.get("latency_ms"), bool) and math.isfinite(r["latency_ms"])]) else None,
         "gate_decisions": dict(Counter(r.get("decision") for r in gate)),
         "route_calls": len(route),
         "route_injected": sum(1 for r in route if r.get("injected")),

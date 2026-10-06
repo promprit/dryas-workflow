@@ -249,6 +249,15 @@ class TuneTest(unittest.TestCase):
         self.assertEqual(rep["judge_latency_ms_median"], 300)
         self.assertIn("- Judge latency median (healthy < 500 ms): 300 ms", tune.render(rep, []))
 
+    def test_judge_latency_ignores_non_finite(self):
+        with open(os.path.join(self.d, "gate.jsonl"), "w") as f:
+            f.write('{"decision": "none", "latency_ms": NaN}\n{"decision": "none", "latency_ms": Infinity}\n'
+                    '{"decision": "none", "latency_ms": 200}\n{"decision": "none", "latency_ms": 400}\n'
+                    '{"decision": "none", "latency_ms": NaN}\n')
+        rep = tune.build()
+        self.assertEqual(rep["judge_latency_ms_median"], 300)
+        self.assertIn("- Judge latency median (healthy < 500 ms): 300 ms", tune.render(rep, []))
+
     def test_judge_latency_empty_renders_na(self):
         rep = tune.build()
         self.assertIsNone(rep["judge_latency_ms_median"])
