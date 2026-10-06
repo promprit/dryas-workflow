@@ -431,7 +431,7 @@ class FallbackTest(unittest.TestCase):
         prompts = []
         di.confirm = lambda prompt: prompts.append(prompt) or True
         self.install(["core", "ruflo"])
-        want = "Ruflo 3.99.0 does not match Dryas's patches. Replace your global ruflo 3.99.0 with the tested %s?" % self.tested
+        want = "Replace the ruflo on your PATH (/b/ruflo) 3.99.0 with the tested %s?" % self.tested
         self.assertTrue(any(want in p for p in prompts), prompts)
 
     def test_unknown_current_version(self):
@@ -440,7 +440,39 @@ class FallbackTest(unittest.TestCase):
         prompts = []
         di.confirm = lambda prompt: prompts.append(prompt) or False
         self.install(["core", "ruflo"])
-        self.assertTrue(any("Ruflo unknown does not match" in p and "ruflo unknown with" in p for p in prompts), prompts)
+        self.assertTrue(any("(/b/ruflo) unknown with the tested" in p for p in prompts), prompts)
+
+    def test_version_probe_has_timeout_and_survives_errors(self):
+        rh.patched_helpers = self.fail_first
+        seen = []
+        def boom(argv, *a, **k):
+            seen.append(k.get("timeout"))
+            raise subprocess.TimeoutExpired(argv, 10)
+        di.capture = boom
+        prompts = []
+        di.confirm = lambda prompt: prompts.append(prompt) or False
+        self.assertEqual(self.install(["core", "ruflo"]), 1)
+        self.assertEqual(seen, [10])
+        self.assertTrue(any("unknown" in p for p in prompts), prompts)
+
+    def test_yes_announces_replacement_and_restore_hint(self):
+        rh.patched_helpers = self.fail_first
+        di.pu.which = lambda n: "/new/ruflo"
+        di.confirm = lambda prompt: self.fail("prompted despite --yes")
+        rc, out = self.printed(yes=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("Replacing the ruflo on your PATH (/b/ruflo) 3.99.0 with the tested %s (Dryas's patches do not match 3.99.0 yet)." % self.tested, out)
+        self.assertLess(out.index("Replacing the ruflo"), out.index("is now"))
+        self.assertIn("The ruflo on your PATH is now %s; run `npm install -g ruflo` to return to the latest once Dryas supports it." % self.tested, out)
+
+    def test_npm_did_not_update_path_binary(self):
+        rh.patched_helpers = self.fail_first
+        di.pu.which = lambda n: "/b/ruflo"
+        rc, out = self.printed(yes=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("npm installed ruflo@%s but /b/ruflo on your PATH was not updated (another package manager?)" % self.tested, out)
+        self.assertEqual(len(self.attempts), 1)
+        self.assertFalse((self.cd / "ruflo/helpers").exists())
 
     def test_fallback_declined_returns_1_and_writes_no_helpers(self):
         rh.patched_helpers = self.fail_first
@@ -469,7 +501,7 @@ class FallbackTest(unittest.TestCase):
         self.assertIn("still bad", out)
         self.assertNotIn("HINTTEXT", out.rsplit("still bad", 1)[1])
         self.assertNotIn("falls back", out)
-        self.assertIn("Your global ruflo is now %s; run `npm install -g ruflo` to restore the latest." % self.tested, out)
+        self.assertIn("The ruflo on your PATH is now %s; run `npm install -g ruflo` to restore the latest." % self.tested, out)
 
     def test_npm_failure_returns_1(self):
         rh.patched_helpers = self.fail_first

@@ -69,9 +69,9 @@ def _vtuple(v) -> Optional[tuple]:
     return tuple(int(x) for x in m.group(1).split(".")) if m else None
 
 
-def thirdparty(comps: List[str], yes: bool, home: Optional[Path] = None) -> int:
+def thirdparty(comps: List[str], yes: bool, home: Optional[Path] = None, table_path: Optional[Path] = None) -> int:
     import dryas_install as di
-    table = json.loads((HERE / "components.json").read_text(encoding="utf-8"))
+    table = json.loads(Path(table_path or HERE / "components.json").read_text(encoding="utf-8"))
     sel = [c for c in comps if c in table]
     cmds = [argv for c in sel for argv in table[c]["commands"]]
     if cmds:

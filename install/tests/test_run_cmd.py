@@ -144,20 +144,17 @@ class ThirdpartyWarnTest(unittest.TestCase):
 
     def test_unparseable_tested_never_warns(self):
         import io
-        import json as _j
         from contextlib import redirect_stdout
-        real = run_cmd.json.loads
-        def fake_loads(t, *a, **k):
-            d = real(t, *a, **k)
-            if "superpowers" in d:
-                d["superpowers"]["plugin_tested"] = "4.6.0-rc1"
-            return d
-        run_cmd.json.loads = fake_loads
-        try:
-            o = self.out(["1.0.0"])
-        finally:
-            run_cmd.json.loads = real
-        self.assertNotIn("warning", o)
+        table = json.loads((HERE.parent / "components.json").read_text())
+        table["superpowers"]["plugin_tested"] = "4.6.0-rc1"
+        tp = self.home / "components.json"
+        tp.write_text(json.dumps(table))
+        (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(
+            json.dumps({"plugins": {"superpowers@claude-plugins-official": [{"version": "1.0.0"}]}}))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(run_cmd.thirdparty(["superpowers"], True, home=self.home, table_path=tp), 0)
+        self.assertNotIn("warning", buf.getvalue())
 
     def test_warns_when_not_installed(self):
         self.assertIn("superpowers@claude-plugins-official is not installed", self.out(None))
