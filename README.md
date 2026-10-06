@@ -11,6 +11,8 @@ The method is the asset; the tools are replaceable. This repo holds both:
 
 This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
 
+Built and run by [Dryas Studio](https://dryasstudio.com), which delivers every client project with it.
+
 ## The framework
 
 ```
