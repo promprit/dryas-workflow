@@ -10,6 +10,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import jevlog
 import planfile
 
 TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
@@ -67,6 +68,24 @@ def check(root: str, path: str, has_agent_id: bool = False) -> Optional[str]:
     return "scope lock: %s is outside the scope of active task(s) %s" % (rel.replace(os.sep, "/"), ",".join(map(str, active)))
 
 
+def _active_ids(root: str) -> List[str]:
+    try:
+        with open(os.path.join(root, ".orchestrate", "active.json"), encoding="utf-8") as f:
+            a = json.load(f).get("active", [])
+        return [str(x) for x in a] if isinstance(a, list) else []
+    except Exception:
+        return []
+
+
+def _log_deny(root: str, path: str) -> None:
+    """Record a deny for GOV-M4. Never raises, never changes the decision."""
+    try:
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        jevlog.append("scope", {"task": _active_ids(root), "path": rel, "decision": "deny"})
+    except Exception:
+        pass
+
+
 def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if event.get("tool_name") not in TOOLS:
         return None
@@ -82,9 +101,11 @@ def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
             reason = check(os.path.realpath(root), path, has_agent_id)
             if reason:
+                _log_deny(os.path.realpath(root), path)
                 return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                "permissionDecisionReason": reason}}
         except Exception as e:
+            _log_deny(os.path.realpath(root), path)
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                            "permissionDecisionReason": "scope lock: error checking %s (%s)" % (root, type(e).__name__)}}
     return None

@@ -75,6 +75,7 @@ Review and cleanup tasks (`Failing test first: none (review)` or `none (cleanup)
 3. Give each executor ONLY its section: `"{{PY}}" -X utf8 "{{CD}}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
 4. Dispatch with the Agent tool, `subagent_type: executor` (model sonnet from its frontmatter). Independent tasks go out in one message, in parallel.
 5. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus` on that dispatch, after `mcp__jev__log_escalation` (from_model sonnet, to_model opus). Never dispatch Fable here: Fable is only reached through §7.
+6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__jev__log_dispatch` with task ("<worktree branch>:<PLAN.md task id>", e.g. worktree-feat:3, so ids stay unique across runs), tier (sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
 
 ## 6. On return
 For each report, one `jev_judge` call with state `{task_section, executor_report}`:
@@ -89,6 +90,7 @@ Only an incident, a failure or an escalation reaches you in full; otherwise log 
 Ladder: **Sonnet → Opus → Fable**. Fable is used only when Opus also could not do the task.
 Every `mcp__jev__log_escalation` call passes all five fields: task, reason, decided_by ("jev" or "opus"), from_model, to_model.
 First Sonnet failure: re-dispatch once more on Sonnet with the failure details; the second Sonnet failure escalates to Opus.
+Each re-dispatch is logged with `mcp__jev__log_dispatch` (§5.6).
 <!-- pstack-picks -->
 Before each climb (Sonnet → Opus, Opus → Fable), run superpowers:systematic-debugging with `{{CD}}/pstack/principles/fix-root-causes.md` on the failing reports. Read only; do not edit project files. If the root cause is a plan defect (scope too narrow, Done vague or wrong, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the same model: that is not a climb and the failure count stays. Do this at most once per model; a second failure on that model climbs. Otherwise climb, and put the root cause in the re-dispatch prompt and in the `log_escalation` reason.
 <!-- /pstack-picks -->
@@ -113,7 +115,7 @@ Start only after every build task has left `.orchestrate/active.json`.
 
 <!-- /pstack-picks -->
 ## 8. Finish
-Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then remove the worktree.
+Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then call `mcp__jev__log_merge` with task and branch (the worktree branch name), tasks_merged (the number of task sections in .orchestrate/PLAN.md) and cost_usd when you have the session cost from /cost or a cost notice; then remove the worktree.
 
 ## Question rules (typesafe skill)
-One narrow judgment per question; named JSON fields in state; every choice has `none_of_these`; batch independent questions into one call; never ask Jev to write code or plans.
+One narrow judgment per question; named JSON fields in state; every choice has `none_of_these`; batch independent questions into one call; never ask Jev to write code or plans. When one call covers several tasks, name each question `<question>.<task>` (for example `needs_opus.t3`); /tune groups calls by the part before the dot.

@@ -38,6 +38,30 @@ TOOLS = [
                                                          "opus_decision": {}, "reason": {"type": "string"}},
                         "required": ["question", "jev_answer", "opus_decision", "reason"]},
     },
+    {
+        "name": "log_dispatch",
+        "description": "Record one executor dispatch (first or re-dispatch). Feeds /tune: tasks dispatched, GOV-M4, ESC-M1.",
+        "inputSchema": {"type": "object", "properties": {"task": {"type": "string"}, "tier": {"type": "string"},
+                                                         "role": {"type": "string"}, "attempt": {"type": "integer", "minimum": 1}},
+                        "required": ["task", "tier", "role", "attempt"]},
+    },
+    {
+        "name": "log_review",
+        "description": "Record one review round of a branch with its finding counts. Feeds /tune: REV-M1, merges without review.",
+        "inputSchema": {"type": "object", "properties": {"task": {"type": "string"}, "round": {"type": "integer", "minimum": 1},
+                                                         "critical": {"type": "integer", "minimum": 0},
+                                                         "important": {"type": "integer", "minimum": 0},
+                                                         "minor": {"type": "integer", "minimum": 0}},
+                        "required": ["task", "round", "critical", "important", "minor"]},
+    },
+    {
+        "name": "log_merge",
+        "description": "Record a local merge of a worktree branch. cost_usd is optional (from /cost). Feeds /tune: EXE-M3.",
+        "inputSchema": {"type": "object", "properties": {"task": {"type": "string"}, "branch": {"type": "string"},
+                                                         "tasks_merged": {"type": "integer", "minimum": 0},
+                                                         "cost_usd": {"type": "number", "minimum": 0}},
+                        "required": ["task", "branch", "tasks_merged"]},
+    },
 ]
 
 
@@ -97,6 +121,47 @@ def _sanitize_log_override(args: Dict[str, Any]) -> Dict[str, Any]:
         "opus_decision": _coerce_to_str(args.get("opus_decision")),
         "reason": _coerce_to_str(args.get("reason")),
     }
+
+
+def _as_int(v: Any) -> Optional[int]:
+    """Strict int: real ints or digit strings; never bools or floats."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str):
+        t = v.strip()
+        if t[:1] == "-":
+            t = t[1:]
+        if t.isdecimal() and t.isascii():
+            return int(v.strip())
+    return None
+
+
+LOG_TOOLS = {
+    "log_dispatch": ("dispatch", ("task", "tier", "role"), {"attempt": 1}),
+    "log_review": ("review", ("task",), {"round": 1, "critical": 0, "important": 0, "minor": 0}),
+    "log_merge": ("merge", ("task", "branch"), {"tasks_merged": 0}),
+}
+
+
+def _validate_log(args: Dict[str, Any], strs: Any, ints: Dict[str, int]) -> Any:
+    """Return (record, bad_fields). A record is written only when bad_fields is empty."""
+    rec: Dict[str, Any] = {}
+    bad = []
+    for k in strs:
+        v = args.get(k)
+        if isinstance(v, bool) or not isinstance(v, (str, int)) or not str(v).strip():
+            bad.append(k)
+        else:
+            rec[k] = _coerce_to_str(v)
+    for k, lo in ints.items():
+        n = _as_int(args.get(k))
+        if n is None or n < lo:
+            bad.append(k)
+        else:
+            rec[k] = n
+    return rec, bad
 
 
 def _normalize_questions(questions: Dict[str, Any]) -> Dict[str, Any]:
@@ -246,6 +311,18 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
                 return _text(mid, "logged")
             if name == "log_override":
                 jevlog.append("overrides", _sanitize_log_override(args))
+                return _text(mid, "logged")
+            if name in LOG_TOOLS:
+                file, strs, ints = LOG_TOOLS[name]
+                rec, bad = _validate_log(args, strs, ints)
+                if bad:
+                    return _text(mid, "invalid or missing: %s" % ", ".join(bad), True)
+                if name == "log_merge":
+                    raw = args.get("cost_usd")
+                    cost = None if isinstance(raw, bool) else _coerce_confidence(raw)
+                    if cost is not None and cost >= 0:
+                        rec["cost_usd"] = cost
+                jevlog.append(file, rec)
                 return _text(mid, "logged")
             name_str = str(name)[:64] if name else "unknown"
             return _text(mid, "unknown tool %r" % name_str, True)

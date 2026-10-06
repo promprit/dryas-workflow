@@ -18,6 +18,8 @@ class ScopeLockTest(unittest.TestCase):
         with open(os.path.join(self.wt, ".orchestrate", "PLAN.md"), "w") as f:
             f.write(PLAN)
         self.set_active(["1"])
+        self.logs = tempfile.mkdtemp()
+        os.environ["JEV_LOG_DIR"] = self.logs
 
     def set_active(self, ids):
         with open(os.path.join(self.wt, ".orchestrate", "active.json"), "w") as f:
@@ -133,6 +135,31 @@ class ScopeLockTest(unittest.TestCase):
             f.write(PLAN)
         # Should work with fallback
         self.assertIsNone(scope_lock.run(self.ev(os.path.join(self.wt, "src/feature/a.ts"))))
+
+    def scope_records(self):
+        p = os.path.join(self.logs, "scope.jsonl")
+        if not os.path.exists(p):
+            return []
+        with open(p) as f:
+            return [json.loads(l) for l in f]
+
+    def test_deny_writes_scope_record(self):
+        out = scope_lock.run(self.ev(os.path.join(self.wt, "src/other.ts")))
+        self.assertEqual(self.decision(out), "deny")
+        recs = self.scope_records()
+        self.assertEqual(len(recs), 1)
+        self.assertEqual((recs[0]["task"], recs[0]["path"], recs[0]["decision"]), (["1"], "src/other.ts", "deny"))
+
+    def test_allow_writes_nothing(self):
+        self.assertIsNone(scope_lock.run(self.ev(os.path.join(self.wt, "src/feature/a.ts"))))
+        self.assertEqual(self.scope_records(), [])
+
+    def test_unwritable_log_dir_still_denies(self):
+        blocker = os.path.join(self.logs, "afile")
+        open(blocker, "w").close()
+        os.environ["JEV_LOG_DIR"] = os.path.join(blocker, "sub")  # parent is a file: makedirs fails
+        out = scope_lock.run(self.ev(os.path.join(self.wt, "src/other.ts")))
+        self.assertEqual(self.decision(out), "deny")
 
 
 if __name__ == "__main__":

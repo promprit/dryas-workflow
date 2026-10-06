@@ -178,6 +178,85 @@ class TuneTest(unittest.TestCase):
         self.assertEqual(loaded["gate"]["min_confidence"], 0.7)  # default, not "0.7"
         self.assertIsInstance(loaded["gate"]["allowlist"], list)  # default list, not "rm"
 
+    def test_canonical_names(self):
+        cases = {"needs_opus.t3": "needs_opus", "t2_needs_opus": "needs_opus", "needs_opus_t10": "needs_opus",
+                 "needs_opus_any": "needs_opus", "specific_12": "specific", "specific_all": "specific",
+                 "executor1": "executor", "executor_kind": "executor", "done_t5": "done", "t6_done": "done",
+                 "failing_tests_exist": "failing_test_exists", "failing_test_t1": "failing_test_exists",
+                 "failing_test_exists_2": "failing_test_exists", "risk_t5": "risk",
+                 "needs_stronger_model.t1": "needs_stronger_model",
+                 "opus4": "opus4", "t1_opus": "t1_opus", "other_needs_opus": "other_needs_opus", "failing1": "failing1"}
+        for raw, want in cases.items():
+            self.assertEqual(tune.canonical(raw), want, raw)
+
+    def test_questions_grouped_by_canonical_name(self):
+        write(self.d, "mcp", [{"answers": {"needs_opus.t1": {"confidence": 0.9}, "t2_needs_opus": {"confidence": 0.9}}}])
+        write(self.d, "overrides", [{"question": "needs_opus_t3"}])
+        q = tune.build()["questions"]
+        self.assertEqual((q["needs_opus"]["calls"], q["needs_opus"]["overrides"]), (2, 1))
+
+    def test_sonnet_opus_count_requires_from_sonnet(self):
+        write(self.d, "escalations", [{"reason": "a", "from_model": "sonnet", "to_model": "opus"},
+                                      {"reason": "b", "from_model": "opus", "to_model": "opus"},
+                                      {"reason": "c", "to_model": "opus"}])
+        self.assertEqual(tune.build()["opus_escalations"]["count"], 1)
+
+    def test_delivery_metrics(self):
+        write(self.d, "dispatch", [{"task": "t1", "tier": "sonnet", "role": "coder", "attempt": 1},
+                                   {"task": "t1", "tier": "sonnet", "role": "coder", "attempt": 2},
+                                   {"task": "t2", "tier": "sonnet", "role": "tester", "attempt": "1"},
+                                   {"task": "t3", "tier": "opus", "role": "coder", "attempt": 1},
+                                   {"task": "t4", "tier": "sonnet", "role": "coder", "attempt": 1},
+                                   "not a dict", {"tier": "sonnet"}])
+        write(self.d, "scope", [{"task": ["1"], "path": "a", "decision": "deny"}] * 2)
+        write(self.d, "escalations", [{"reason": "x", "from_model": "sonnet", "to_model": "opus"}])
+        write(self.d, "review", [{"task": "b1", "round": 1}, {"task": "b1", "round": 2}, {"task": "b1", "round": 1},
+                                 {"task": "b2", "round": 1}, {"task": "b3", "round": "x"}])
+        write(self.d, "merge", [{"task": "b1", "branch": "b1", "tasks_merged": 4, "cost_usd": 8.0},
+                                {"task": "b2", "branch": "b2", "tasks_merged": 2},
+                                {"task": "b9", "branch": "b9", "tasks_merged": 1, "cost_usd": 2.0}])
+        d = tune.build()["delivery"]
+        self.assertEqual(d["tasks_dispatched"], 4)
+        self.assertEqual(d["scope_denials"], 2)
+        self.assertAlmostEqual(d["scope_per_task"], 0.5)
+        self.assertAlmostEqual(d["climb_rate"], 0.25)
+        self.assertAlmostEqual(d["review_rounds_median"], 1.5)   # b1 max 2, b2 max 1, b3 has no valid round
+        self.assertEqual((d["merges"], d["merges_without_review"]), (3, 1))  # b9
+        self.assertAlmostEqual(d["cost_per_task"], 2.0)          # (8+2)/(4+1)
+        self.assertEqual(d["merges_without_cost"], 1)
+
+    def test_zero_task_merge_excluded_from_cost_per_task(self):
+        write(self.d, "merge", [{"task": "a", "branch": "a", "tasks_merged": 0, "cost_usd": 9.0},
+                                {"task": "b", "branch": "b", "cost_usd": 9.0},
+                                {"task": "c", "branch": "c", "tasks_merged": 2, "cost_usd": 4.0}])
+        d = tune.build()["delivery"]
+        self.assertAlmostEqual(d["cost_per_task"], 2.0)
+        self.assertEqual((d["merges"], d["merges_without_cost"]), (3, 2))
+
+    def test_canonical_dotted_unknown_returns_question_part(self):
+        self.assertEqual(tune.canonical("needs_swarm.t3"), "needs_swarm")
+        self.assertEqual(tune.canonical("needs_swarm"), "needs_swarm")
+
+    def test_render_review_rounds_threshold(self):
+        text = tune.render(tune.build(), [])
+        self.assertIn("- Median review rounds per branch (healthy <= 2): ", text)
+
+    def test_delivery_empty_logs_render_na(self):
+        r = tune.build()
+        d = r["delivery"]
+        self.assertEqual((d["tasks_dispatched"], d["scope_per_task"], d["climb_rate"], d["review_rounds_median"], d["cost_per_task"]),
+                         (0, None, None, None, None))
+        text = tune.render(r, [])
+        self.assertIn("Scope-lock denials per task (healthy 0-1): n/a", text)
+        self.assertIn("Cost per merged task: n/a", text)
+
+    def test_noop_proposal_dropped(self):
+        th = thresholds.load()
+        allow = th["gate"]["allowlist"]
+        rep = {"questions": {}, "tool_calls": 500, "judged_share": 0.6, "top_judged_heads": [allow[0]],
+               "swarm_vs_plain": None, "compare_count": 0}
+        self.assertEqual(tune.proposals(rep, th), [])
+
 
 if __name__ == "__main__":
     unittest.main()
