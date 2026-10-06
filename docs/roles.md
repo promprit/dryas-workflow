@@ -12,11 +12,11 @@ Solo, the agents supply the second pair of eyes: two-stage review (`/wreview`) a
 
 | Role | Decision rights | Owns metrics | Skills | Solo | Team |
 | --- | --- | --- | --- | --- | --- |
-| Design approver | Approves the design and, for architectural work, the written spec (WF-2, GOV-1) | none | Judging scope and intent; reading a spec for gaps | You | Product or tech lead |
-| Loop owner | Runs the orchestrated loop. Approves in-session install, move, delete and overwrite after a dry-run (GOV-4). Takes the task when the top tier fails (ESC-6) | GOV-M4, ESC-M1 | Writing tight plans; debugging from agent reports | You | The developer on the task |
+| Design approver | Approves the design and, for architectural work, the written spec (WF-2, WF-3) | none | Judging scope and intent; reading a spec for gaps | You | Product or tech lead |
+| Loop owner | Runs the orchestrated loop. Approves in-session install, move, delete, overwrite and settings changes after a dry-run or diff (GOV-4). Takes the task when the top tier fails (ESC-6) | GOV-M4, ESC-M1 | Writing tight plans; debugging from agent reports | You | The developer on the task |
 | Reviewer | Decides a change is ready to merge after review and verification | REV-M1 | Reading a diff against its spec; judging test evidence | You | Another developer |
 | Threshold owner | Runs the periodic tune and approves or rejects each proposal (GOV-9) | GOV-M1, GOV-M2, GOV-M3, ESC-M2, EXE-M1, EXE-M2 | Reading logs and trends; not retuning for one bad week | You | Platform or tooling lead |
-| Release owner | Push, publish and release (GOV-5). Merges changes to the workflow repo and re-runs the installer, which covers shared settings | EXE-M3 | Release hygiene; rollback | You | Tech lead or release manager |
+| Release owner | Push, publish and release (GOV-5). Merges changes to the workflow repo and re-runs the installer, which is how shared settings change for everyone | EXE-M3 | Release hygiene; rollback | You | Tech lead or release manager |
 
 Metric IDs are defined in [metrics.md](metrics.md).
 
@@ -39,7 +39,7 @@ R = does the work, A = answers for it, C = consulted, I = informed. Stages are f
 | Build | R | | A | | | |
 | Escalate | R | | A | | I | |
 | Review | R | | C | A | | |
-| Ship | | | I | C | | A, R |
+| Ship | R (commit) | | I | C | | A, R (push, merge) |
 | Calibrate (weekly) | | | C | | A, R | |
 
 Solo, every human column is you.

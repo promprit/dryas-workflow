@@ -47,9 +47,9 @@ A level is earned by its metrics, not by the calendar. Move up only when the exi
 | Level | Turn on | Ready to move up when |
 | --- | --- | --- |
 | L0 Ad hoc | An AI assistant, no loop. | Starting point. |
-| L1 Gated | Brainstorm-first, review-before-merge, only humans push. | Every merged change had an approved design and a review (REV-M1 ≤ 1; check by hand until it is logged). |
+| L1 Gated | Brainstorm-first, review-before-merge, only humans push. | Every merged change had an approved design and a review (checked by hand until the `merge` and `review` records exist), and REV-M1 ≤ 1. |
 | L2 Scoped | Plan files, worktrees and the scope lock. | GOV-M4 ≤ 1 denial per task (by hand until it is logged). |
-| L3 Laddered | Cheap executors and the escalation ladder. | ESC-M1 under 20% and ESC-M2 = 0. |
+| L3 Laddered | Cheap executors and the escalation ladder, with every climb logged (by hand if the judge's log tool is not on yet). | ESC-M1 under 20% (by hand until `dispatch` is logged) and ESC-M2 = 0. |
 | L4 Target | The judge, memory and a weekly tune. | Stay here: GOV-M1 10–30%, GOV-M2 5–25%, EXE-M1 ≤ 3×. |
 
 Installing is not a level. The reference implementation turns on every L4 tool at once; the level is reached only when the metrics hold.

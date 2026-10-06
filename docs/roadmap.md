@@ -32,7 +32,7 @@ Make the method readable without the tools, and complete it as an operating mode
 - [x] Worked examples: [examples/](../examples/README.md)
 - [x] Human roles, separation rules, a RACI across the loop and the skills each role needs: [roles.md](roles.md)
 - [x] KPIs with a definition, healthy range, source log, cadence and live/planned status: [metrics.md](metrics.md)
-- [ ] Log the planned metrics: `scope`, `dispatch`, `review` and `merge` records ([metrics.md](metrics.md#planned-logging)), and report them in `/tune`
+- [ ] Log the planned metrics: `scope`, `dispatch`, `review` and `merge` records ([metrics.md](metrics.md#planned-logging)), and report them in `/tune`; make `/tune` count only frontier escalations whose `from_model` is the strong tier (ESC-M2)
 - [x] One page mapping layers, roles and metrics onto the operating-model dimensions: [operating-model.md](operating-model.md)
 - [x] Maturity levels L0–L4, each earned by its metrics: [adoption-guide.md](adoption-guide.md#maturity-levels)
 - [x] Re-lead README and why-dryas.md with "target operating model for AI-assisted software delivery"

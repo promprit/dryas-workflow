@@ -8,6 +8,8 @@ The scope is deliberate: software delivery, not every use of AI in an organisati
 
 ## Dimension map
 
+The role column names who answers for the dimension or layer as a whole. Each metric has its own owner, which may be a different role: see [roles.md](roles.md).
+
 | Dimension | What Dryas defines | Where | Accountable role | Metrics |
 | --- | --- | --- | --- | --- |
 | Process | The loop, its stages and their exit conditions | [architecture.md](architecture.md), [execution-model.md](execution-model.md), [review-model.md](review-model.md) | Loop owner | ESC-M1, REV-M1 |
@@ -18,7 +20,7 @@ The scope is deliberate: software delivery, not every use of AI in an organisati
 | Scale within a team | One agent per worktree, parallel loops, shared memory per repo | [execution-model.md](execution-model.md), [memory-model.md](memory-model.md) | Loop owner | none |
 | People and organisation | Roles as hats, separation rules, RACI across the loop | [roles.md](roles.md) | All roles | none |
 | Metrics | KPIs with range, source, cadence and status | [metrics.md](metrics.md) | Threshold owner | All |
-| Current → target transition | Staged rollout and maturity levels L0–L4 | [adoption-guide.md](adoption-guide.md) | Design approver | none |
+| Current → target transition | Maturity levels L0–L4 | [adoption-guide.md](adoption-guide.md) | Design approver | none |
 
 Status of each dimension and the work still open: [roadmap.md](roadmap.md).
 
@@ -26,7 +28,7 @@ Status of each dimension and the work still open: [roadmap.md](roadmap.md).
 
 How the spec, the roles and the metrics join, layer by layer.
 
-| Layer | Spec rules | Owning role | Metrics |
+| Layer | Spec rules | Accountable role | Metrics |
 | --- | --- | --- | --- |
 | Memory | MEM | Loop owner | none yet |
 | Governance | GOV | Design approver, threshold owner | GOV-M1 to GOV-M4 |
