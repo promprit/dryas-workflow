@@ -1,8 +1,8 @@
-# Dryas
+# Dryas Workflow Framework
 
 ![ci](https://github.com/promprit/dryas-workflow/actions/workflows/ci.yml/badge.svg)
 
-**Dryas is an opinionated operating model for delivering software with AI agents.** It says who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
+**The Dryas Workflow Framework (Dryas for short) is an opinionated operating model for delivering software with AI agents.** It says who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
 
 The method is the asset; the tools are replaceable. This repo holds both:
 
@@ -26,7 +26,7 @@ Review       nothing merges unverified; a human ships
 | [Why Dryas](docs/why-dryas.md) | The problems it solves, and what it is not |
 | [Architecture](docs/architecture.md) | The five layers, the loop, design principles |
 | [Memory](docs/memory-model.md) · [Governance](docs/governance.md) · [Execution](docs/execution-model.md) · [Escalation](docs/escalation-model.md) · [Review](docs/review-model.md) | One model doc per layer |
-| [Specification v1 (draft)](spec/dryas-spec-v1.md) | Numbered MUST / SHOULD rules and the `dryas.yaml` manifest |
+| [Dryas Workflow Framework Specification v1 (draft)](spec/dryas-spec-v1.md) | Numbered MUST / SHOULD rules and the `dryas.yaml` manifest |
 | [Reference map](reference/README.md) | How this repo implements each rule, with a conformance table |
 | [Examples](examples/README.md) | A feature walked through the loop, a plan file, manifests |
 | [Adoption guide](docs/adoption-guide.md) | Use it, fork it, or write an edition for another harness |

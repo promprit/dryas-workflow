@@ -1,6 +1,6 @@
 # Why Dryas exists
 
-Dryas is an opinionated operating model for delivering software with AI agents. It says who decides, who builds, what each agent may touch, what is remembered, when to spend more on a stronger model, and what must be true before work merges.
+The Dryas Workflow Framework (Dryas for short) is an opinionated operating model for delivering software with AI agents. It says who decides, who builds, what each agent may touch, what is remembered, when to spend more on a stronger model, and what must be true before work merges.
 
 The tools in this repo (Claude Code, Superpowers, Ruflo, Jev, the design skills) are one way to run it. They are replaceable. The model is the asset.
 
