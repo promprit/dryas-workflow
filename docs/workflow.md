@@ -179,7 +179,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   - This is our own code; **jev-use is not used** (it's unofficial).
 - **`/tune`** (weekly) reports:
   - override rate per question
-  - the share of tool calls Jev judged
+  - the share of tool calls Jev judged, and the median judge latency (GOV-M1)
   - sonnet→opus and opus→fable counts and reasons
   - the swarm-vs-plain token ratio
   - Jev spend

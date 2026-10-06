@@ -33,7 +33,7 @@
 | ID | KPI | Definition | Healthy | Source | Cadence | Status | If out of range |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | EXE-M1 | Swarm vs plain token ratio | Mean swarm tokens ÷ plain tokens over ≥3 comparisons | ≤ 3.0× | `compare` | Weekly | live | Above: `/tune` proposes raising `route.swarm_min` so swarms run only when the judge is more sure. |
-| EXE-M2 | Judge spend share | Judge spend ÷ Claude-side spend | Under 5% | `gate`, `route`, `mcp`, `compact` + `/cost` | Weekly | live (manual) | Above: the judge is asked too often. Check GOV-M1 first. |
+| EXE-M2 | Judge spend share | Judge spend ÷ Claude-side spend | Under 5% | `gate`, `route`, `mcp`, `compact` + `/cost` | Weekly | live (manual) | Above: the judge is asked too often. Check the judged share trend in /tune first. |
 | EXE-M3 | Cost per merged task | Claude-side spend attributed to a task ÷ tasks merged | Baseline first, then trend | `merge` | Monthly | partial: cost_usd is entered by hand; /tune reports how many merges lack it | A rising trend with a flat ESC-M1 points to plans that are too coarse. |
 
 ## Review
