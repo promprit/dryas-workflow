@@ -32,7 +32,7 @@ Last updated: 2026-10-05.
 |---|---|---|
 | **Orchestrator (main session)** — Claude Code on Opus by default; may be another harness (§14) | Orchestrator: brainstorms with you, plans, dispatches, judges, integrates | Edit project files itself on multi-step work |
 | **Jev** (TypeSafe `typesafe/jev-1.13` via OpenRouter) | Decision support: tool-call gate, prompt routing, per-task triage, commit check, compaction keep/drop | Write code or plans |
-| **Ruflo** (`ruflo@3.51.0`, pinned) | Orchestration plumbing (hierarchical swarm) and the **only** memory/learning layer | Plan (its goals/planning hooks are dropped); use `ANTHROPIC_API_KEY` |
+| **Ruflo** (`ruflo`, latest; tested 3.53.0) | Orchestration plumbing (hierarchical swarm) and the **only** memory/learning layer | Plan (its goals/planning hooks are dropped); use `ANTHROPIC_API_KEY` |
 | **Superpowers** (plugin) | Process: brainstorming, worktrees, TDD, two-stage review, verification, plan format | — |
 | **pstack picks** (vendored from pstack, optional, `--no-pstack-picks`) | Review, cleanup and perf references, executor principles | Route, pick models, add hooks, or run without a trigger |
 | **FlowObserve** (separate observer app, optional) | Ambient monitor of live sessions: shows each session's stage in the loop (Brainstorm, Plan, Judge, Build, Escalate, Review, Ship) and what needs you (observe-only) | Block or change anything; write Jev logs or `.orchestrate/` |
@@ -189,7 +189,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
 ## 7. Ruflo details
 
-- **CLI:** `npm i -g ruflo@3.51.0`, pinned, on the Mac's nvm Node.
+- **CLI:** `npm i -g ruflo` (latest; tested 3.53.0, with automatic fallback), on the Mac's nvm Node.
 - **Plugins** (marketplace `ruvnet/ruflo`, user scope): ruflo-core 0.2.6, ruflo-swarm 0.3.0, ruflo-testgen 0.2.1, ruflo-jujutsu 0.2.1 (diff risk scoring). ruflo-cost-tracker 0.26.3 is installed but DISABLED (its Stop hook ran unpinned `npx @claude-flow/cli@latest`; disabled 2026-10-03). Not installed: ruflo-goals, or any other Ruflo plugin.
 - **Settings env:** `RUFLO_HOOK_SKIP_NPX=1`, `RUFLO_MCP_SKIP_NPX=1` and `RUFLO_NO_AUTO_ENABLE=1`. Ruflo never runs `npx ruflo@latest`, and never writes `~/.ruflo/first-run-enabled.json`.
 - **Topology:** hierarchical, passed in `swarm_init` arguments (the plugin MCP defaults to hierarchical-mesh, so the orchestrator always passes it).
@@ -198,7 +198,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - **Memory and data** go to `$DRYAS_DATA_ROOT/ruflo` (SSD), per project. Every lifted Ruflo hook is wrapped by `~/.claude/ruflo/run.py`, so it's a silent no-op when the SSD or a helper is missing.
 - **Hooks:**
   - **Lifted by us:** pre-bash (an observe-only chain stage), session-restore, auto-memory import (import only, no Stop sync), helper post-edit, helper session-end on SessionEnd and on PreCompact (manual and auto), and SubagentStop post-task.
-  - **ruflo-core's own plugin hooks also run** (modify-bash, modify-file, post-command, post-edit, PreCompact guidance and Stop session-end), through the pinned CLI override. pre-edit and post-bash have no handler in Ruflo 3.51.0.
+  - **ruflo-core's own plugin hooks also run** (modify-bash, modify-file, post-command, post-edit, PreCompact guidance and Stop session-end), through the CLI override. pre-edit and post-bash had no handler when checked against Ruflo 3.51.0 (not re-checked on later versions).
   - Two helper files (`intelligence.cjs` and `auto-memory-hook.mjs`) carry a 4-line local patch that honours `RUFLO_DATA_ROOT`, so they never write into project trees.
   - **Dropped:** route, compaction guidance, SubagentStart status, notify.
 - Ruflo's `CLAUDE.md` planning sections ("Implementation Loop", "Concurrency and authority") are not used, because the orchestrator owns planning.
@@ -271,7 +271,7 @@ An optional, separate observer app (closed source). The workflow runs fully with
 - The OpenRouter key is never written by this workflow; it lives in your shell profile, for example `~/.zshrc` (pre-existing).
 - Commands are redacted before leaving the Mac, and file contents are never sent.
 - The gate fails open to normal permissions and never auto-allows.
-- Ruflo is pinned, with the `@latest` fallback forbidden.
+- Ruflo tracks latest, and the installer falls back to the tested version if Dryas's patches do not apply.
 - Every settings change goes through dry-run, then approval, then backup.
 - **Known exposures you accepted:**
   - the prompt route sends the first 4k characters of each prompt to OpenRouter

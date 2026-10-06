@@ -1,4 +1,5 @@
-"""Generate the Ruflo helper files with a sandboxed `ruflo init`, then apply pinned local patches (ruflo 3.51.0)."""
+"""Generate the Ruflo helper files with a sandboxed `ruflo init`, then apply local patches (tested with the ruflo in components.json)."""
+import json
 import os
 import shutil
 import subprocess
@@ -10,7 +11,17 @@ HELPERS = ("auto-memory-hook.mjs", "hook-handler.cjs", "intelligence.cjs", "memo
 INIT_FLAGS = ["init", "--only-claude", "--no-global", "--no-mods", "--no-plugin-install", "--no-skills-sh",
               "--no-signup", "--no-codex-detect"]
 INIT_TIMEOUT = 300
-HINT = " (patches are pinned to ruflo 3.51.0; install that version or use --no-ruflo)"
+
+
+def tested_ruflo() -> str:
+    """The Ruflo version the patches are tested with (components.json)."""
+    table = json.loads((Path(__file__).resolve().parent / "components.json").read_text(encoding="utf-8"))
+    return table["ruflo"]["tested"]
+
+
+def _hint() -> str:
+    return (" (patches are tested with ruflo %s; Dryas offers to switch to that version, or use --no-ruflo)"
+            % tested_ruflo())
 
 PATCHES = [
     ("hook-handler.cjs",
@@ -41,6 +52,14 @@ class HelperError(Exception):
     pass
 
 
+class PatchError(HelperError):
+    """The generated helpers do not match the patch table (a Ruflo version mismatch)."""
+
+    def __init__(self, detail: str, hint: str = None):
+        self.detail = detail
+        super().__init__(detail + (_hint() if hint is None else hint))
+
+
 def init_argv(ruflo_bin: str) -> List[str]:
     return [ruflo_bin] + INIT_FLAGS
 
@@ -52,7 +71,7 @@ def patch_text(name: str, text: str, strict: bool = True) -> str:
     counts = [text.count(old) for old, _ in mine]
     for (old, _), n in zip(mine, counts):
         if n > 1 or (n == 0 and (strict or not any(counts))):
-            raise HelperError("%s: patch anchor must occur exactly once (found %d): %r%s" % (name, n, old, HINT))
+            raise PatchError("%s: patch anchor must occur exactly once (found %d): %r" % (name, n, old))
     for (old, new), n in zip(mine, counts):
         if n:
             text = text.replace(old, new)
@@ -96,7 +115,7 @@ def patched_helpers(ruflo_bin: str) -> Dict[str, Tuple[bytes, int]]:
     out = {}
     for n in HELPERS:
         if n not in gen:
-            raise HelperError("generator did not produce helper %s" % n)
+            raise PatchError("generator did not produce helper %s" % n)
         data, mode = gen[n]
         out[n] = (patch_text(n, data.decode("utf-8"), strict=True).encode("utf-8"), mode)
     return out

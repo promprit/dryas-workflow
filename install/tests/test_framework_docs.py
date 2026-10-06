@@ -58,6 +58,12 @@ class FrameworkDocsTest(unittest.TestCase):
         self.assertIn("## Logging records", t)
         self.assertNotIn("by hand until", read("docs/adoption-guide.md"))
 
+    def test_no_pinned_versions(self):
+        for rel in ("docs/install.md", "docs/workflow.md", "reference/README.md", "reference/dryas.yaml"):
+            t = read(rel)
+            for bad in ("pinned 3.51.0", "pinned 6.4.1", "pinned 4.3.1", "ruflo@3.51.0"):
+                self.assertNotIn(bad, t, f"{rel}: {bad}")
+
 
 if __name__ == "__main__":
     unittest.main()

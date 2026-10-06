@@ -1,13 +1,13 @@
 {
-  "superpowers": {"version": "6.4.1", "commands": [["claude", "plugin", "install", "superpowers@claude-plugins-official"]], "plugin": "superpowers@claude-plugins-official"},
-  "ruflo": {"version": "3.51.0", "commands": [
-    ["npm", "install", "-g", "ruflo@3.51.0"],
+  "superpowers": {"tested": "6.4.2", "plugin_tested": "6.4.2", "commands": [["claude", "plugin", "install", "superpowers@claude-plugins-official"]], "plugin": "superpowers@claude-plugins-official"},
+  "ruflo": {"tested": "3.53.0", "plugin_tested": "0.2.6", "commands": [
+    ["npm", "install", "-g", "ruflo"],
     ["claude", "plugin", "marketplace", "add", "ruvnet/ruflo"],
     ["claude", "plugin", "install", "ruflo-core@ruflo"],
     ["claude", "plugin", "install", "ruflo-swarm@ruflo"],
     ["claude", "plugin", "install", "ruflo-testgen@ruflo"],
     ["claude", "plugin", "install", "ruflo-jujutsu@ruflo"]], "plugin": "ruflo-core@ruflo"},
-  "design": {"version": "4.3.1", "commands": [
+  "design": {"tested": "4.5.0", "plugin_tested": "4.5.0", "commands": [
     ["claude", "plugin", "marketplace", "add", "pbakaus/impeccable"],
     ["claude", "plugin", "install", "impeccable@impeccable"],
     ["claude", "plugin", "marketplace", "add", "nextlevelbuilder/ui-ux-pro-max-skill"],

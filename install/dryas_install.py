@@ -40,11 +40,12 @@ def run(argv: List[str], cwd=None) -> int:
         return 127
 
 
-def capture(argv: List[str], input_text: Optional[str] = None, env: Optional[dict] = None) -> Tuple[int, str]:
+def capture(argv: List[str], input_text: Optional[str] = None, env: Optional[dict] = None,
+            timeout: Optional[float] = None) -> Tuple[int, str]:
     try:
         p = subprocess.run(pu.resolve_argv(argv), input=input_text, capture_output=True, text=True, env=env,
-                           encoding="utf-8", errors="replace")
-    except OSError:
+                           encoding="utf-8", errors="replace", timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
         return 127, ""
     return p.returncode, p.stdout
 
@@ -280,6 +281,46 @@ def _ts() -> str:
     return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
+def _ruflo_version(ruflo_bin: str) -> str:
+    """`<ruflo> --version` (10 s limit); "unknown" on any failure."""
+    try:
+        rc, out = capture([ruflo_bin, "--version"], timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return out.strip().splitlines()[0] if rc == 0 and out.strip() else "unknown"
+
+
+def _ruflo_fallback(err: "ruflo_helpers.PatchError", mapping: Dict[str, str], yes: bool) -> Optional[dict]:
+    """Patches did not match the Ruflo on PATH: offer to replace it with the tested version and retry once.
+    None = give up (the caller returns 1)."""
+    tested = ruflo_helpers.tested_ruflo()
+    old_bin = mapping.get("RUFLO_BIN", "")
+    current = _ruflo_version(old_bin)
+    where = "the ruflo on your PATH (%s) %s" % (old_bin, current)
+    print("error: Ruflo helpers: %s" % err)
+    if not (yes or confirm("Replace %s with the tested %s?" % (where, tested))):
+        return None
+    print("Replacing %s with the tested %s (Dryas's patches do not match %s yet)." % (where, tested, current))
+    rc = run(["npm", "install", "-g", "ruflo@" + tested])
+    if rc != 0:
+        print("npm install -g ruflo@%s failed (exit %d)" % (tested, rc))
+        return None
+    new_bin = pu.which("ruflo")
+    if new_bin == old_bin and current != "unknown" and _ruflo_version(new_bin) == current:
+        print("npm installed ruflo@%s but %s on your PATH was not updated (another package manager?)" % (tested, old_bin))
+        return None
+    mapping["RUFLO_BIN"] = new_bin
+    try:
+        helpers = ruflo_helpers.patched_helpers(new_bin)
+    except ruflo_helpers.HelperError as e2:
+        print("error: Ruflo helpers: %s" % getattr(e2, "detail", e2))
+        print("The ruflo on your PATH is now %s; run `npm install -g ruflo` to restore the latest." % tested)
+        return None
+    print("The ruflo on your PATH is now %s; run `npm install -g ruflo` to return to the latest once Dryas supports it."
+          % tested)
+    return helpers
+
+
 def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = False, dry: bool = False,
             yes: bool = False, claude: bool = True) -> int:
     repo, cd, home, ts = Path(repo), Path(cd), Path(home), _ts()
@@ -298,6 +339,10 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
         else:
             try:
                 helpers = ruflo_helpers.patched_helpers(mapping.get("RUFLO_BIN", ""))
+            except ruflo_helpers.PatchError as e:
+                helpers = _ruflo_fallback(e, mapping, yes)
+                if helpers is None:
+                    return 1
             except ruflo_helpers.HelperError as e:
                 print("error: Ruflo helpers: %s" % e)
                 return 1

@@ -1,4 +1,4 @@
-import os, shutil, subprocess, sys, tempfile, unittest
+import json, os, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
@@ -65,7 +65,8 @@ class RunCmdTest(unittest.TestCase):
         from contextlib import redirect_stdout
         import codex_target as ct
         import dryas_install as di
-        saved = (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free)
+        saved = (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free, di.confirm)
+        di.confirm = lambda *a, **k: False
         di.install = lambda *a, **k: 0
         ct.install_codex = lambda *a, **k: 0
         ct.verify_codex = lambda *a, **k: 0
@@ -84,7 +85,80 @@ class RunCmdTest(unittest.TestCase):
                 run_cmd.main(["--harness", "codex", "--no-ruflo", "--no-superpowers", "--no-design"])
             self.assertNotIn(note, buf.getvalue())
         finally:
-            (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free) = saved
+            (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free, di.confirm) = saved
+
+
+class ThirdpartyWarnTest(unittest.TestCase):
+    def setUp(self):
+        import dryas_install as di
+        self.di, self.orig = di, (di.run, di.confirm)
+        di.run = lambda argv, cwd=None: 0
+        di.confirm = lambda prompt: False
+        self.home = Path(tempfile.mkdtemp())
+        (self.home / ".claude" / "plugins").mkdir(parents=True)
+        self.tested = json.loads((HERE.parent / "components.json").read_text())["superpowers"]["tested"]
+
+    def tearDown(self):
+        self.di.run, self.di.confirm = self.orig
+        shutil.rmtree(str(self.home), ignore_errors=True)
+
+    def out(self, versions):
+        import io
+        from contextlib import redirect_stdout
+        plugins = {} if versions is None else {"superpowers@claude-plugins-official": [{"version": v} for v in versions]}
+        (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": plugins}))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(run_cmd.thirdparty(["superpowers"], True, home=self.home), 0)
+        return buf.getvalue()
+
+    def test_warns_only_when_older_than_tested(self):
+        o = self.out(["6.0.0"])
+        self.assertIn("superpowers@claude-plugins-official is 6.0.0; Dryas Workflow is tested with %s (older than tested)" % self.tested, o)
+
+    def test_silent_on_equal_or_newer(self):
+        for v in (self.tested, "v99.0.0", "99.0.0"):
+            self.assertNotIn("warning", self.out([v]), v)
+
+    def test_silent_on_unparseable(self):
+        for vs in (["abc"], ["6.0.0-beta"], ["6.0.0", "weird"], ["unknown"]):
+            self.assertNotIn("warning", self.out(vs), vs)
+
+    def test_skill_v_prefix_and_newest_wins(self):
+        self.assertNotIn("warning", self.out(["skill-v99.0.0"]))
+        self.assertNotIn("warning", self.out(["1.0.0", "99.0.0"]))
+        self.assertIn("older than tested", self.out(["1.0.0", "2.0.0"]))
+
+    def test_ruflo_plugin_compared_to_plugin_tested(self):
+        import io
+        from contextlib import redirect_stdout
+        table = json.loads((HERE.parent / "components.json").read_text())
+        self.assertEqual(table["ruflo"]["plugin_tested"], "0.2.6")
+        self.assertEqual(table["superpowers"]["plugin_tested"], "6.4.2")
+        self.assertEqual(table["design"]["plugin_tested"], "4.5.0")
+        (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(
+            json.dumps({"plugins": {"ruflo-core@ruflo": [{"version": "0.2.6"}]}}))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(run_cmd.thirdparty(["ruflo"], True, home=self.home), 0)
+        self.assertNotIn("older than tested", buf.getvalue())
+
+    def test_unparseable_tested_never_warns(self):
+        import io
+        from contextlib import redirect_stdout
+        table = json.loads((HERE.parent / "components.json").read_text())
+        table["superpowers"]["plugin_tested"] = "4.6.0-rc1"
+        tp = self.home / "components.json"
+        tp.write_text(json.dumps(table))
+        (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(
+            json.dumps({"plugins": {"superpowers@claude-plugins-official": [{"version": "1.0.0"}]}}))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(run_cmd.thirdparty(["superpowers"], True, home=self.home, table_path=tp), 0)
+        self.assertNotIn("warning", buf.getvalue())
+
+    def test_warns_when_not_installed(self):
+        self.assertIn("superpowers@claude-plugins-official is not installed", self.out(None))
 
 
 class WrapperTest(unittest.TestCase):

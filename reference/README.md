@@ -17,7 +17,7 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 
 | Layer | Abstract role | Bound to |
 | --- | --- | --- |
-| Memory | Project memory | [Ruflo](https://github.com/ruvnet/ruflo) 3.51.0 (`memory_search`, `memory_store`) |
+| Memory | Project memory | [Ruflo](https://github.com/ruvnet/ruflo) (latest; tested 3.53.0) (`memory_search`, `memory_store`) |
 | Memory | Session memory | `claude/jev/handoff.py`, `compact_keep.py`, `compact_restore.py` |
 | Governance | Judge and gate | [Jev](https://github.com/typesafe-ai/skills) via OpenRouter (`gate.py`, `route.py`, `jev_mcp.py`) |
 | Governance | Scope lock | `claude/jev/scope_lock.py` |
