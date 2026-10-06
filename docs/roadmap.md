@@ -6,21 +6,19 @@ Dryas is a method first. The tooling follows it, not the other way round.
 
 **The Dryas Workflow Framework: a target operating model for AI-assisted software delivery.**
 
-The scope is deliberate: software delivery, not every use of AI in an organisation. Against the usual operating-model dimensions:
+The scope is deliberate: software delivery, not every use of AI in an organisation. What Dryas defines for each operating-model dimension, and where: [operating-model.md](operating-model.md). Status per dimension:
 
-| Dimension | Status | Where |
-| --- | --- | --- |
-| Process | Covered | The loop, [execution-model.md](execution-model.md), [review-model.md](review-model.md) |
-| Governance and decision rights | Covered | [governance.md](governance.md) |
-| Technology (as roles, not products) | Covered | [architecture.md](architecture.md), [reference/](../reference/README.md) |
-| Controls and risk | Covered for delivery | Scope lock, gates, secrets, redaction, logged overrides and escalations |
-| Cost | Covered for delivery | [escalation-model.md](escalation-model.md), `/tune` spend reports |
-| Scale within a team | Covered | One agent per worktree, parallel loops, shared memory per repo |
-| People and organisation | Covered | [roles.md](roles.md) |
-| Metrics | Partial (model defined; some KPIs need new logging) | [metrics.md](metrics.md) |
-| Current → target transition | Partial | [adoption-guide.md](adoption-guide.md) rollout; Phase 1: maturity levels |
-
-Once the two gaps are closed, the README and [why-dryas.md](why-dryas.md) lead with the TOM positioning.
+| Dimension | Status |
+| --- | --- |
+| Process | Covered |
+| Governance and decision rights | Covered |
+| Technology (as roles, not products) | Covered |
+| Controls and risk | Covered for delivery |
+| Cost | Covered for delivery |
+| Scale within a team | Covered |
+| People and organisation | Covered |
+| Metrics | Partial (model defined; some KPIs need new logging) |
+| Current → target transition | Partial (rollout defined; maturity levels next) |
 
 ## Phase 1: the framework (now)
 
@@ -35,7 +33,7 @@ Make the method readable without the tools, and complete it as an operating mode
 - [x] Human roles, separation rules, a RACI across the loop and the skills each role needs: [roles.md](roles.md)
 - [x] KPIs with a definition, healthy range, source log, cadence and live/planned status: [metrics.md](metrics.md)
 - [ ] Log the planned metrics: `scope`, `dispatch`, `review` and `merge` records ([metrics.md](metrics.md#planned-logging)), and report them in `/tune`
-- [ ] `operating-model.md`: one page mapping the five layers, roles and metrics onto the operating-model dimensions above
+- [x] One page mapping layers, roles and metrics onto the operating-model dimensions: [operating-model.md](operating-model.md)
 - [ ] Maturity levels (current → target) in [adoption-guide.md](adoption-guide.md)
 - [ ] Re-lead README and why-dryas.md with "target operating model for AI-assisted software delivery"
 
