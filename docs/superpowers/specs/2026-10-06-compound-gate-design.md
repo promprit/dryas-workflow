@@ -102,3 +102,5 @@ Edit and Write judging; adding `sed`, `echo`, `for` or other heads; heredocs; an
 - Parts are stripped with `strip(" \t")` only.
 - Every `cd` target in a compound must resolve inside the session cwd, tracked across successive `cd` parts; one argument, not starting with `-`.
 - `ls # x; pwd` is now judged.
+- `..` in `cd` targets is judged (shells resolve `..` logically before symlinks).
+- `CDPATH` set in the hook environment judges any compound `cd`; zsh `cdpath`/`cdable_vars` are assumed unset.

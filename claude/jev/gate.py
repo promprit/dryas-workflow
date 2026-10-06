@@ -153,7 +153,9 @@ def allowlisted_compound(cmd: str, allowlist: List[str], cwd: str) -> Tuple[bool
             return False, 0
         if words[0] != "cd":
             continue
-        if not root or len(words) != 2 or words[1].startswith("-"):
+        if not root or len(words) != 2 or words[1].startswith("-") or os.environ.get("CDPATH"):
+            return False, 0
+        if ".." in words[1].split("/"):  # shells resolve .. logically, before symlinks
             return False, 0
         current = os.path.realpath(os.path.join(current, words[1]))
         if current != root and not current.startswith(root.rstrip(os.sep) + os.sep):
@@ -200,7 +202,8 @@ def run(event: Dict[str, Any], judge_fn=judge) -> Optional[Dict[str, Any]]:
     base = dict({"tool": tool}, **_head(tool, ti))
     if tool == "Bash":
         cmd = str(ti.get("command", ""))
-        ok, n = allowlisted(cmd, t["allowlist"]) and _plain(cmd), 1
+        ok = allowlisted(cmd, t["allowlist"])
+        ok, n = ok and _plain(cmd), 1
         if not ok and t.get("compound", True):
             ok, n = allowlisted_compound(cmd, t["allowlist"], str(event.get("cwd") or ""))
         if ok:

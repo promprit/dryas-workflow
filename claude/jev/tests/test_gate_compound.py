@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gate
@@ -46,7 +47,18 @@ JUDGE = [
 FORBIDDEN = set(";&|<>()`\\\n\r")
 
 
+def _no_cdpath(test):
+    """Remove CDPATH for the test's duration; the developer's shell may set it."""
+    patcher = mock.patch.dict(os.environ)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    os.environ.pop("CDPATH", None)
+
+
 class SplitTest(unittest.TestCase):
+    def setUp(self):
+        _no_cdpath(self)
+
     def test_skip_cases(self):
         for cmd, n in SKIP.items():
             self.assertEqual(gate.allowlisted_compound(cmd, AL, CWD), (True, n), repr(cmd))
@@ -76,6 +88,7 @@ class SplitTest(unittest.TestCase):
 
 class RunTest(unittest.TestCase):
     def setUp(self):
+        _no_cdpath(self)
         self.tmp = tempfile.mkdtemp()
         os.environ["JEV_LOG_DIR"] = os.path.join(self.tmp, "logs")
         os.environ["JEV_SSD_ROOT"] = self.tmp
@@ -150,3 +163,37 @@ class RunTest(unittest.TestCase):
         self.thresholds()
         gate.run(self.bash("ls \\foo"), judge_fn=self.judge)  # backslash is not a plain character
         self.assertEqual(len(self.calls), 1)
+
+
+class CdEdgeTest(unittest.TestCase):
+    def setUp(self):
+        _no_cdpath(self)
+        self.root = os.path.realpath(tempfile.mkdtemp())
+        os.makedirs(os.path.join(self.root, "a", "b"))
+        os.mkdir(os.path.join(self.root, "sub"))
+
+    def test_cd_symlink_dotdot_escape_judged(self):
+        # bash/zsh resolve l/../.. logically: l/.. is root, root/.. is outside.
+        os.symlink(os.path.join(self.root, "a", "b"), os.path.join(self.root, "l"))
+        self.assertFalse(gate.allowlisted_compound("cd l/../.. && pwd", AL, self.root)[0])
+
+    def test_cd_symlink_outside_judged(self):
+        outside = os.path.realpath(tempfile.mkdtemp())
+        os.symlink(outside, os.path.join(self.root, "l2"))
+        self.assertFalse(gate.allowlisted_compound("cd l2 && ls", AL, self.root)[0])
+
+    def test_cd_dotdot_inside_judged(self):
+        self.assertFalse(gate.allowlisted_compound("cd a/../b && ls", AL, self.root)[0])
+
+    def test_cdpath_set_judges_cd(self):
+        self.assertEqual(gate.allowlisted_compound("cd sub && ls", AL, self.root), (True, 2))
+        with mock.patch.dict(os.environ, {"CDPATH": "/tmp"}):
+            self.assertFalse(gate.allowlisted_compound("cd sub && ls", AL, self.root)[0])
+
+    def test_cwd_root_skipped_only_without_cdpath(self):
+        self.assertEqual(gate.allowlisted_compound("cd tmp && ls", AL, "/"), (True, 2))
+        with mock.patch.dict(os.environ, {"CDPATH": ".:/x"}):
+            self.assertFalse(gate.allowlisted_compound("cd tmp && ls", AL, "/")[0])
+
+    def test_cwd_trailing_slash_skipped(self):
+        self.assertEqual(gate.allowlisted_compound("cd sub && ls", AL, "/x/"), (True, 2))
