@@ -134,7 +134,6 @@ def _as_int(v: Any) -> Optional[int]:
     return None
 
 
-# tool name -> (log file, required string fields, required int fields with minimum)
 LOG_TOOLS = {
     "log_dispatch": ("dispatch", ("task", "tier", "role"), {"attempt": 1}),
     "log_review": ("review", ("task",), {"round": 1, "critical": 0, "important": 0, "minor": 0}),
@@ -320,7 +319,7 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
                         rec["cost_usd"] = cost
                 jevlog.append(file, rec)
                 return _text(mid, "logged")
-            name_str =str(name)[:64] if name else "unknown"
+            name_str = str(name)[:64] if name else "unknown"
             return _text(mid, "unknown tool %r" % name_str, True)
         except Exception as e:
             return _text(mid, "internal error: %s" % type(e).__name__, True)
