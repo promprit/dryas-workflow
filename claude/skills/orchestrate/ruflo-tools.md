@@ -1,6 +1,6 @@
 # Ruflo tool names (consumed by the orchestrate skill)
 
-Source: ruflo-core 0.2.6 plugin MCP (`ruflo-core/.mcp.json`, server key `ruflo`), Ruflo CLI 3.51.0.
+Source: ruflo-core 0.2.6 plugin MCP (`ruflo-core/.mcp.json`, server key `ruflo`), Ruflo CLI 3.51.0 (tool names checked then; Dryas now tracks the latest Ruflo).
 In a session the tools are `mcp__plugin_ruflo-core_ruflo__<tool>` (use `ToolSearch("memory_search")` to load). The upstream docs call the server `claude-flow`; with the plugin install the prefix is the one above.
 
 memory_search: memory_search (MCP server claude-flow, from ruflo-core; full name mcp__plugin_ruflo-core_ruflo__memory_search)

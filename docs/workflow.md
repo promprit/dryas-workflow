@@ -198,7 +198,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - **Memory and data** go to `$DRYAS_DATA_ROOT/ruflo` (SSD), per project. Every lifted Ruflo hook is wrapped by `~/.claude/ruflo/run.py`, so it's a silent no-op when the SSD or a helper is missing.
 - **Hooks:**
   - **Lifted by us:** pre-bash (an observe-only chain stage), session-restore, auto-memory import (import only, no Stop sync), helper post-edit, helper session-end on SessionEnd and on PreCompact (manual and auto), and SubagentStop post-task.
-  - **ruflo-core's own plugin hooks also run** (modify-bash, modify-file, post-command, post-edit, PreCompact guidance and Stop session-end), through the CLI override. pre-edit and post-bash have no handler in Ruflo 3.51.0.
+  - **ruflo-core's own plugin hooks also run** (modify-bash, modify-file, post-command, post-edit, PreCompact guidance and Stop session-end), through the CLI override. pre-edit and post-bash had no handler when checked against Ruflo 3.51.0 (not re-checked on later versions).
   - Two helper files (`intelligence.cjs` and `auto-memory-hook.mjs`) carry a 4-line local patch that honours `RUFLO_DATA_ROOT`, so they never write into project trees.
   - **Dropped:** route, compaction guidance, SubagentStart status, notify.
 - Ruflo's `CLAUDE.md` planning sections ("Implementation Loop", "Concurrency and authority") are not used, because the orchestrator owns planning.
