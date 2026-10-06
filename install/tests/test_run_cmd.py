@@ -65,7 +65,8 @@ class RunCmdTest(unittest.TestCase):
         from contextlib import redirect_stdout
         import codex_target as ct
         import dryas_install as di
-        saved = (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free)
+        saved = (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free, di.confirm)
+        di.confirm = lambda *a, **k: False
         di.install = lambda *a, **k: 0
         ct.install_codex = lambda *a, **k: 0
         ct.verify_codex = lambda *a, **k: 0
@@ -84,7 +85,7 @@ class RunCmdTest(unittest.TestCase):
                 run_cmd.main(["--harness", "codex", "--no-ruflo", "--no-superpowers", "--no-design"])
             self.assertNotIn(note, buf.getvalue())
         finally:
-            (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free) = saved
+            (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free, di.confirm) = saved
 
 
 class ThirdpartyWarnTest(unittest.TestCase):

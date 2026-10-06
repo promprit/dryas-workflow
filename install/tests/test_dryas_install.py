@@ -36,6 +36,8 @@ class InstallTest(unittest.TestCase):
         self.cd = self.home / ".claude"
         self.cd.mkdir(parents=True)
         os.environ.pop("DRYAS_DATA_ROOT", None)  # the live session sets it; tests need the $HOME/.dryas default
+        for mod, name in ((di, "run"), (di, "detect"), (di, "confirm"), (di, "capture"), (rh, "generate")):
+            self.addCleanup(setattr, mod, name, getattr(mod, name))  # restore after the test; no leaked stubs
         self.calls = []
         self.dist = Path(tempfile.mkdtemp()) / "cli-dist"
         self.dist.mkdir()
