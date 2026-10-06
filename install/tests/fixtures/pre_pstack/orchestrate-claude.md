@@ -65,7 +65,7 @@ If `failing_test_exists` is not confidently true: dispatch a **tester** executor
 3. Give each executor ONLY its section: `"{{PY}}" -X utf8 "{{CD}}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
 4. Dispatch with the Agent tool, `subagent_type: executor` (model sonnet from its frontmatter). Independent tasks go out in one message, in parallel.
 5. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus` on that dispatch, after `mcp__jev__log_escalation` (from_model sonnet, to_model opus). Never dispatch Fable here: Fable is only reached through §7.
-6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__jev__log_dispatch` with task (the PLAN.md task id), tier (sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
+6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__jev__log_dispatch` with task ("<worktree branch>:<PLAN.md task id>", e.g. worktree-feat:3, so ids stay unique across runs), tier (sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
 
 ## 6. On return
 For each report, one `jev_judge` call with state `{task_section, executor_report}`:

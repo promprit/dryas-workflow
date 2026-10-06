@@ -10,7 +10,7 @@ def read(rel):
 def test_orchestrate_texts_log_dispatch_and_merge():
     for rel in ("claude/skills/orchestrate/SKILL.md", "codex/skills/orchestrate/SKILL.md"):
         t = read(rel)
-        for s in ("log_dispatch", "log_merge", "<question>.<task>"):
+        for s in ("log_dispatch", "log_merge", "<question>.<task>", "<worktree branch>:<"):
             assert s in t, (rel, s)
 
 

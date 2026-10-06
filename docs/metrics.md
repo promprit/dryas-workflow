@@ -19,13 +19,13 @@
 | GOV-M1 | Judged share | Tool calls the judge reviewed ÷ all tool calls | 10–30% (target ~20%; `/tune` acts above 30% once there are ≥100 tool calls; the 10% floor is a starting value) | `gate`, `calls` | Weekly | live | Above: `/tune` proposes allowlisting heads that were judged often and never denied. Below: check the allowlist has not grown too broad. |
 | GOV-M2 | Judge override rate | Orchestrator overrides ÷ judge answers, across questions with ≥20 calls (`/tune` also shows each question's rate) | 5–25% | `mcp`, `overrides` | Weekly | live | Above 25%: `/tune` proposes raising `dispatch.min_confidence`. Below 5% with most answers under threshold: proposes lowering it. |
 | GOV-M3 | Gate ask + deny share | (`ask` + `deny`) ÷ all gate decisions | Trend only | `gate` | Weekly | live | A sudden jump: read the denied commands before changing anything. |
-| GOV-M4 | Scope-lock denials per task | Edits denied by the scope lock ÷ tasks dispatched | 0–1 | `scope` | Per task | live | Repeated denials on one task mean its Scope globs in the plan are wrong. Fix the plan, not the lock. |
+| GOV-M4 | Scope-lock denials per task | Edits denied by the scope lock ÷ tasks dispatched | 0–1 | `scope` | Per task | live | Repeated denials on one task mean its Scope globs in the plan are wrong. Fix the plan, not the lock. Read scope.jsonl to see which tasks were active at each denial; /tune reports the total. |
 
 ## Escalation
 
 | ID | KPI | Definition | Healthy | Source | Cadence | Status | If out of range |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ESC-M1 | Strong-tier escalation rate | Cheap → strong climbs ÷ tasks dispatched | Under 20% | `escalations`, `dispatch` | Weekly | live: only climbs from Sonnet count | Read the logged reasons. One recurring reason usually points to a plan or prompt defect ([escalation-model.md](escalation-model.md)). |
+| ESC-M1 | Strong-tier escalation rate | Cheap → strong climbs ÷ tasks dispatched. Codex dispatches count in the denominator but its climbs are not from Sonnet, so mixed use understates the rate. | Under 20% | `escalations`, `dispatch` | Weekly | live: only climbs from Sonnet count | Read the logged reasons. One recurring reason usually points to a plan or prompt defect ([escalation-model.md](escalation-model.md)). |
 | ESC-M2 | Frontier dispatches without a strong-tier failure | Escalation records to the frontier tier whose from-tier is not the strong tier. An unlogged dispatch is invisible, so this also relies on every climb being logged | 0 | `escalations` | Weekly | live: `/tune` reports "Fable without a prior Opus step" | Any value above 0 breaks "stop at the first success". Treat it as a compliance finding. |
 
 ## Execution and cost
@@ -40,7 +40,7 @@
 
 | ID | KPI | Definition | Healthy | Source | Cadence | Status | If out of range |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| REV-M1 | Fix rounds after review | Median rounds of `/wreview` findings fixed before a task merges | ≤ 1 | `review` | Per task, trended monthly | live | Above: findings are caught too late. Tighten the task's done criteria in the plan ([review-model.md](review-model.md)). |
+| REV-M1 | Fix rounds after review | Median review rounds per branch (1 = passed first review) | ≤ 2 (at most one fix round) | `review` | Per task, trended monthly | live | Above: findings are caught too late. Tighten the task's done criteria in the plan ([review-model.md](review-model.md)). |
 
 ## Memory
 
