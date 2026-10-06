@@ -93,3 +93,12 @@ After install, a week of `/tune` shows the judged share falling toward 35–45%.
 ## Out of scope
 
 Edit and Write judging; adding `sed`, `echo`, `for` or other heads; heredocs; any change to `allowlisted()`.
+
+## Amendments after /interrogate (approved 2026-10-06)
+
+/interrogate (Sonnet and Opus reviewers) found: shell expansion (`{a,b}`, `${x:-...}`, `${x:=...}`, `$'...'`) turns harmless words into banned flags like `--output`, in single commands (pre-existing on main) and across compound parts (new); a leading `cd` changes the directory later parts run in, so code-running heads (pytest, npm/pnpm test, swift test, git with repo config) could run in an outside directory; `str.strip()` removed characters bash keeps; `#` comments and `${...}` were not modelled. Amendments:
+
+- Character allowlist for single and compound commands: a part (or a single command) skips the judge only if every character is in the plain set (ASCII letters, digits, space, tab, quotes and `. _ / = : @ % + , -`). This tightens the old single-command check; the deviation from "`allowlisted()` unchanged" is approved by the user, and the `allowlisted()` code itself is still unchanged.
+- Parts are stripped with `strip(" \t")` only.
+- Every `cd` target in a compound must resolve inside the session cwd, tracked across successive `cd` parts; one argument, not starting with `-`.
+- `ls # x; pwd` is now judged.

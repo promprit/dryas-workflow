@@ -44,6 +44,7 @@ class FrameworkDocsTest(unittest.TestCase):
 
     def test_compound_gate_documented(self):
         self.assertIn("gate.compound", read("docs/governance.md"))
+        self.assertIn("plain characters", read("docs/governance.md"))
         self.assertIn("compound true", read("docs/workflow.md"))
         self.assertIn("gate.compound", read("docs/metrics.md"))
 
