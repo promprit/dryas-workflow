@@ -1,0 +1,61 @@
+# Dryas manifest for this repository's editions (spec: ../spec/dryas-spec-v1.md).
+# Descriptive in spec v1: the installer still reads its flags and install/components.json.
+dryas: "1.0-draft"
+edition: dryas-reference
+harness: [claude-code, codex]
+conformance: {level: full, table: README.md}
+
+workflow:
+  stages: [brainstorm, plan, judge, build, escalate, review, ship]
+  brainstorm: {required: true, approval: human, provider: superpowers:brainstorming}
+  plan: {required: true, format: plan-file, path: .orchestrate/PLAN.md}
+  judge: {required: false, provider: jev}
+  rules_source: claude/CLAUDE.md.template
+
+memory:
+  provider: ruflo
+  version: 3.51.0
+  namespace: main-repo
+  read: before-plan
+  write: after-task
+  session: {handoff: /handoff, compaction: jev-scored}
+
+governance:
+  scope_lock: {required: true, provider: dryas-scope-lock, armed_by: .orchestrate/active.json}
+  gate: {provider: jev, model: typesafe/jev-1.13, auto_allow: false, on_failure: no-decision}
+  judge: {provider: jev, min_confidence: 0.7, below_threshold: orchestrator}
+  overrides: {log: required, tune: /tune}
+  hook_order: [scope-lock, jev-gate, ruflo, observer]
+  human_approval: [design, install, move, delete, overwrite, settings, push, release]
+  secrets: {only: OPENROUTER_API_KEY, location: shell-environment}
+
+execution:
+  orchestrator: opus
+  executor: sonnet
+  isolation: worktree
+  one_agent_per_worktree: true
+  tdd: required
+  parallel: ruflo-hierarchical-swarm
+  process: superpowers
+  specialist:
+    design: [ui-ux-pro-max, impeccable]
+
+escalation:
+  ladder: [sonnet, opus, fable]
+  climb_after_failures: {sonnet: 2, opus: 1}
+  climb_below_confidence: 0.5
+  judge_may_start_at: opus
+  root_cause_before_climb: true
+  log: required
+  after_top: human
+
+review:
+  mandatory: true
+  stages: [spec-compliance, code-quality]
+  command: /wreview
+  verification: required
+  adversarial: {command: /interrogate, gated_by: jev.needs_interrogate, tiers: [sonnet, opus]}
+  cleanup: pstack-picks
+  merge_after: [review, verification]
+  commit: {command: /commit, gated_by: jev}
+  push: human

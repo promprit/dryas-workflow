@@ -1,0 +1,41 @@
+# The smallest edition that can claim Dryas Core: no judge, no project memory.
+# Needs only a rules file, a pre-tool hook that can deny edits, and sub-agents.
+dryas: "1.0-draft"
+edition: minimal-core
+harness: [any]
+conformance: {level: core, table: CONFORMANCE.md}
+
+workflow:
+  stages: [brainstorm, plan, judge, build, escalate, review, ship]   # judge is a no-op here (WF-1)
+  brainstorm: {required: true, approval: human}
+  plan: {required: true, format: plan-file}
+  judge: {required: false}
+
+memory:
+  provider: none
+
+governance:
+  scope_lock: {required: true, provider: dryas-scope-lock}
+  gate: {provider: none}
+  judge: {provider: none, below_threshold: orchestrator}
+  human_approval: [design, install, move, delete, overwrite, settings, push, release]
+
+execution:
+  orchestrator: strong
+  executor: cheap
+  isolation: worktree
+  one_agent_per_worktree: true
+  tdd: required
+
+escalation:
+  ladder: [cheap, strong]
+  climb_after_failures: {cheap: 2}
+  log: required
+  after_top: human
+
+review:
+  mandatory: true
+  stages: [spec-compliance, code-quality]
+  verification: required
+  merge_after: [review, verification]
+  push: human

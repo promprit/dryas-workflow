@@ -1,0 +1,1 @@
+{"task":"Task 1: Rate-limit the login endpoint","reason":"2 Sonnet failures: counter reset on every request; root cause: store keyed by request id, not account id","decided_by":"orchestrator","from_model":"sonnet","to_model":"opus","ts":"2026-10-06T10:42:13+0000"}
