@@ -16,10 +16,12 @@ The installer asks before it changes anything. Use `--dry-run` first to see what
 | --- | --- | --- |
 | Workflow core | Agents, commands, hooks and the scope lock in `~/.claude` | this repo |
 | Jev | Gating and routing hooks, with the [TypeSafe skills](https://github.com/typesafe-ai/skills) | `--no-jev` skips |
-| Ruflo | Orchestration and memory ([ruvnet/ruflo](https://github.com/ruvnet/ruflo), pinned 3.51.0) | `--no-ruflo` skips |
-| Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), pinned 6.4.1) | `--no-superpowers` skips |
-| Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (pinned 4.3.1) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
+| Ruflo | Orchestration and memory ([ruvnet/ruflo](https://github.com/ruvnet/ruflo), latest; tested 3.53.0) | `--no-ruflo` skips |
+| Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), latest; tested 6.4.2) | `--no-superpowers` skips |
+| Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (latest; tested 4.5.0) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
 | pstack picks | Interrogate review, cleanup, benchmark checklist and principles, adapted from [pstack-claude](https://github.com/michael-denyer/pstack-claude) (see NOTICE.md) | `--no-pstack-picks` skips |
+
+Dryas installs the latest version of each component. If Dryas's Ruflo patches do not apply to the latest Ruflo, the installer falls back to the tested version. A weekly CI job checks the latest Ruflo.
 
 You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex CLI, or both, installed first.
 

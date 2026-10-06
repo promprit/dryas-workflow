@@ -14,7 +14,7 @@ workflow:
 
 memory:
   provider: ruflo
-  version: 3.51.0
+  version: latest  # tested 3.53.0
   namespace: main-repo
   read: before-plan
   write: after-task
