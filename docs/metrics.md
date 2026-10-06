@@ -9,6 +9,7 @@
 - **Healthy range.** Starting values, calibrated by `/tune`. Where `/tune` already has a threshold, the range uses it.
 - **Cadence.** Weekly means the `/tune` run. Per task means the orchestrator checks it before merging.
 - **Out of range.** A metric outside its range is a prompt to look, not an automatic change. `/tune` proposes threshold changes; a human approves each one ([governance.md](governance.md)).
+- **Owners.** Each KPI's owner is listed in [roles.md](roles.md).
 - **IDs.** `<LAYER>-M<n>`, matching the layer prefixes of the spec rules so the operating-model map can join them.
 
 ## Governance

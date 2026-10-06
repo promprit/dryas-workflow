@@ -5,7 +5,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 FRAMEWORK = ["docs/why-dryas.md", "docs/architecture.md", "docs/memory-model.md", "docs/governance.md",
              "docs/execution-model.md", "docs/escalation-model.md", "docs/review-model.md",
-             "docs/adoption-guide.md", "docs/metrics.md", "docs/roadmap.md", "spec/dryas-spec-v1.md", "reference/README.md",
+             "docs/adoption-guide.md", "docs/metrics.md", "docs/roles.md", "docs/roadmap.md", "spec/dryas-spec-v1.md", "reference/README.md",
              "examples/README.md", "examples/walkthrough.md"]
 MANIFESTS = ["reference/dryas.yaml", "examples/manifests/minimal-core.yaml", "examples/manifests/codex.yaml"]
 MANIFEST_KEYS = ("dryas", "edition", "harness", "conformance", "workflow", "memory", "governance",

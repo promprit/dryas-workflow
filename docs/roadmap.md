@@ -16,7 +16,7 @@ The scope is deliberate: software delivery, not every use of AI in an organisati
 | Controls and risk | Covered for delivery | Scope lock, gates, secrets, redaction, logged overrides and escalations |
 | Cost | Covered for delivery | [escalation-model.md](escalation-model.md), `/tune` spend reports |
 | Scale within a team | Covered | One agent per worktree, parallel loops, shared memory per repo |
-| People and organisation | **Gap** | Phase 1: `roles.md` |
+| People and organisation | Covered | [roles.md](roles.md) |
 | Metrics | Partial (model defined; some KPIs need new logging) | [metrics.md](metrics.md) |
 | Current → target transition | Partial | [adoption-guide.md](adoption-guide.md) rollout; Phase 1: maturity levels |
 
@@ -32,7 +32,7 @@ Make the method readable without the tools, and complete it as an operating mode
 - [x] Adoption guide: [adoption-guide.md](adoption-guide.md)
 - [x] Reference map from method to implementation: [reference/](../reference/README.md)
 - [x] Worked examples: [examples/](../examples/README.md)
-- [ ] `roles.md`: named human roles (design approver, loop owner, reviewer, threshold owner, release owner), a RACI across the loop's stages, and the skills each role needs
+- [x] Human roles, separation rules, a RACI across the loop and the skills each role needs: [roles.md](roles.md)
 - [x] KPIs with a definition, healthy range, source log, cadence and live/planned status: [metrics.md](metrics.md)
 - [ ] Log the planned metrics: `scope`, `dispatch`, `review` and `merge` records ([metrics.md](metrics.md#planned-logging)), and report them in `/tune`
 - [ ] `operating-model.md`: one page mapping the five layers, roles and metrics onto the operating-model dimensions above
