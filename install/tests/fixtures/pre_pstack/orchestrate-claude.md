@@ -65,6 +65,7 @@ If `failing_test_exists` is not confidently true: dispatch a **tester** executor
 3. Give each executor ONLY its section: `"{{PY}}" -X utf8 "{{CD}}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
 4. Dispatch with the Agent tool, `subagent_type: executor` (model sonnet from its frontmatter). Independent tasks go out in one message, in parallel.
 5. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus` on that dispatch, after `mcp__jev__log_escalation` (from_model sonnet, to_model opus). Never dispatch Fable here: Fable is only reached through §7.
+6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__jev__log_dispatch` with task (the PLAN.md task id), tier (sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
 
 ## 6. On return
 For each report, one `jev_judge` call with state `{task_section, executor_report}`:
@@ -79,13 +80,14 @@ Only an incident, a failure or an escalation reaches you in full; otherwise log 
 Ladder: **Sonnet → Opus → Fable**. Fable is used only when Opus also could not do the task.
 Every `mcp__jev__log_escalation` call passes all five fields: task, reason, decided_by ("jev" or "opus"), from_model, to_model.
 First Sonnet failure: re-dispatch once more on Sonnet with the failure details; the second Sonnet failure escalates to Opus.
+Each re-dispatch is logged with `mcp__jev__log_dispatch` (§5.6).
 1. A Sonnet executor that fails done-criteria `escalation.sonnet_failures_before_opus` times (2), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with `model: opus`. Call `mcp__jev__log_escalation` first (from sonnet, to opus, with the reason).
 2. If the Opus executor succeeds, stop: no Fable.
 3. Only if the Opus executor fails `escalation.opus_failures_before_fable` times (1), or reports CONFIDENCE below the threshold, re-dispatch once with `model: fable`, after `mcp__jev__log_escalation` (from opus, to fable, reason naming what Opus could not resolve). If Fable is unavailable, stop and report to the user.
 4. A Fable failure comes to the user with all three reports.
 
 ## 8. Finish
-Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then remove the worktree.
+Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then call `mcp__jev__log_merge` with task and branch (the worktree branch name), tasks_merged (the number of task sections in .orchestrate/PLAN.md) and cost_usd when you have the session cost from /cost or a cost notice; then remove the worktree.
 
 ## Question rules (typesafe skill)
-One narrow judgment per question; named JSON fields in state; every choice has `none_of_these`; batch independent questions into one call; never ask Jev to write code or plans.
+One narrow judgment per question; named JSON fields in state; every choice has `none_of_these`; batch independent questions into one call; never ask Jev to write code or plans. When one call covers several tasks, name each question `<question>.<task>` (for example `needs_opus.t3`); /tune groups calls by the part before the dot.
