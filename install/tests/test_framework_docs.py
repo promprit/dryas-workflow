@@ -42,6 +42,12 @@ class FrameworkDocsTest(unittest.TestCase):
         for s in ("docs/operating-model.md", "docs/architecture.md", "spec/dryas-spec-v1.md", "reference/README.md", "docs/adoption-guide.md"):
             self.assertIn(s, t, s)
 
+    def test_metrics_status_matches_logging(self):
+        t = read("docs/metrics.md")
+        self.assertNotIn("| planned |", t)              # no KPI row left as planned
+        self.assertIn("## Logging records", t)
+        self.assertNotIn("by hand until", read("docs/adoption-guide.md"))
+
 
 if __name__ == "__main__":
     unittest.main()
