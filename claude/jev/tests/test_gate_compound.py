@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -90,6 +91,7 @@ class RunTest(unittest.TestCase):
     def setUp(self):
         _no_cdpath(self)
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         os.environ["JEV_LOG_DIR"] = os.path.join(self.tmp, "logs")
         os.environ["JEV_SSD_ROOT"] = self.tmp
         self.calls = []
@@ -150,6 +152,7 @@ class RunTest(unittest.TestCase):
     def test_cd_outside_cwd_judged(self):
         self.thresholds()
         outside = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, outside, True)
         gate.run(self.bash("cd %s && ls" % outside), judge_fn=self.judge)
         self.assertEqual(len(self.calls), 1)
 
@@ -169,6 +172,7 @@ class CdEdgeTest(unittest.TestCase):
     def setUp(self):
         _no_cdpath(self)
         self.root = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
         os.makedirs(os.path.join(self.root, "a", "b"))
         os.mkdir(os.path.join(self.root, "sub"))
 
@@ -179,6 +183,7 @@ class CdEdgeTest(unittest.TestCase):
 
     def test_cd_symlink_outside_judged(self):
         outside = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside, True)
         os.symlink(outside, os.path.join(self.root, "l2"))
         self.assertFalse(gate.allowlisted_compound("cd l2 && ls", AL, self.root)[0])
 
