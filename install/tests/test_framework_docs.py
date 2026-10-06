@@ -48,6 +48,10 @@ class FrameworkDocsTest(unittest.TestCase):
         self.assertIn("compound true", read("docs/workflow.md"))
         self.assertIn("gate.compound", read("docs/metrics.md"))
 
+    def test_gov_m1_is_judge_latency(self):
+        self.assertIn("Judge latency", read("docs/metrics.md"))
+        self.assertIn("GOV-M1 < 500 ms", read("docs/adoption-guide.md"))
+
     def test_metrics_status_matches_logging(self):
         t = read("docs/metrics.md")
         self.assertNotIn("| planned |", t)              # no KPI row left as planned
