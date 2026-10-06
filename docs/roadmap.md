@@ -2,9 +2,29 @@
 
 Dryas is a method first. The tooling follows it, not the other way round.
 
+## Positioning
+
+**The Dryas Workflow Framework: a target operating model for AI-assisted software delivery.**
+
+The scope is deliberate: software delivery, not every use of AI in an organisation. Against the usual operating-model dimensions:
+
+| Dimension | Status | Where |
+| --- | --- | --- |
+| Process | Covered | The loop, [execution-model.md](execution-model.md), [review-model.md](review-model.md) |
+| Governance and decision rights | Covered | [governance.md](governance.md) |
+| Technology (as roles, not products) | Covered | [architecture.md](architecture.md), [reference/](../reference/README.md) |
+| Controls and risk | Covered for delivery | Scope lock, gates, secrets, redaction, logged overrides and escalations |
+| Cost | Covered for delivery | [escalation-model.md](escalation-model.md), `/tune` spend reports |
+| Scale within a team | Covered | One agent per worktree, parallel loops, shared memory per repo |
+| People and organisation | **Gap** | Phase 1: `roles.md` |
+| Metrics | **Gap** (data exists in logs, no model yet) | Phase 1: `metrics.md` |
+| Current → target transition | Partial | [adoption-guide.md](adoption-guide.md) rollout; Phase 1: maturity levels |
+
+Once the two gaps are closed, the README and [why-dryas.md](why-dryas.md) lead with the TOM positioning.
+
 ## Phase 1: the framework (now)
 
-Make the method readable without the tools.
+Make the method readable without the tools, and complete it as an operating model.
 
 - [x] Why Dryas exists and what it solves: [why-dryas.md](why-dryas.md)
 - [x] Five-layer architecture and the loop: [architecture.md](architecture.md)
@@ -12,6 +32,11 @@ Make the method readable without the tools.
 - [x] Adoption guide: [adoption-guide.md](adoption-guide.md)
 - [x] Reference map from method to implementation: [reference/](../reference/README.md)
 - [x] Worked examples: [examples/](../examples/README.md)
+- [ ] `roles.md`: named human roles (design approver, loop owner, reviewer, threshold owner, release owner), a RACI across the loop's stages, and the skills each role needs
+- [ ] `metrics.md`: KPIs with a definition, healthy range, source log and review cadence each. Start from what is already logged: escalation rate per tier, judge override rate per question, scope-lock denials per task, rework after review, cost per merged task
+- [ ] `operating-model.md`: one page mapping the five layers, roles and metrics onto the operating-model dimensions above
+- [ ] Maturity levels (current → target) in [adoption-guide.md](adoption-guide.md)
+- [ ] Re-lead README and why-dryas.md with "target operating model for AI-assisted software delivery"
 
 ## Phase 2: the specification and manifest
 
