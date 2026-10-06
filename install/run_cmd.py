@@ -5,6 +5,7 @@
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -62,6 +63,12 @@ def preflight(comps: List[str], harness: str, claude_dir: Path) -> List[str]:
     return probs
 
 
+def _vtuple(v) -> Optional[tuple]:
+    """Dotted numeric version as an int tuple (a leading 'v' or 'skill-v' is stripped); None if unparseable."""
+    m = re.fullmatch(r"(?:skill-)?v?(\d+(?:\.\d+)*)", str(v).strip())
+    return tuple(int(x) for x in m.group(1).split(".")) if m else None
+
+
 def thirdparty(comps: List[str], yes: bool, home: Optional[Path] = None) -> int:
     import dryas_install as di
     table = json.loads((HERE / "components.json").read_text(encoding="utf-8"))
@@ -85,11 +92,15 @@ def thirdparty(comps: List[str], yes: bool, home: Optional[Path] = None) -> int:
     except (OSError, ValueError):
         plugins = {}
     for c in sel:
-        want, name = table[c]["version"], table[c]["plugin"]
+        want, name = table[c]["tested"], table[c]["plugin"]
         have = [e.get("version") for e in plugins.get(name, []) if isinstance(e, dict)]
-        if want not in have:
-            print("warning: %s is %s; Dryas Workflow is tested with %s"
-                  % (name, ", ".join(str(h) for h in have) or "not installed", want))
+        if not have:
+            print("warning: %s is not installed; Dryas Workflow is tested with %s" % (name, want))
+            continue
+        nums = [_vtuple(h) for h in have]
+        if all(nums) and max(nums) < _vtuple(want):
+            print("warning: %s is %s; Dryas Workflow is tested with %s (older than tested)"
+                  % (name, ", ".join(str(h) for h in have), want))
     return 0
 
 

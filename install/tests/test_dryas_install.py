@@ -387,5 +387,57 @@ class InstallTest(unittest.TestCase):
         self.assertIn("warning: installing with a virtual-environment Python", buf.getvalue())
 
 
+class FallbackTest(unittest.TestCase):
+    install = InstallTest.install
+
+    def setUp(self):
+        InstallTest.setUp(self)
+        self.saved = (rh.patched_helpers, di.pu.which)
+        self.tested = rh.tested_ruflo()
+        self.attempts = []
+        self.out = {n: (b"x\n", 0o644) for n in rh.HELPERS}
+
+    def tearDown(self):
+        rh.patched_helpers, di.pu.which = self.saved
+
+    def fail_first(self, bin_):
+        self.attempts.append(bin_)
+        if len(self.attempts) == 1:
+            raise rh.HelperError("anchor mismatch")
+        return self.out
+
+    def test_fallback_installs_tested_version_and_retries(self):
+        rh.patched_helpers = self.fail_first
+        di.pu.which = lambda n: "/new/ruflo"
+        self.assertEqual(self.install(["core", "ruflo"]), 0)
+        self.assertIn(["npm", "install", "-g", "ruflo@" + self.tested], self.calls)
+        self.assertEqual(self.attempts, ["/b/ruflo", "/new/ruflo"])
+        self.assertTrue((self.cd / "ruflo/helpers/hook-handler.cjs").exists())
+
+    def test_fallback_declined_returns_1_and_writes_no_helpers(self):
+        rh.patched_helpers = self.fail_first
+        di.confirm = lambda prompt: False
+        self.assertEqual(self.install(["core", "ruflo"]), 1)
+        self.assertNotIn(["npm", "install", "-g", "ruflo@" + self.tested], self.calls)
+        self.assertEqual(len(self.attempts), 1)
+        self.assertFalse((self.cd / "ruflo/helpers").exists())
+
+    def test_yes_skips_prompt(self):
+        rh.patched_helpers = self.fail_first
+        di.confirm = lambda prompt: self.fail("prompted despite --yes")
+        di.pu.which = lambda n: "/new/ruflo"
+        self.assertEqual(self.install(["core", "ruflo"], yes=True), 0)
+
+    def test_retry_failure_returns_1(self):
+        def always(bin_):
+            self.attempts.append(bin_)
+            raise rh.HelperError("still bad")
+        rh.patched_helpers = always
+        di.pu.which = lambda n: "/new/ruflo"
+        self.assertEqual(self.install(["core", "ruflo"]), 1)
+        self.assertEqual(len(self.attempts), 2)
+        self.assertFalse((self.cd / "ruflo/helpers").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

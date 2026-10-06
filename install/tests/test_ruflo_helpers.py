@@ -56,7 +56,8 @@ class PatchTableTest(unittest.TestCase):
     def test_strict_is_default_and_hint_in_message(self):
         with self.assertRaises(rh.HelperError) as cm:
             rh.patch_text("intelligence.cjs", "const SESSION_DIR = path.join(PROJECT_ROOT, '.claude-flow', 'sessions');\n")
-        self.assertIn("pinned to ruflo 3.51.0", str(cm.exception))
+        self.assertIn("patches are tested with ruflo %s" % rh.tested_ruflo(), str(cm.exception))
+        self.assertIn("falls back to that version automatically", str(cm.exception))
         self.assertIn("--no-ruflo", str(cm.exception))
 
 
