@@ -9,6 +9,7 @@ import gate
 
 AL = ["ls", "cat", "head", "tail", "wc", "pwd", "git status", "git diff", "git log", "git show",
       "pytest", "python3 -m pytest", "cd", "grep"]
+CWD = "/x"
 
 SKIP = {
     "cd /x && git status 2>&1 | tail -3": 3,
@@ -24,7 +25,8 @@ SKIP = {
     "cd x\t&&\tls": 2,
     "ls;ls;ls;ls;ls;ls;ls;ls": 8,
     "cd /x && python3 -m pytest -q 2>&1 | tail -1": 3,
-    "ls # x; pwd": 2,
+    "cd /x/sub && ls": 2,
+    "cd /x && git status": 2,
 }
 
 JUDGE = [
@@ -34,6 +36,11 @@ JUDGE = [
     "ls >& /dev/null", "", "   ", "ls；rm -rf x", "ls $'a;b'", 'ls "$(rm x)"', "ls `rm x`", "ls $(pwd)",
     "cat <<EOF", "ls 'unclosed && pwd", "git status --output=x && ls", "git -c core.pager=sh log && ls",
     "ls 2>&1 &", "FOO=1 ls && pwd",
+    "ls # x; pwd",
+    "ls ${x:=--output=f} && git log $x", "git diff {--output=Y,HEAD} && ls", "git diff ${x:---output=Y} && ls",
+    "git diff $'--output=Y' && ls", "\x0bls && pwd", "ls\xa0 && pwd", "ls\x00 && pwd", "ls * && pwd",
+    "cd ~ && ls", "cd /tmp && pytest", "cd .. && ls", "cd - && ls", "cd && ls", "cd a && cd ../.. && ls",
+    "cd -P a && ls",
 ]
 
 FORBIDDEN = set(";&|<>()`\\\n\r")
@@ -42,11 +49,11 @@ FORBIDDEN = set(";&|<>()`\\\n\r")
 class SplitTest(unittest.TestCase):
     def test_skip_cases(self):
         for cmd, n in SKIP.items():
-            self.assertEqual(gate.allowlisted_compound(cmd, AL), (True, n), repr(cmd))
+            self.assertEqual(gate.allowlisted_compound(cmd, AL, CWD), (True, n), repr(cmd))
 
     def test_judge_cases(self):
         for cmd in JUDGE:
-            self.assertEqual(gate.allowlisted_compound(cmd, AL)[0], False, repr(cmd))
+            self.assertEqual(gate.allowlisted_compound(cmd, AL, CWD)[0], False, repr(cmd))
 
     def test_skipped_parts_are_clean_and_allowlisted(self):
         for cmd in SKIP:
@@ -56,6 +63,11 @@ class SplitTest(unittest.TestCase):
                 self.assertTrue(gate.allowlisted(p, AL), (cmd, p))
                 self.assertFalse(FORBIDDEN & set(p), (cmd, p))
                 self.assertNotIn("$(", p, (cmd, p))
+            rest = cmd
+            for tok in ("2>/dev/null", "2>&1", ">/dev/null"):
+                rest = rest.replace(tok, "")
+            for p in parts:
+                self.assertIn(p, rest, (cmd, p))
 
     def test_split_returns_parts(self):
         self.assertEqual(gate.split_compound("cd /x && git status 2>&1 | tail -3"), ["cd /x", "git status", "tail -3"])
@@ -107,7 +119,34 @@ class RunTest(unittest.TestCase):
         gate.run(self.bash("ls"), judge_fn=self.judge)
         self.assertEqual(len(self.calls), 1)  # single allowlisted command still skipped
 
-    def test_old_single_skip_is_a_floor(self):
+    def test_single_expansion_now_judged(self):
         self.thresholds()
-        gate.run(self.bash("ls \\foo"), judge_fn=self.judge)  # backslash: split_compound gives None, old check skips
+        gate.run(self.bash("git diff ${x:---output=f}"), judge_fn=self.judge)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_single_glob_now_judged(self):
+        self.thresholds()
+        gate.run(self.bash("ls *"), judge_fn=self.judge)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_single_plain_still_skipped(self):
+        self.thresholds()
+        gate.run(self.bash("ls"), judge_fn=self.judge)
         self.assertEqual(self.calls, [])
+
+    def test_cd_outside_cwd_judged(self):
+        self.thresholds()
+        outside = tempfile.mkdtemp()
+        gate.run(self.bash("cd %s && ls" % outside), judge_fn=self.judge)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_cd_inside_cwd_skipped(self):
+        self.thresholds()
+        os.mkdir(os.path.join(self.tmp, "sub"))
+        gate.run(self.bash("cd sub && ls"), judge_fn=self.judge)
+        self.assertEqual(self.calls, [])
+
+    def test_single_backslash_now_judged(self):
+        self.thresholds()
+        gate.run(self.bash("ls \\foo"), judge_fn=self.judge)  # backslash is not a plain character
+        self.assertEqual(len(self.calls), 1)

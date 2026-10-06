@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import string
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -74,6 +75,12 @@ MAX_PARTS = 8
 _SAFE_REDIRECTS = ("2>/dev/null", "2>&1", ">/dev/null")
 _BAD_IN_QUOTES = set(";&|<>()`")
 _BAD_OUTSIDE = set("&<>()`")
+_SAFE_CHARS = frozenset(string.ascii_letters + string.digits + " \t._/=:@%+,-'\"")
+
+
+def _plain(s: str) -> bool:
+    """Only plain characters: no expansion, glob, comment, history or non-ASCII."""
+    return all(c in _SAFE_CHARS for c in s)
 
 
 def split_compound(cmd: str) -> Optional[List[str]]:
@@ -112,8 +119,8 @@ def split_compound(cmd: str) -> Optional[List[str]]:
             return None
         op = "&&" if cmd.startswith("&&", i) else "||" if cmd.startswith("||", i) else c if c in ";|" else ""
         if op:
-            part = "".join(cur).strip()
-            if not part:
+            part = "".join(cur).strip(" \t")
+            if not part or not _plain(part):
                 return None
             parts.append(part)
             cur = []
@@ -125,17 +132,32 @@ def split_compound(cmd: str) -> Optional[List[str]]:
         i += 1
     if quote:
         return None
-    part = "".join(cur).strip()
-    if not part:
+    part = "".join(cur).strip(" \t")
+    if not part or not _plain(part):
         return None
     parts.append(part)
     return parts if len(parts) <= MAX_PARTS else None
 
 
-def allowlisted_compound(cmd: str, allowlist: List[str]) -> Tuple[bool, int]:
+def allowlisted_compound(cmd: str, allowlist: List[str], cwd: str) -> Tuple[bool, int]:
+    """Skip only if every part is allowlisted and every cd stays inside cwd."""
     parts = split_compound(cmd)
     if not parts or not all(allowlisted(p, allowlist) for p in parts):
         return False, 0
+    root = os.path.realpath(cwd) if cwd else ""
+    current = root
+    for p in parts:
+        try:
+            words = shlex.split(p)
+        except ValueError:
+            return False, 0
+        if words[0] != "cd":
+            continue
+        if not root or len(words) != 2 or words[1].startswith("-"):
+            return False, 0
+        current = os.path.realpath(os.path.join(current, words[1]))
+        if current != root and not current.startswith(root.rstrip(os.sep) + os.sep):
+            return False, 0
     return True, len(parts)
 
 
@@ -178,9 +200,9 @@ def run(event: Dict[str, Any], judge_fn=judge) -> Optional[Dict[str, Any]]:
     base = dict({"tool": tool}, **_head(tool, ti))
     if tool == "Bash":
         cmd = str(ti.get("command", ""))
-        ok, n = allowlisted(cmd, t["allowlist"]), 1
+        ok, n = allowlisted(cmd, t["allowlist"]) and _plain(cmd), 1
         if not ok and t.get("compound", True):
-            ok, n = allowlisted_compound(cmd, t["allowlist"])
+            ok, n = allowlisted_compound(cmd, t["allowlist"], str(event.get("cwd") or ""))
         if ok:
             jevlog.append("gate", dict(base, decision="skipped", **({"parts": n} if n > 1 else {})))
             return None
