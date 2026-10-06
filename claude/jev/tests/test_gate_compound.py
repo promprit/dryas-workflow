@@ -1,0 +1,113 @@
+import json
+import os
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import gate
+
+AL = ["ls", "cat", "head", "tail", "wc", "pwd", "git status", "git diff", "git log", "git show",
+      "pytest", "python3 -m pytest", "cd", "grep"]
+
+SKIP = {
+    "cd /x && git status 2>&1 | tail -3": 3,
+    "cd x&&git status": 2,
+    "ls; pwd": 2,
+    "ls || pwd": 2,
+    "git status >/dev/null": 1,
+    "git status 2>/dev/null && ls": 2,
+    "git status 2>&1": 1,
+    "cd 'my dir' && ls": 2,
+    "cd \"a'b\" && ls": 2,
+    "grep -rn foo . | head -5": 2,
+    "cd x\t&&\tls": 2,
+    "ls;ls;ls;ls;ls;ls;ls;ls": 8,
+    "cd /x && python3 -m pytest -q 2>&1 | tail -1": 3,
+    "ls # x; pwd": 2,
+}
+
+JUDGE = [
+    "ls | sh", "cd /x && git push", "grep -r x . > out.txt", 'git log --format="%h|%s"', "cat a; rm -rf b",
+    "ls &", "cat <(ls)", "ls >(cat)", "ls >| f", "ls &> f", "ls |& cat", "ls \\; pwd", "ls\npwd", "ls\rpwd",
+    "ls;;pwd", "ls &&", "; ls", "ls;ls;ls;ls;ls;ls;ls;ls;ls", "ls '2>&1'", "ls >/dev/nullx", "ls 2>&1x",
+    "ls >& /dev/null", "", "   ", "ls；rm -rf x", "ls $'a;b'", 'ls "$(rm x)"', "ls `rm x`", "ls $(pwd)",
+    "cat <<EOF", "ls 'unclosed && pwd", "git status --output=x && ls", "git -c core.pager=sh log && ls",
+    "ls 2>&1 &", "FOO=1 ls && pwd",
+]
+
+FORBIDDEN = set(";&|<>()`\\\n\r")
+
+
+class SplitTest(unittest.TestCase):
+    def test_skip_cases(self):
+        for cmd, n in SKIP.items():
+            self.assertEqual(gate.allowlisted_compound(cmd, AL), (True, n), repr(cmd))
+
+    def test_judge_cases(self):
+        for cmd in JUDGE:
+            self.assertEqual(gate.allowlisted_compound(cmd, AL)[0], False, repr(cmd))
+
+    def test_skipped_parts_are_clean_and_allowlisted(self):
+        for cmd in SKIP:
+            parts = gate.split_compound(cmd)
+            self.assertIsNotNone(parts, repr(cmd))
+            for p in parts:
+                self.assertTrue(gate.allowlisted(p, AL), (cmd, p))
+                self.assertFalse(FORBIDDEN & set(p), (cmd, p))
+                self.assertNotIn("$(", p, (cmd, p))
+
+    def test_split_returns_parts(self):
+        self.assertEqual(gate.split_compound("cd /x && git status 2>&1 | tail -3"), ["cd /x", "git status", "tail -3"])
+        self.assertIsNone(gate.split_compound("ls;" * 9 + "ls"))
+
+
+class RunTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["JEV_LOG_DIR"] = os.path.join(self.tmp, "logs")
+        os.environ["JEV_SSD_ROOT"] = self.tmp
+        self.calls = []
+
+    def thresholds(self, **gate_cfg):
+        p = os.path.join(self.tmp, "th.json")
+        with open(p, "w") as f:
+            json.dump({"gate": dict({"allowlist": AL}, **gate_cfg)}, f)
+        os.environ["JEV_THRESHOLDS"] = p
+
+    def judge(self, state, questions):
+        self.calls.append(state)
+        return {"answers": {"safe": {"type": "noul", "value": 0.9, "confidence": 0.9},
+                            "risk": {"type": "choice", "value": "routine", "confidence": 0.9, "probabilities": {}}},
+                "latency_ms": 1, "input_tokens": 1, "cost": 0.0}
+
+    def bash(self, cmd):
+        return {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": self.tmp}
+
+    def records(self):
+        with open(os.path.join(self.tmp, "logs", "gate.jsonl")) as f:
+            return [json.loads(l) for l in f]
+
+    def test_compound_skip_logs_parts(self):
+        self.thresholds()
+        self.assertIsNone(gate.run(self.bash("cd x && ls | head -1"), judge_fn=self.judge))
+        self.assertEqual(self.calls, [])
+        rec = self.records()[-1]
+        self.assertEqual((rec["decision"], rec["parts"]), ("skipped", 3))
+
+    def test_single_skip_has_no_parts_field(self):
+        self.thresholds()
+        gate.run(self.bash("ls"), judge_fn=self.judge)
+        self.assertNotIn("parts", self.records()[-1])
+
+    def test_kill_switch_judges_compound(self):
+        self.thresholds(compound=False)
+        gate.run(self.bash("cd x && ls"), judge_fn=self.judge)
+        self.assertEqual(len(self.calls), 1)
+        gate.run(self.bash("ls"), judge_fn=self.judge)
+        self.assertEqual(len(self.calls), 1)  # single allowlisted command still skipped
+
+    def test_old_single_skip_is_a_floor(self):
+        self.thresholds()
+        gate.run(self.bash("ls \\foo"), judge_fn=self.judge)  # backslash: split_compound gives None, old check skips
+        self.assertEqual(self.calls, [])
