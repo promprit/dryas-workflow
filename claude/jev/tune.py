@@ -80,7 +80,9 @@ def canonical(name: str) -> str:
     s = re.sub(r"^t\d+_", "", base)
     s = re.sub(r"(_t\d+|_\d+|\d+|_any|_all|_kind)$", "", s)
     s = _ALIASES.get(s, s)
-    return s if s in CANONICAL else str(name)
+    if s in CANONICAL:
+        return s
+    return base if "." in str(name) else str(name)
 
 
 def _int(v: Any) -> Optional[int]:
@@ -114,7 +116,7 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
         if k is not None and v is not None:
             rounds[str(k)] = max(rounds.get(str(k), 0), v)
     reviewed = {str(r.get("task")) for r in review if r.get("task") is not None}
-    costed = [(c, _int(r.get("tasks_merged")) or 0) for r in merge for c in [_num(r.get("cost_usd"))] if c is not None]
+    costed = [(c, _int(r.get("tasks_merged")) or 0) for r in merge for c in [_num(r.get("cost_usd"))] if c is not None and (_int(r.get("tasks_merged")) or 0) >= 1]
     merged_tasks = sum(t for _, t in costed)
     return {
         "tasks_dispatched": n,
@@ -249,7 +251,7 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
         "- Tasks dispatched: %d" % d["tasks_dispatched"],
         "- Scope-lock denials per task (healthy 0-1): %s (%d denials)" % (na(d["scope_per_task"]), d["scope_denials"]),
         "- Sonnet->Opus climb rate (healthy under 20%%): %s" % ("n/a" if d["climb_rate"] is None else "%.0f%%" % (d["climb_rate"] * 100)),
-        "- Median review rounds per branch (healthy <= 1): %s" % na(d["review_rounds_median"], "%.1f"),
+        "- Median review rounds per branch (healthy <= 2): %s" % na(d["review_rounds_median"], "%.1f"),
         "- Merges without a review (should be 0): %d of %d" % (d["merges_without_review"], d["merges"]),
         "- Cost per merged task: %s (%d of %d merges had no cost)" % (na(d["cost_per_task"], "$%.2f"), d["merges_without_cost"], d["merges"]),
     ]

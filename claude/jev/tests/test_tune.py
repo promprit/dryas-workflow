@@ -225,6 +225,22 @@ class TuneTest(unittest.TestCase):
         self.assertAlmostEqual(d["cost_per_task"], 2.0)          # (8+2)/(4+1)
         self.assertEqual(d["merges_without_cost"], 1)
 
+    def test_zero_task_merge_excluded_from_cost_per_task(self):
+        write(self.d, "merge", [{"task": "a", "branch": "a", "tasks_merged": 0, "cost_usd": 9.0},
+                                {"task": "b", "branch": "b", "cost_usd": 9.0},
+                                {"task": "c", "branch": "c", "tasks_merged": 2, "cost_usd": 4.0}])
+        d = tune.build()["delivery"]
+        self.assertAlmostEqual(d["cost_per_task"], 2.0)
+        self.assertEqual((d["merges"], d["merges_without_cost"]), (3, 2))
+
+    def test_canonical_dotted_unknown_returns_question_part(self):
+        self.assertEqual(tune.canonical("needs_swarm.t3"), "needs_swarm")
+        self.assertEqual(tune.canonical("needs_swarm"), "needs_swarm")
+
+    def test_render_review_rounds_threshold(self):
+        text = tune.render(tune.build(), [])
+        self.assertIn("- Median review rounds per branch (healthy <= 2): ", text)
+
     def test_delivery_empty_logs_render_na(self):
         r = tune.build()
         d = r["delivery"]

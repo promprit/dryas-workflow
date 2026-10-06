@@ -86,6 +86,29 @@ class McpTest(unittest.TestCase):
         call("log_merge", {"task": "c", "branch": "c", "tasks_merged": 1, "cost_usd": -3})
         self.assertTrue(all("cost_usd" not in r for r in self.read("merge")))
 
+    def test_log_merge_rejects_bool_cost(self):
+        r = call("log_merge", {"task": "b", "branch": "b", "tasks_merged": 1, "cost_usd": True})
+        self.assertFalse(r["result"].get("isError", False))
+        (rec,) = self.read("merge")
+        self.assertNotIn("cost_usd", rec)
+
+    def test_log_string_fields_must_be_str_or_int(self):
+        bad = [("log_dispatch", {"task": True, "tier": "sonnet", "role": "coder", "attempt": 1}),
+               ("log_dispatch", {"task": "t", "tier": ["x"], "role": "coder", "attempt": 1}),
+               ("log_dispatch", {"task": "t", "tier": "sonnet", "role": {"a": 1}, "attempt": 1}),
+               ("log_merge", {"task": "b", "branch": False, "tasks_merged": 1})]
+        for name, args in bad:
+            self.assertTrue(call(name, args)["result"]["isError"], (name, args))
+        for f in ("dispatch", "merge"):
+            self.assertFalse(os.path.exists(os.path.join(self.tmp, f + ".jsonl")), f)
+        r = call("log_merge", {"task": 7, "branch": "b", "tasks_merged": 1})
+        self.assertFalse(r["result"].get("isError", False))
+
+    def test_log_unicode_digit_is_invalid_not_internal_error(self):
+        r = call("log_dispatch", {"task": "t", "tier": "s", "role": "c", "attempt": "\u00b2"})
+        self.assertTrue(r["result"]["isError"])
+        self.assertIn("invalid or missing", r["result"]["content"][0]["text"])
+
     def test_judge_marks_escalations_and_logs(self):
         r = call("jev_judge", {"state": {"x": 1}, "questions": VALID_QUESTIONS}, lambda s, q: RES)
         payload = json.loads(r["result"]["content"][0]["text"])

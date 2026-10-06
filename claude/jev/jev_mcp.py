@@ -129,8 +129,12 @@ def _as_int(v: Any) -> Optional[int]:
         return None
     if isinstance(v, int):
         return v
-    if isinstance(v, str) and v.strip().lstrip("-").isdigit():
-        return int(v.strip())
+    if isinstance(v, str):
+        t = v.strip()
+        if t[:1] == "-":
+            t = t[1:]
+        if t.isdecimal() and t.isascii():
+            return int(v.strip())
     return None
 
 
@@ -147,7 +151,7 @@ def _validate_log(args: Dict[str, Any], strs: Any, ints: Dict[str, int]) -> Any:
     bad = []
     for k in strs:
         v = args.get(k)
-        if v is None or not str(v).strip():
+        if isinstance(v, bool) or not isinstance(v, (str, int)) or not str(v).strip():
             bad.append(k)
         else:
             rec[k] = _coerce_to_str(v)
@@ -314,7 +318,8 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
                 if bad:
                     return _text(mid, "invalid or missing: %s" % ", ".join(bad), True)
                 if name == "log_merge":
-                    cost = _coerce_confidence(args.get("cost_usd"))
+                    raw = args.get("cost_usd")
+                    cost = None if isinstance(raw, bool) else _coerce_confidence(raw)
                     if cost is not None and cost >= 0:
                         rec["cost_usd"] = cost
                 jevlog.append(file, rec)
