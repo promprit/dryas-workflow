@@ -12,6 +12,7 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         "deny_safe_below": 0.2,
         "min_confidence": 0.7,
         "ask_risk": "destructive",
+        "compound": True,
         "allowlist": [
             "ls", "cat", "head", "tail", "wc", "pwd",
             "git status", "git diff", "git log", "git show",

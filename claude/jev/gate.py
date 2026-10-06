@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import string
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -70,6 +71,98 @@ def allowlisted(cmd: str, allowlist: List[str]) -> bool:
     return any(words[:len(entry_words)] == entry_words for entry in allowlist if (entry_words := entry.split()))
 
 
+MAX_PARTS = 8
+_SAFE_REDIRECTS = ("2>/dev/null", "2>&1", ">/dev/null")
+_BAD_IN_QUOTES = set(";&|<>()`")
+_BAD_OUTSIDE = set("&<>()`")
+_SAFE_CHARS = frozenset(string.ascii_letters + string.digits + " \t._/=:@%+,-'\"")
+
+
+def _plain(s: str) -> bool:
+    """Only plain characters: no expansion, glob, comment, history or non-ASCII."""
+    return all(c in _SAFE_CHARS for c in s)
+
+
+def split_compound(cmd: str) -> Optional[List[str]]:
+    """Split on &&, ||, ; and | outside quotes; drop safe standalone redirects.
+
+    Returns None (send to the judge) for anything else unusual. Never returns a part that
+    contains a shell operator, a backslash or a newline.
+    """
+    if not cmd or "\\" in cmd or "\n" in cmd or "\r" in cmd:
+        return None
+    parts: List[str] = []
+    cur: List[str] = []
+    quote: Optional[str] = None
+    i, n = 0, len(cmd)
+    while i < n:
+        c = cmd[i]
+        if quote:
+            if c == quote:
+                quote = None
+            elif c in _BAD_IN_QUOTES:
+                return None
+            cur.append(c)
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c
+            cur.append(c)
+            i += 1
+            continue
+        if not cur or cur[-1] in " \t":
+            r = next((r for r in _SAFE_REDIRECTS if cmd.startswith(r, i)), None)
+            if r and (i + len(r) == n or cmd[i + len(r)] in " \t;|&"):
+                i += len(r)
+                continue
+        if cmd.startswith("|&", i):
+            return None
+        op = "&&" if cmd.startswith("&&", i) else "||" if cmd.startswith("||", i) else c if c in ";|" else ""
+        if op:
+            part = "".join(cur).strip(" \t")
+            if not part or not _plain(part):
+                return None
+            parts.append(part)
+            cur = []
+            i += len(op)
+            continue
+        if c in _BAD_OUTSIDE:
+            return None
+        cur.append(c)
+        i += 1
+    if quote:
+        return None
+    part = "".join(cur).strip(" \t")
+    if not part or not _plain(part):
+        return None
+    parts.append(part)
+    return parts if len(parts) <= MAX_PARTS else None
+
+
+def allowlisted_compound(cmd: str, allowlist: List[str], cwd: str) -> Tuple[bool, int]:
+    """Skip only if every part is allowlisted and every cd stays inside cwd."""
+    parts = split_compound(cmd)
+    if not parts or not all(allowlisted(p, allowlist) for p in parts):
+        return False, 0
+    root = os.path.realpath(cwd) if cwd else ""
+    current = root
+    for p in parts:
+        try:
+            words = shlex.split(p)
+        except ValueError:
+            return False, 0
+        if words[0] != "cd":
+            continue
+        if not root or len(words) != 2 or words[1].startswith("-") or os.environ.get("CDPATH"):
+            return False, 0
+        if ".." in words[1].split("/"):  # shells resolve .. logically, before symlinks
+            return False, 0
+        current = os.path.realpath(os.path.join(current, words[1]))
+        if current != root and not current.startswith(root.rstrip(os.sep) + os.sep):
+            return False, 0
+    return True, len(parts)
+
+
 def decide(answers: Dict[str, Dict[str, Any]], t: Dict[str, Any]) -> Optional[Tuple[str, str]]:
     safe, risk = answers["safe"], answers["risk"]
     if safe["value"] < t["deny_safe_below"] and safe["confidence"] >= t["min_confidence"]:
@@ -107,9 +200,15 @@ def run(event: Dict[str, Any], judge_fn=judge) -> Optional[Dict[str, Any]]:
     t = thresholds.load()["gate"]
     ti = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
     base = dict({"tool": tool}, **_head(tool, ti))
-    if tool == "Bash" and allowlisted(str(ti.get("command", "")), t["allowlist"]):
-        jevlog.append("gate", dict(base, decision="skipped"))
-        return None
+    if tool == "Bash":
+        cmd = str(ti.get("command", ""))
+        ok = allowlisted(cmd, t["allowlist"])
+        ok, n = ok and _plain(cmd), 1
+        if not ok and t.get("compound", True):
+            ok, n = allowlisted_compound(cmd, t["allowlist"], str(event.get("cwd") or ""))
+        if ok:
+            jevlog.append("gate", dict(base, decision="skipped", **({"parts": n} if n > 1 else {})))
+            return None
     ssd = os.environ.get("JEV_SSD_ROOT", "")
     if ssd and not os.path.isdir(ssd):
         jevlog.append("gate", dict(base, decision="none", error="ssd_missing"))

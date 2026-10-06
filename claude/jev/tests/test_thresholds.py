@@ -136,6 +136,12 @@ class ThresholdsTest(unittest.TestCase):
         self.assertIsNone(thresholds.validate("interrogate.min_confidence", 0.8))
         self.assertIsNotNone(thresholds.validate("interrogate.min_confidence", 1.5))
 
+    def test_gate_compound_default_and_validation(self):
+        self.assertIs(thresholds.DEFAULTS["gate"]["compound"], True)
+        self.assertIsNone(thresholds.validate("gate.compound", False))
+        self.assertIsNotNone(thresholds.validate("gate.compound", "no"))
+        self.assertIsNotNone(thresholds.validate("gate.compound", 0))
+
 
 class HandoffThresholdsTest(unittest.TestCase):
     def test_defaults(self):
