@@ -40,7 +40,7 @@
 
 | ID | KPI | Definition | Healthy | Source | Cadence | Status | If out of range |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| REV-M1 | Fix rounds after review | Median review rounds per branch (1 = passed first review) | ≤ 2 (at most one fix round) | `review` | Per task, trended monthly | live | Above: findings are caught too late. Tighten the task's done criteria in the plan ([review-model.md](review-model.md)). |
+| REV-M1 | Review rounds per branch | Median review rounds per branch (1 = passed first review) | ≤ 2 (at most one fix round) | `review` | Per task, trended monthly | live | Above: findings are caught too late. Tighten the task's done criteria in the plan ([review-model.md](review-model.md)). |
 
 ## Memory
 
