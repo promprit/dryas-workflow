@@ -231,7 +231,37 @@ class TuneTest(unittest.TestCase):
                                 {"task": "c", "branch": "c", "tasks_merged": 2, "cost_usd": 4.0}])
         d = tune.build()["delivery"]
         self.assertAlmostEqual(d["cost_per_task"], 2.0)
-        self.assertEqual((d["merges"], d["merges_without_cost"]), (3, 2))
+        self.assertEqual((d["merges"], d["merges_without_cost"]), (3, 0))  # all three have a valid cost
+
+    def test_merges_without_cost_counts_missing_cost_only(self):
+        write(self.d, "merge", [{"task": "a", "tasks_merged": 0, "cost_usd": 5.0},
+                                {"task": "b", "tasks_merged": 2},
+                                {"task": "c", "tasks_merged": 1, "cost_usd": 2.0}])
+        d = tune.build()["delivery"]
+        self.assertEqual(d["merges_without_cost"], 1)
+        self.assertAlmostEqual(d["cost_per_task"], 2.0)
+
+    def test_judge_latency_median(self):
+        write(self.d, "gate", [{"decision": "none", "latency_ms": 100}, {"decision": "none", "latency_ms": 300},
+                               {"decision": "none", "latency_ms": 900}, {"decision": "skipped"},
+                               {"decision": "none", "latency_ms": True}])
+        rep = tune.build()
+        self.assertEqual(rep["judge_latency_ms_median"], 300)
+        self.assertIn("- Judge latency median (healthy < 500 ms): 300 ms", tune.render(rep, []))
+
+    def test_judge_latency_ignores_non_finite(self):
+        with open(os.path.join(self.d, "gate.jsonl"), "w") as f:
+            f.write('{"decision": "none", "latency_ms": NaN}\n{"decision": "none", "latency_ms": Infinity}\n'
+                    '{"decision": "none", "latency_ms": 200}\n{"decision": "none", "latency_ms": 400}\n'
+                    '{"decision": "none", "latency_ms": NaN}\n')
+        rep = tune.build()
+        self.assertEqual(rep["judge_latency_ms_median"], 300)
+        self.assertIn("- Judge latency median (healthy < 500 ms): 300 ms", tune.render(rep, []))
+
+    def test_judge_latency_empty_renders_na(self):
+        rep = tune.build()
+        self.assertIsNone(rep["judge_latency_ms_median"])
+        self.assertIn("- Judge latency median (healthy < 500 ms): n/a", tune.render(rep, []))
 
     def test_canonical_dotted_unknown_returns_question_part(self):
         self.assertEqual(tune.canonical("needs_swarm.t3"), "needs_swarm")

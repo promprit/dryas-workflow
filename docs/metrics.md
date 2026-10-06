@@ -16,7 +16,7 @@
 
 | ID | KPI | Definition | Healthy | Source | Cadence | Status | If out of range |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GOV-M1 | Judged share | Tool calls the judge reviewed ÷ all tool calls | 10–30% (target ~20%; `/tune` acts above 30% once there are ≥100 tool calls; the 10% floor is a starting value) | `gate`, `calls` | Weekly | live | Above: `/tune` proposes allowlisting heads that were judged often and never denied. Below: check the allowlist has not grown too broad. If a compound-command skip looks wrong, set `gate.compound` to false and report the command. |
+| GOV-M1 | Judge latency | Median latency of judged tool calls (gate records with latency_ms). Judged share (judged ÷ all tool calls) is reported as a trend only. | < 500 ms | `gate` | Weekly | live | Check the judge provider. If judged share also rose, review the allowlist (`/tune` proposes additions above 30% judged share). If a compound-command skip looks wrong, set `gate.compound` to false and report the command. |
 | GOV-M2 | Judge override rate | Orchestrator overrides ÷ judge answers, across questions with ≥20 calls (`/tune` also shows each question's rate) | 5–25% | `mcp`, `overrides` | Weekly | live | Above 25%: `/tune` proposes raising `dispatch.min_confidence`. Below 5% with most answers under threshold: proposes lowering it. |
 | GOV-M3 | Gate ask + deny share | (`ask` + `deny`) ÷ all gate decisions | Trend only | `gate` | Weekly | live | A sudden jump: read the denied commands before changing anything. |
 | GOV-M4 | Scope-lock denials per task | Edits denied by the scope lock ÷ tasks dispatched | 0–1 | `scope` | Per task | live | Repeated denials on one task mean its Scope globs in the plan are wrong. Fix the plan, not the lock. Read scope.jsonl to see which tasks were active at each denial; /tune reports the total. |
@@ -33,7 +33,7 @@
 | ID | KPI | Definition | Healthy | Source | Cadence | Status | If out of range |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | EXE-M1 | Swarm vs plain token ratio | Mean swarm tokens ÷ plain tokens over ≥3 comparisons | ≤ 3.0× | `compare` | Weekly | live | Above: `/tune` proposes raising `route.swarm_min` so swarms run only when the judge is more sure. |
-| EXE-M2 | Judge spend share | Judge spend ÷ Claude-side spend | Under 5% | `gate`, `route`, `mcp`, `compact` + `/cost` | Weekly | live (manual) | Above: the judge is asked too often. Check GOV-M1 first. |
+| EXE-M2 | Judge spend share | Judge spend ÷ Claude-side spend | Under 5% | `gate`, `route`, `mcp`, `compact` + `/cost` | Weekly | live (manual) | Above: the judge is asked too often. Check the judged share trend in /tune first. |
 | EXE-M3 | Cost per merged task | Claude-side spend attributed to a task ÷ tasks merged | Baseline first, then trend | `merge` | Monthly | partial: cost_usd is entered by hand; /tune reports how many merges lack it | A rising trend with a flat ESC-M1 points to plans that are too coarse. |
 
 ## Review
