@@ -209,6 +209,8 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "judged_share": round(len(judged) / len(calls), 4) if calls else 0.0,
         "judge_latency_ms_median": statistics.median(lat) if (lat := [r["latency_ms"] for r in gate if isinstance(r.get("latency_ms"), (int, float)) and not isinstance(r.get("latency_ms"), bool) and math.isfinite(r["latency_ms"])]) else None,
         "gate_decisions": dict(Counter(r.get("decision") for r in gate)),
+        "gate_skips_by_via": {v: sum(1 for r in gate if r.get("decision") == "skipped" and (r.get("via") or "legacy") == v)
+                              for v in ("allowlist", "compound", "prescreen", "legacy")},
         "route_calls": len(route),
         "route_injected": sum(1 for r in route if r.get("injected")),
         "questions": questions,
@@ -293,6 +295,7 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
              "- Tool calls: %d; Jev judged %d (%.0f%%, target ~20%%)" % (rep["tool_calls"], rep["gate_judged"], rep["judged_share"] * 100),
              "- Judge latency median (healthy < 500 ms): %s" % ("n/a" if rep["judge_latency_ms_median"] is None else "%d ms" % rep["judge_latency_ms_median"]),
              "- Gate decisions: %s" % json.dumps(rep["gate_decisions"]),
+             "- gate skips: allowlist %(allowlist)d, compound %(compound)d, prescreen %(prescreen)d, legacy %(legacy)d" % rep["gate_skips_by_via"],
              "- Route: %d calls, %d injected" % (rep["route_calls"], rep["route_injected"]),
              "- Escalations sonnet->opus: %d %s" % (rep["opus_escalations"]["count"], json.dumps(rep["opus_escalations"]["reasons"])),
              "- Fable dispatches (opus->fable only): %d %s" % (rep["fable"]["count"], json.dumps(rep["fable"]["reasons"])),

@@ -21,6 +21,14 @@ class TuneTest(unittest.TestCase):
         os.environ["JEV_LOG_DIR"] = self.d
         os.environ["JEV_THRESHOLDS"] = os.path.join(self.d, "thresholds.json")
 
+    def test_gate_skips_by_via(self):
+        sk = lambda **k: dict({"tool": "Bash", "decision": "skipped", "head": "ls"}, **k)
+        write(self.d, "gate", [sk(via="allowlist")] * 3 + [sk(via="compound")] * 2 + [sk(via="prescreen")]
+              + [sk()] * 4 + [{"tool": "Bash", "decision": "none", "via": "prescreen", "latency_ms": 5}])
+        r = tune.build()
+        self.assertEqual(r["gate_skips_by_via"], {"allowlist": 3, "compound": 2, "prescreen": 1, "legacy": 4})
+        self.assertIn("gate skips: allowlist 3, compound 2, prescreen 1, legacy 4", tune.render(r, []))
+
     def test_report_numbers(self):
         write(self.d, "calls", [{"tool": "Bash"}] * 10)
         write(self.d, "gate", [{"tool": "Bash", "decision": "skipped", "head": "ls"}] * 8
