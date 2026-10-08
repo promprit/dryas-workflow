@@ -115,6 +115,10 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 2. **Jev gate** (`gate.py`), on Bash/Write/Edit.
    - **What it sends:** the redacted command, or the file path plus byte and line counts. Never file contents.
    - **Allowlist bypass:** plain commands such as `ls`, `cat`, `git status/diff/log/show` and `pnpm/npm test` skip Jev, but only when they contain no `; & | > < $( \``, newline or `--output`. The target is for Jev to judge about 20% of tool calls.
+   - **Compound bypass:** a command made only of allowlisted parts skips Jev too.
+   - **Prescreen** (`prescreen.py`, `risky(cmd)`): a third local skip route. It scans the whole Bash command, including `$(...)`, loops and heredocs, for risky tokens: deleting, moving or copying files, permission changes, network tools, databases, interpreters (python, node, shells, including versioned ones such as `python3.12`), scripts run by a path (`./x.sh`, `/tmp/x.sh`), except programs in the standard system bin folders, deploy and database CLIs (prisma, firebase, wrangler, aws, gcloud and similar), destructive git subcommands and `git -c`, package installs, `sed -i`, `find -delete/-exec`, and writing redirects (other than `/dev/null`). No risky token means Jev is not called. A risky token, or any error, sends the command to Jev as before. On a replay of about 10k real commands it skipped about 35% (allowlist and compound alone: about 4%) and flagged all 17 past ask/deny commands it could match.
+   - **A skip is not an allow.** The command falls back to Claude Code's normal permissions. Turn the prescreen off with `gate.prescreen: false` in `thresholds.json` (default true). The pattern list lives in code, so `/tune` cannot loosen it.
+   - **Skip log:** skip records in `gate.jsonl` carry `via` (`allowlist`, `compound` or `prescreen`). `/tune` shows `gate_skips_by_via`.
    - **Deny** when p(safe) < 0.2 at confidence ≥ 0.7.
    - **Ask** when the risk is "destructive" at confidence ≥ 0.7.
    - Otherwise no decision, so normal permissions apply. The gate **never auto-allows**.
@@ -159,7 +163,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
   | Area | Setting |
   |---|---|
-  | gate | deny_safe_below 0.2, min_confidence 0.7, ask_risk destructive, allowlist, compound true |
+  | gate | deny_safe_below 0.2, min_confidence 0.7, ask_risk destructive, allowlist, compound true, prescreen true |
   | route | 0.7 (swarm needs max(swarm_min 0.7, min_confidence); `/tune` proposes raising swarm_min when swarm costs >3x plain over ≥3 comparisons) |
   | dispatch | 0.7 |
   | escalation | executor_confidence_below 0.5, sonnet_failures_before_opus 2, opus_failures_before_fable 1 |

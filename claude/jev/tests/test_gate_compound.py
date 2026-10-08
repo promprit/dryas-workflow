@@ -99,7 +99,7 @@ class RunTest(unittest.TestCase):
     def thresholds(self, **gate_cfg):
         p = os.path.join(self.tmp, "th.json")
         with open(p, "w") as f:
-            json.dump({"gate": dict({"allowlist": AL}, **gate_cfg)}, f)
+            json.dump({"gate": dict({"allowlist": AL, "prescreen": False}, **gate_cfg)}, f)
         os.environ["JEV_THRESHOLDS"] = p
 
     def judge(self, state, questions):

@@ -2,7 +2,8 @@
 """Chain stage on PreToolUse: Jev judges Bash/Write/Edit. Can deny or ask; never allows.
 
 Sends the (redacted) command, or file path + byte/line counts. Never file contents.
-Allowlisted plain shell reads skip Jev. Every failure means no decision.
+Allowlisted plain shell reads, allowlisted compounds and commands the local prescreen finds
+not risky skip Jev. Every failure means no decision.
 """
 import json
 import os
@@ -16,6 +17,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
 import thresholds
 from jev_client import JevUnavailable, judge
+
+try:
+    import prescreen
+except Exception:  # broken or missing prescreen: every command goes to the judge
+    prescreen = None
 
 GATE_TOOLS = {"Bash", "Write", "Edit"}
 DEFAULT_STATE = ("dev workspace on external SSD; prod credentials NOT present; "
@@ -193,6 +199,13 @@ def _head(tool: str, ti: Dict[str, Any]) -> Dict[str, Any]:
     return {"head": "other"}
 
 
+def _risky(cmd: str) -> bool:
+    try:
+        return prescreen is None or prescreen.risky(cmd)
+    except Exception:
+        return True
+
+
 def run(event: Dict[str, Any], judge_fn=judge) -> Optional[Dict[str, Any]]:
     tool = event.get("tool_name")
     if tool not in GATE_TOOLS:
@@ -202,12 +215,15 @@ def run(event: Dict[str, Any], judge_fn=judge) -> Optional[Dict[str, Any]]:
     base = dict({"tool": tool}, **_head(tool, ti))
     if tool == "Bash":
         cmd = str(ti.get("command", ""))
-        ok = allowlisted(cmd, t["allowlist"])
-        ok, n = ok and _plain(cmd), 1
+        ok = allowlisted(cmd, t["allowlist"]) and _plain(cmd)
+        via, extra = "allowlist", {}
         if not ok and t.get("compound", True):
             ok, n = allowlisted_compound(cmd, t["allowlist"], str(event.get("cwd") or ""))
+            via, extra = "compound", {"parts": n}
+        if not ok and t.get("prescreen", True) and not _risky(cmd):
+            ok, via, extra = True, "prescreen", {}
         if ok:
-            jevlog.append("gate", dict(base, decision="skipped", **({"parts": n} if n > 1 else {})))
+            jevlog.append("gate", dict(base, decision="skipped", via=via, **extra))
             return None
     ssd = os.environ.get("JEV_SSD_ROOT", "")
     if ssd and not os.path.isdir(ssd):
