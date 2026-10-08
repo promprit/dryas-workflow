@@ -287,6 +287,122 @@ class TuneTest(unittest.TestCase):
                "swarm_vs_plain": None, "compare_count": 0}
         self.assertEqual(tune.proposals(rep, th), [])
 
+    def _haiku_logs(self, started, climbed, skip_ups=0, reason="missed edge case"):
+        disp = [{"task": "w:%d" % i, "tier": "haiku", "role": "coder", "attempt": 1} for i in range(started)]
+        disp += [{"task": "w:%d" % i, "tier": "sonnet", "role": "coder", "attempt": 2} for i in range(climbed)]
+        disp += [{"task": "s:%d" % i, "tier": "sonnet", "role": "coder", "attempt": 1} for i in range(skip_ups)]
+        esc = [{"task": "w:%d" % i, "reason": reason, "decided_by": "opus",
+                "from_model": "haiku", "to_model": "sonnet"} for i in range(climbed)]
+        esc += [{"task": "s:%d" % i, "reason": "skip-up: multi-file", "decided_by": "jev",
+                 "from_model": "haiku", "to_model": "sonnet"} for i in range(skip_ups)]
+        write(self.d, "dispatch", disp)
+        write(self.d, "escalations", esc)
+
+    def test_haiku_climb_rate_excludes_skip_ups(self):
+        self._haiku_logs(started=4, climbed=1, skip_ups=2)
+        d = tune.build()["delivery"]
+        self.assertEqual(d["tasks_dispatched"], 6)
+        self.assertEqual(d["haiku_tasks"], 4)
+        self.assertAlmostEqual(d["haiku_share"], round(4 / 6, 4))
+        self.assertAlmostEqual(d["haiku_climb_rate"], 0.25)
+        self.assertEqual(d["haiku_climb_reasons"], {"missed edge case": 1})
+
+    def test_haiku_climb_counts_task_once(self):
+        write(self.d, "dispatch", [{"task": "w:1", "tier": "haiku", "role": "coder", "attempt": 1},
+                                   {"task": "w:2", "tier": "haiku", "role": "coder", "attempt": 1}])
+        write(self.d, "escalations", [{"task": "w:1", "reason": "a", "from_model": "haiku", "to_model": "sonnet"},
+                                      {"task": "w:1", "reason": "a", "from_model": "haiku", "to_model": "sonnet"}])
+        self.assertAlmostEqual(tune.build()["delivery"]["haiku_climb_rate"], 0.5)
+
+    def test_haiku_metrics_na_without_haiku(self):
+        write(self.d, "dispatch", [{"task": "s:1", "tier": "sonnet", "role": "coder", "attempt": 1}])
+        rep = tune.build()
+        d = rep["delivery"]
+        self.assertEqual((d["haiku_tasks"], d["haiku_climb_rate"]), (0, None))
+        self.assertEqual(d["haiku_share"], 0.0)
+        out = tune.render(rep, [])
+        self.assertIn("Haiku->Sonnet climb rate", out)
+        self.assertIn("n/a", out.split("Haiku->Sonnet climb rate", 1)[1].splitlines()[0])
+
+    def test_haiku_metrics_empty_logs(self):
+        d = tune.build()["delivery"]
+        self.assertEqual((d["haiku_tasks"], d["haiku_share"], d["haiku_climb_rate"]), (0, None, None))
+
+    def _haiku_props(self):
+        return [p for p in tune.proposals(tune.build(), thresholds.load()) if p["key"] == "dispatch.haiku_default"]
+
+    def test_haiku_proposal_fires_above_max(self):
+        self._haiku_logs(started=25, climbed=9)
+        p = self._haiku_props()
+        self.assertEqual(len(p), 1)
+        self.assertEqual((p[0]["old"], p[0]["new"]), (True, False))
+        self.assertIn("missed edge case", p[0]["why"])
+
+    def test_haiku_proposal_not_at_max(self):
+        self._haiku_logs(started=20, climbed=7)
+        self.assertEqual(self._haiku_props(), [])
+
+    def test_haiku_proposal_needs_ten_tasks(self):
+        self._haiku_logs(started=9, climbed=9)
+        self.assertEqual(self._haiku_props(), [])
+
+    def test_haiku_proposal_not_repeated_when_off(self):
+        with open(os.environ["JEV_THRESHOLDS"], "w") as f:
+            json.dump({"dispatch": {"haiku_default": False}}, f)
+        self._haiku_logs(started=10, climbed=10)
+        self.assertEqual(self._haiku_props(), [])
+
+    def test_needs_sonnet_canonical(self):
+        for raw in ("needs_sonnet.3", "needs_sonnet.worktree-x:3", "needs_sonnet_t2", "t4_needs_sonnet"):
+            self.assertEqual(tune.canonical(raw), "needs_sonnet", raw)
+
+    def test_haiku_climb_reasons_once_per_task(self):
+        write(self.d, "dispatch", [{"task": "w:1", "tier": "haiku", "role": "coder", "attempt": 1}])
+        write(self.d, "escalations", [{"task": "w:1", "reason": "a", "from_model": "haiku", "to_model": "sonnet"},
+                                      {"task": "w:1", "reason": "b", "from_model": "haiku", "to_model": "sonnet"}])
+        d = tune.build()["delivery"]
+        self.assertEqual(d["haiku_climb_reasons"], {"b": 1})
+        self.assertAlmostEqual(d["haiku_climb_rate"], 1.0)
+
+    def test_climb_rate_leaves_out_haiku_finished_tasks(self):
+        write(self.d, "dispatch", [{"task": "h1", "tier": "haiku", "role": "coder", "attempt": 1},
+                                   {"task": "h2", "tier": "haiku", "role": "coder", "attempt": 1},
+                                   {"task": "h2", "tier": "sonnet", "role": "coder", "attempt": 2},
+                                   {"task": "s1", "tier": "sonnet", "role": "coder", "attempt": 1}])
+        write(self.d, "escalations", [{"task": "h2", "reason": "x", "from_model": "haiku", "to_model": "sonnet"},
+                                      {"task": "s1", "reason": "y", "from_model": "sonnet", "to_model": "opus"}])
+        d = tune.build()["delivery"]
+        self.assertEqual(d["tasks_dispatched"], 3)
+        self.assertAlmostEqual(d["climb_rate"], 0.5)
+
+    def test_climb_rate_none_when_haiku_finished_everything(self):
+        write(self.d, "dispatch", [{"task": "h1", "tier": "haiku", "role": "coder", "attempt": 1}])
+        self.assertIsNone(tune.build()["delivery"]["climb_rate"])
+
+    def test_haiku_proposal_reads_old_value_and_says_history(self):
+        disp = [{"task": "w:%d" % i, "tier": "haiku", "role": "coder", "attempt": 1} for i in range(10)]
+        esc = [{"task": "w:%d" % i, "reason": "r", "from_model": "haiku", "to_model": "sonnet"} for i in range(5)]
+        write(self.d, "dispatch", disp)
+        write(self.d, "escalations", esc)
+        p = [x for x in tune.proposals(tune.build(), thresholds.load()) if x["key"] == "dispatch.haiku_default"][0]
+        self.assertIs(p["old"], True)
+        self.assertIn("all logged history", p["why"])
+
+    def test_climb_rate_denominator_from_dispatch_log(self):
+        # h2 reached Sonnet (attempt-2 sonnet dispatch) but its haiku->sonnet record is missing
+        write(self.d, "dispatch", [{"task": "h1", "tier": "haiku", "role": "coder", "attempt": 1},
+                                   {"task": "h2", "tier": "haiku", "role": "coder", "attempt": 1},
+                                   {"task": "h2", "tier": "sonnet", "role": "coder", "attempt": 2}])
+        write(self.d, "escalations", [{"task": "h2", "reason": "y", "from_model": "sonnet", "to_model": "opus"}])
+        d = tune.build()["delivery"]
+        self.assertAlmostEqual(d["climb_rate"], 1.0)        # 1 climb over h2; h1 never left Haiku
+        self.assertAlmostEqual(d["haiku_climb_rate"], 0.0)  # ESC-M3 still counts logged climbs only
+
+    def test_render_hides_reasons_without_haiku(self):
+        rep = tune.build()
+        line = [l for l in tune.render(rep, []).splitlines() if "Haiku->Sonnet climb rate" in l][0]
+        self.assertTrue(line.endswith("n/a"), line)
+
 
 if __name__ == "__main__":
     unittest.main()

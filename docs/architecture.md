@@ -22,8 +22,8 @@ Dryas has five layers and one loop. The layers say *what must exist*; the loop s
 | --- | --- | --- | --- |
 | **Memory** | Carry outcomes across sessions so the same mistake is not paid for twice. | [memory-model.md](memory-model.md) | Ruflo memory, namespaced per repo |
 | **Governance** | Keep decisions with the right party: humans for design and outward actions, a cheap judge for narrow questions, a lock for file scope. | [governance.md](governance.md) | Jev gate and judge, scope lock hook, approval rules |
-| **Execution** | Turn an approved design into small, verifiable tasks done by cheap agents that cannot collide. | [execution-model.md](execution-model.md) | `/orchestrate`, `executor` agent on Sonnet, git worktrees |
-| **Escalation** | Climb to a stronger model only on evidence of failure, with the reason on record. | [escalation-model.md](escalation-model.md) | Sonnet → Opus → Fable, `log_escalation` |
+| **Execution** | Turn an approved design into small, verifiable tasks done by cheap agents that cannot collide. | [execution-model.md](execution-model.md) | `/orchestrate`, `executor` agent (Haiku first; Sonnet default for reviews), git worktrees |
+| **Escalation** | Climb to a stronger model only on evidence of failure, with the reason on record. | [escalation-model.md](escalation-model.md) | Haiku → Sonnet → Opus → Fable, `log_escalation` |
 | **Review** | Prove the work before it merges, and keep shipping a human act. | [review-model.md](review-model.md) | `/wreview`, verification skill, `/interrogate`, `/commit` |
 
 ## The loop

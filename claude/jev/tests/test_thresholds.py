@@ -142,6 +142,39 @@ class ThresholdsTest(unittest.TestCase):
         self.assertIsNotNone(thresholds.validate("gate.compound", "no"))
         self.assertIsNotNone(thresholds.validate("gate.compound", 0))
 
+    def test_haiku_defaults(self):
+        t = thresholds.load()
+        self.assertEqual(t["escalation"]["haiku_failures_before_sonnet"], 1)
+        self.assertEqual(t["escalation"]["haiku_climb_max"], 0.35)
+        self.assertIs(t["dispatch"]["haiku_default"], True)
+        self.assertEqual(t["escalation"]["sonnet_failures_before_opus"], 2)
+        self.assertEqual(t["escalation"]["opus_failures_before_fable"], 1)
+
+    def test_failures_before_keys_range(self):
+        for key in ("escalation.haiku_failures_before_sonnet",
+                    "escalation.sonnet_failures_before_opus",
+                    "escalation.opus_failures_before_fable"):
+            self.assertIsNone(thresholds.validate(key, 1), key)
+            self.assertIsNone(thresholds.validate(key, 5), key)
+            self.assertIsNotNone(thresholds.validate(key, 0), key)
+            self.assertIsNotNone(thresholds.validate(key, 6), key)
+            self.assertIsNotNone(thresholds.validate(key, 1.5), key)
+            self.assertIsNotNone(thresholds.validate(key, True), key)
+
+    def test_haiku_climb_max_range(self):
+        self.assertIsNone(thresholds.validate("escalation.haiku_climb_max", 0.5))
+        self.assertIsNone(thresholds.validate("escalation.haiku_climb_max", 0.0))
+        self.assertIsNone(thresholds.validate("escalation.haiku_climb_max", 1.0))
+        self.assertIsNotNone(thresholds.validate("escalation.haiku_climb_max", 1.2))
+        self.assertIsNotNone(thresholds.validate("escalation.haiku_climb_max", -0.1))
+        self.assertIsNotNone(thresholds.validate("escalation.haiku_climb_max", "0.3"))
+
+    def test_haiku_default_must_be_bool(self):
+        self.assertIsNone(thresholds.validate("dispatch.haiku_default", False))
+        self.assertIsNone(thresholds.validate("dispatch.haiku_default", True))
+        self.assertIsNotNone(thresholds.validate("dispatch.haiku_default", 0))
+        self.assertIsNotNone(thresholds.validate("dispatch.haiku_default", "false"))
+
 
 class HandoffThresholdsTest(unittest.TestCase):
     def test_defaults(self):

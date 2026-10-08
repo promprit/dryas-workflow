@@ -26,7 +26,7 @@ TOOLS = [
     },
     {
         "name": "log_escalation",
-        "description": ("Record one escalation step with its reason. Ladder: sonnet -> opus -> fable; fable only after an "
+        "description": ("Record one escalation step with its reason. Ladder: haiku -> sonnet -> opus -> fable; fable only after an "
                         "Opus executor failed the same task. Required for every step."),
         "inputSchema": {"type": "object", "properties": {k: {"type": "string"} for k in ("task", "reason", "decided_by", "from_model", "to_model")},
                         "required": ["task", "reason", "decided_by", "from_model", "to_model"]},

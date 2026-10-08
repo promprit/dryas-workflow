@@ -21,9 +21,10 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         ],
     },
     "route": {"min_confidence": 0.7, "swarm_min": 0.7},
-    "dispatch": {"min_confidence": 0.7},
-    # Ladder: sonnet -> opus -> fable. Fable only after the Opus executor also failed.
-    "escalation": {"executor_confidence_below": 0.5, "sonnet_failures_before_opus": 2, "opus_failures_before_fable": 1},
+    "dispatch": {"min_confidence": 0.7, "haiku_default": True},
+    # Ladder: haiku -> sonnet -> opus -> fable. Fable only after the Opus executor also failed.
+    "escalation": {"executor_confidence_below": 0.5, "haiku_failures_before_sonnet": 1,
+                   "sonnet_failures_before_opus": 2, "opus_failures_before_fable": 1, "haiku_climb_max": 0.35},
     "commit": {"min_confidence": 0.7},
     "interrogate": {"min_confidence": 0.7},
     "compact": {"keep_above": 0.5},
@@ -89,10 +90,13 @@ def validate(dotted: str, value: Any) -> Optional[str]:
     if key == "keep_min" and (value < 0.0 or value > 1.0):
         return f"{dotted} must be a float in [0.0, 1.0]"
 
+    if key == "haiku_climb_max" and (value < 0.0 or value > 1.0):
+        return f"{dotted} must be a float in [0.0, 1.0]"
+
     if key == "warn_pct" and (value < 0.1 or value > 0.95):
         return f"{dotted} must be a float in [0.1, 0.95]"
 
-    if key.endswith("_failures_before_") or key.endswith("_failures_before_opus") or key.endswith("_failures_before_fable"):
+    if re.search(r"_failures_before_(sonnet|opus|fable)$", key):
         if not isinstance(value, int) or value < 1 or value > 5:
             return f"{dotted} must be an int in [1, 5]"
 

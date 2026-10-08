@@ -68,7 +68,7 @@ def _steps(esc: List[Dict[str, Any]], to_model: str, from_model: Optional[str] =
     return {"count": len(hits), "reasons": dict(Counter(str(r.get("reason")) for r in hits))}
 
 
-CANONICAL = ("executor", "specific", "failing_test_exists", "needs_opus", "needs_stronger_model",
+CANONICAL = ("executor", "specific", "failing_test_exists", "needs_opus", "needs_sonnet", "needs_stronger_model",
              "done", "risk", "safe_to_commit", "needs_interrogate")
 _ALIASES = {"failing_tests_exist": "failing_test_exists", "failing_test": "failing_test_exists"}
 
@@ -107,10 +107,25 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
     dispatch = [r for r in dispatch if isinstance(r, dict)]
     review = [r for r in review if isinstance(r, dict)]
     merge = [r for r in merge if isinstance(r, dict) and r.get("task") is not None]
-    tasks = {str(r["task"]) for r in dispatch if r.get("task") is not None and _int(r.get("attempt")) == 1}
-    n = len(tasks)
+    first_tier: Dict[str, Any] = {}
+    for r in dispatch:
+        if r.get("task") is not None and _int(r.get("attempt")) == 1:
+            first_tier.setdefault(str(r["task"]), r.get("tier"))
+    n = len(first_tier)
     denials = sum(1 for r in scope if isinstance(r, dict))
     climbs = _steps(esc, "opus", "sonnet")["count"]
+    # ESC-M3: Haiku-started = attempt-1 dispatch on haiku. Skip-ups start on sonnet at attempt 1,
+    # so their haiku->sonnet records are not counted.
+    haiku_tasks = {t for t, tier in first_tier.items() if tier == "haiku"}
+    reached_cheap = {str(r["task"]) for r in dispatch if r.get("task") is not None and r.get("tier") != "haiku"}
+    haiku_climbs = [r for r in esc if isinstance(r, dict) and r.get("from_model") == "haiku"
+                    and r.get("to_model") == "sonnet" and str(r.get("task")) in haiku_tasks]
+    last_climb: Dict[str, Dict[str, Any]] = {}
+    for r in haiku_climbs:
+        last_climb[str(r.get("task"))] = r
+    haiku_climbed = set(last_climb)
+    # Tasks that reached the cheap tier: everything except Haiku-started tasks that never got a non-Haiku dispatch.
+    cheap_n = n - len(haiku_tasks - reached_cheap)
     rounds: Dict[str, int] = {}
     for r in review:
         k, v = r.get("task"), _int(r.get("round"))
@@ -123,7 +138,11 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
         "tasks_dispatched": n,
         "scope_denials": denials,
         "scope_per_task": round(denials / n, 4) if n else None,
-        "climb_rate": round(climbs / n, 4) if n else None,
+        "climb_rate": round(climbs / cheap_n, 4) if cheap_n else None,
+        "haiku_tasks": len(haiku_tasks),
+        "haiku_share": round(len(haiku_tasks) / n, 4) if n else None,
+        "haiku_climb_rate": round(len(haiku_climbed) / len(haiku_tasks), 4) if haiku_tasks else None,
+        "haiku_climb_reasons": dict(Counter(str(r.get("reason")) for r in last_climb.values())),
         "review_rounds_median": float(statistics.median(rounds.values())) if rounds else None,
         "merges": len(merge),
         "merges_without_review": sum(1 for r in merge if str(r["task"]) not in reviewed),
@@ -240,6 +259,14 @@ def proposals(rep: Dict[str, Any], th: Dict[str, Dict[str, Any]]) -> List[Dict[s
             out.append({"key": "route.swarm_min", "old": cur, "new": round(min(0.95, cur + 0.1), 2),
                         "why": "Swarm runs used %.1fx the tokens of plain Opus over %d comparisons; route to swarm only when Jev is more sure"
                                % (rep["swarm_vs_plain"], rep["compare_count"])})
+    d = rep.get("delivery") or {}
+    rate, started = d.get("haiku_climb_rate"), d.get("haiku_tasks") or 0
+    if rate is not None and started >= 10 and th["dispatch"]["haiku_default"]:
+        cap = th["escalation"]["haiku_climb_max"]
+        if rate > cap:
+            out.append({"key": "dispatch.haiku_default", "old": th["dispatch"]["haiku_default"], "new": False,
+                        "why": "Haiku->Sonnet climb rate %.0f%% over %d Haiku-started tasks (all logged history) (max %.0f%%); reasons: %s"
+                               % (rate * 100, started, cap * 100, json.dumps(d.get("haiku_climb_reasons") or {}))})
     return [p for p in out if p["new"] != p["old"]]
 
 
@@ -253,6 +280,11 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
         "- Tasks dispatched: %d" % d["tasks_dispatched"],
         "- Scope-lock denials per task (healthy 0-1): %s (%d denials)" % (na(d["scope_per_task"]), d["scope_denials"]),
         "- Sonnet->Opus climb rate (healthy under 20%%): %s" % ("n/a" if d["climb_rate"] is None else "%.0f%%" % (d["climb_rate"] * 100)),
+        "- Haiku share of first dispatches: %s (%d Haiku-started tasks)" % (
+            "n/a" if d["haiku_share"] is None else "%.0f%%" % (d["haiku_share"] * 100), d["haiku_tasks"]),
+        "- Haiku->Sonnet climb rate (healthy at or under escalation.haiku_climb_max): %s" % (
+            "n/a" if d["haiku_climb_rate"] is None
+            else "%.0f%% %s" % (d["haiku_climb_rate"] * 100, json.dumps(d["haiku_climb_reasons"]))),
         "- Median review rounds per branch (healthy <= 2): %s" % na(d["review_rounds_median"], "%.1f"),
         "- Merges without a review (should be 0): %d of %d" % (d["merges_without_review"], d["merges"]),
         "- Cost per merged task: %s (%d of %d merges had no cost)" % (na(d["cost_per_task"], "$%.2f"), d["merges_without_cost"], d["merges"]),

@@ -15,7 +15,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are used as in RFC 2119
 | **Orchestrator** | The main session: brainstorms, plans, dispatches, integrates. |
 | **Executor** | A sub-agent that does exactly one task. |
 | **Judge** | A small model that answers narrow, typed questions with a confidence. |
-| **Tier** | A rung on the escalation ladder (cheap, strong, frontier). |
+| **Tier** | A rung on the escalation ladder (economy, cheap, strong, frontier). |
 | **Loop** | One run of Brainstorm → Plan → Judge → Build → Escalate → Review → Ship, owning one worktree. |
 | **Plan file** | The task list for one loop, stored in the loop's worktree. |
 | **Scope** | The set of file globs a task may edit. |
@@ -133,14 +133,15 @@ governance:
 
 execution:
   orchestrator: opus
-  executor: sonnet
+  executor: haiku
+  review_executor: sonnet
   isolation: worktree
   one_agent_per_worktree: true
   tdd: required
 
 escalation:
-  ladder: [sonnet, opus, fable]
-  climb_after_failures: {sonnet: 2, opus: 1}
+  ladder: [haiku, sonnet, opus, fable]
+  climb_after_failures: {haiku: 1, sonnet: 2, opus: 1}
   climb_below_confidence: 0.5
   root_cause_before_climb: true
   log: required

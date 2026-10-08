@@ -40,15 +40,16 @@ Last updated: 2026-10-05.
 ## 3. Model policy and escalation ladder
 
 - **The orchestrator is Opus, always.** `"model": "opus"` is set in `~/.claude/settings.json`.
-- **Executors run on Sonnet by default.** This comes from `~/.claude/agents/executor.md` (`model: sonnet`).
-- **The ladder is Sonnet → Opus → Fable.**
-  1. A Sonnet executor that fails done-criteria twice, or reports confidence below 0.5, is re-run on **Opus**.
-  2. If Opus solves it, stop. **No Fable.**
-  3. Only if the Opus executor also fails is the task re-run once on **Fable**.
-  4. If Fable fails too, the task goes to you with all three reports.
-  - Jev's per-task `needs_opus` answer can start an executor on Opus directly. Nothing starts a task on Fable directly.
+- **Executors start on Haiku by default.** `/orchestrate` passes `model: haiku`; `~/.claude/agents/executor.md` stays `model: sonnet`, so review dispatches never run on Haiku. Kill switch: `dispatch.haiku_default` (false = every task starts on Sonnet, as before).
+- **The ladder is Haiku → Sonnet → Opus → Fable.**
+  1. A Haiku executor that fails done-criteria `haiku_failures_before_sonnet` times (default once), or reports confidence below 0.5, is re-run on **Sonnet**.
+  2. A Sonnet executor that fails done-criteria twice, or reports confidence below 0.5, is re-run on **Opus**.
+  3. If Opus solves it, stop. **No Fable.**
+  4. Only if the Opus executor also fails is the task re-run once on **Fable**.
+  5. If Fable fails too, the task goes to you with every tier's report.
+  - Jev's per-task `needs_sonnet` answer can start an executor on Sonnet, and `needs_opus` on Opus. Nothing starts a task on Fable directly. A direct start on Opus is logged from sonnet whatever the kill switch says, so ESC-M1 stays comparable.
   - Every escalation step is logged with its reason via the `log_escalation` MCP tool.
-- **Root cause before each climb** (pstack picks). Before Sonnet → Opus and Opus → Fable, the orchestrator runs systematic-debugging on the failing reports. A plan defect is fixed in PLAN.md and re-run on the same model; otherwise the climb carries the root cause in its prompt and its log_escalation reason.
+- **Root cause before each climb** (pstack picks). Before Haiku → Sonnet, Sonnet → Opus and Opus → Fable, the orchestrator runs systematic-debugging on the failing reports. A plan defect is fixed in PLAN.md and re-run on the same model; otherwise the climb carries the root cause in its prompt and its log_escalation reason.
 - **Jev answers narrow typed questions only.** A Jev answer below 0.7 confidence, or flagged to escalate, means Opus decides.
 
 ## 4. How a task flows
@@ -161,8 +162,8 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   |---|---|
   | gate | deny_safe_below 0.2, min_confidence 0.7, ask_risk destructive, allowlist, compound true |
   | route | 0.7 (swarm needs max(swarm_min 0.7, min_confidence); `/tune` proposes raising swarm_min when swarm costs >3x plain over ≥3 comparisons) |
-  | dispatch | 0.7 |
-  | escalation | executor_confidence_below 0.5, sonnet_failures_before_opus 2, opus_failures_before_fable 1 |
+  | dispatch | min_confidence 0.7, haiku_default true |
+  | escalation | executor_confidence_below 0.5, haiku_failures_before_sonnet 1, sonnet_failures_before_opus 2, opus_failures_before_fable 1, haiku_climb_max 0.35 (`/tune` proposes haiku_default false above it over ≥10 Haiku-started tasks) |
   | commit | 0.7 |
   | compact | keep_above 0.5 |
   | handoff | keep_min 0.5 |
