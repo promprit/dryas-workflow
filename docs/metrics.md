@@ -25,8 +25,9 @@
 
 | ID | KPI | Definition | Healthy | Source | Cadence | Status | If out of range |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ESC-M1 | Strong-tier escalation rate | Cheap → strong climbs ÷ tasks dispatched. Codex dispatches count in the denominator but its climbs are not from Sonnet, so mixed use understates the rate. | Under 20% | `escalations`, `dispatch` | Weekly | live: only climbs from Sonnet count | Read the logged reasons. One recurring reason usually points to a plan or prompt defect ([escalation-model.md](escalation-model.md)). |
+| ESC-M1 | Strong-tier escalation rate | Cheap → strong climbs ÷ tasks dispatched. Codex dispatches count in the denominator but its climbs are not from Sonnet, so mixed use understates the rate. With Haiku on, the denominator leaves out tasks Haiku finished without reaching Sonnet, so the rate measures the cheap tier only. | Under 20% | `escalations`, `dispatch` | Weekly | live: only climbs from Sonnet count | Read the logged reasons. One recurring reason usually points to a plan or prompt defect ([escalation-model.md](escalation-model.md)). |
 | ESC-M2 | Frontier dispatches without a strong-tier failure | Escalation records to the frontier tier whose from-tier is not the strong tier. An unlogged dispatch is invisible, so this also relies on every climb being logged | 0 | `escalations` | Weekly | live: `/tune` reports "Fable without a prior Opus step" | Any value above 0 breaks "stop at the first success". Treat it as a compliance finding. |
+| ESC-M3 | Economy-tier climb rate | Haiku → Sonnet climbs ÷ tasks whose attempt-1 dispatch was on Haiku. Skip-ups (Jev `needs_sonnet` before any Haiku attempt) are excluded; each task counts once. | At or under 35% (`escalation.haiku_climb_max`) | `escalations`, `dispatch` | Weekly | live | Read the logged reasons. Above the max over ≥10 Haiku-started tasks, `/tune` proposes `dispatch.haiku_default: false`. The rate covers all logged history, so after switching Haiku back on, expect the proposal to repeat until new Haiku tasks outweigh the old climbs. |
 
 ## Execution and cost
 
@@ -53,6 +54,6 @@ Each record is written once, at the point shown. Records written by the orchestr
 | Record | Fields | Written by | Feeds |
 | --- | --- | --- | --- |
 | `scope` | task, path, decision | scope-lock hook, on every deny | GOV-M4 |
-| `dispatch` | task, tier, role, attempt | orchestrator via `log_dispatch`, every dispatch | GOV-M4, ESC-M1 |
+| `dispatch` | task, tier, role, attempt | orchestrator via `log_dispatch`, every dispatch | GOV-M4, ESC-M1, ESC-M3 |
 | `review` | task, round, critical, important, minor | `/wreview` via `log_review`, every round | REV-M1 |
 | `merge` | task, branch, tasks_merged, cost_usd (optional) | orchestrator via `log_merge`, at merge | EXE-M3 |

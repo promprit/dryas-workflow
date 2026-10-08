@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Run a multi-step coding task as Opus orchestrator with Sonnet executors, Jev routing/gates, Ruflo memory and Superpowers process. Use for /orchestrate or any multi-file task. Not for single-file fixes.
+description: Run a multi-step coding task as Opus orchestrator with Haiku-first executors (Sonnet, Opus, Fable on escalation), Jev routing/gates, Ruflo memory and Superpowers process. Use for /orchestrate or any multi-file task. Not for single-file fixes.
 ---
 
 # Orchestrate
@@ -38,6 +38,7 @@ Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project fold
 - `specific` noul: "Is this task specific enough for an executor to finish without asking questions?"
 - `failing_test_exists` noul: "Does a failing test for this task already exist?"
 - `needs_opus` noul: "Does this task need a model stronger than Sonnet (cross-cutting refactor, or concurrency- or security-sensitive code)?"
+- `needs_sonnet` noul (only when `dispatch.haiku_default` is true): "Does this task need a model stronger than Haiku (touches more than one file, non-mechanical logic, or test design beyond a single assertion)?"
 
 Exact shape (criteria for `choice` is a map option -> description; `noul` criteria is {"true": ..., "false": ...}; `score` criteria is an ordered list of 2–10 level descriptions):
 ```json
@@ -48,8 +49,10 @@ Exact shape (criteria for `choice` is a map option -> description; `noul` criter
   "specific": {"type": "noul", "instructions": "Is the task in `task_section` specific enough for an executor to finish without asking questions?",
                "criteria": {"true": "Goal, scope and done-criteria are concrete", "false": "Something essential is missing or ambiguous"}},
   "failing_test_exists": {"type": "noul", "instructions": "Does a failing test for the task in `task_section` already exist (see `test_file_exists`, `last_test_run_tail`)?"},
-  "needs_opus": {"type": "noul", "instructions": "Does the task in `task_section` need a model stronger than Sonnet (cross-cutting refactor, concurrency- or security-sensitive code)?"}}}
+  "needs_opus": {"type": "noul", "instructions": "Does the task in `task_section` need a model stronger than Sonnet (cross-cutting refactor, concurrency- or security-sensitive code)?"},
+  "needs_sonnet": {"type": "noul", "instructions": "Does the task in `task_section` need a model stronger than Haiku (touches more than one file, non-mechanical logic, or test design beyond a single assertion)?"}}}
 ```
+Omit `needs_sonnet` from the call when `dispatch.haiku_default` is false.
 Question names are never sent to Jev, so each `instructions` must be self-contained and reference state by backticked field names.
 
 Run tests with paths relative to the worktree when possible; if the project's venv lives only in the main checkout, use its absolute path.
@@ -63,9 +66,14 @@ If `failing_test_exists` is not confidently true: dispatch a **tester** executor
 1. Initialise the Ruflo swarm once (swarm_init from ruflo-tools.md). Call it with topology "hierarchical" (the plugin default is hierarchical-mesh).
 2. Write `.orchestrate/active.json` = `{"active": [<task ids being dispatched now>]}` before dispatching; this arms the scope lock. On EVERY exit path — success, failure handed to the user (§7.3/§7.4), user abort, or any error — delete `.orchestrate/active.json` before stopping; the scope lock stays armed while it exists.
 3. Give each executor ONLY its section: `"{{PY}}" -X utf8 "{{CD}}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
-4. Dispatch with the Agent tool, `subagent_type: executor` (model sonnet from its frontmatter). Independent tasks go out in one message, in parallel.
-5. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus` on that dispatch, after `mcp__jev__log_escalation` (from_model sonnet, to_model opus). Never dispatch Fable here: Fable is only reached through §7.
-6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__jev__log_dispatch` with task ("<worktree branch>:<PLAN.md task id>", e.g. worktree-feat:3, so ids stay unique across runs), tier (sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
+4. Dispatch with the Agent tool, `subagent_type: executor`. Pick the start tier per task, first match wins:
+   1. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus`, after `mcp__jev__log_escalation` (from_model sonnet, to_model opus, whatever `dispatch.haiku_default` says, so ESC-M1 counts it the same way as before Haiku).
+   2. `dispatch.haiku_default` false → no `model` (Sonnet from the agent's frontmatter). Do not ask `needs_sonnet`.
+   3. `needs_sonnet` true at confidence ≥ threshold, or your own judgment → no `model` (Sonnet), after `mcp__jev__log_escalation` (from_model haiku, to_model sonnet, reason "skip-up: <why>").
+   4. Otherwise → `model: haiku`.
+   Independent tasks go out in one message, in parallel. Never dispatch Fable here: Fable is only reached through §7. Review, interrogate and cleanup dispatches (§7b) never use Haiku: they start on Sonnet (no `model`) and log no skip-up.
+5. Every `log_dispatch` and `log_escalation` call for a task uses the same task id: "<worktree branch>:<PLAN.md task id>", e.g. worktree-feat:3. `/tune` joins the two logs on it.
+6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__jev__log_dispatch` with task (the §5.5 id), tier (haiku, sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
 
 ## 6. On return
 For each report, one `jev_judge` call with state `{task_section, executor_report}`:
@@ -77,14 +85,15 @@ Note: `risk` is a score question whose criteria is the list ["routine", "worth a
 Only an incident, a failure or an escalation reaches you in full; otherwise log one summary line per task. Remove a task id from `active.json` only when that task is finished or handed to the user; a task being re-dispatched stays active. If an executor reports `SCOPE: need <path> because <reason>`, you (main thread) decide; if justified, add the glob to that task's Scope in .orchestrate/PLAN.md (the scope lock lets only the main thread edit .orchestrate/PLAN.md), then re-dispatch. Store the outcome in Ruflo memory (memory_store, same namespace): task title, what worked, what failed.
 
 ## 7. Escalation
-Ladder: **Sonnet → Opus → Fable**. Fable is used only when Opus also could not do the task.
+Ladder: **Haiku → Sonnet → Opus → Fable**. Fable is used only when Opus also could not do the task.
 Every `mcp__jev__log_escalation` call passes all five fields: task, reason, decided_by ("jev" or "opus"), from_model, to_model.
 First Sonnet failure: re-dispatch once more on Sonnet with the failure details; the second Sonnet failure escalates to Opus.
 Each re-dispatch is logged with `mcp__jev__log_dispatch` (§5.6).
-1. A Sonnet executor that fails done-criteria `escalation.sonnet_failures_before_opus` times (2), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with `model: opus`. Call `mcp__jev__log_escalation` first (from sonnet, to opus, with the reason).
-2. If the Opus executor succeeds, stop: no Fable.
-3. Only if the Opus executor fails `escalation.opus_failures_before_fable` times (1), or reports CONFIDENCE below the threshold, re-dispatch once with `model: fable`, after `mcp__jev__log_escalation` (from opus, to fable, reason naming what Opus could not resolve). If Fable is unavailable, stop and report to the user.
-4. A Fable failure comes to the user with all three reports.
+1. A Haiku executor that fails done-criteria `escalation.haiku_failures_before_sonnet` times (1), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with no `model` (Sonnet). Call `mcp__jev__log_escalation` first (from haiku, to sonnet, with the reason). From there the Sonnet rules below apply, starting at zero Sonnet failures.
+2. A Sonnet executor that fails done-criteria `escalation.sonnet_failures_before_opus` times (2), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with `model: opus`. Call `mcp__jev__log_escalation` first (from sonnet, to opus, with the reason).
+3. If the Opus executor succeeds, stop: no Fable.
+4. Only if the Opus executor fails `escalation.opus_failures_before_fable` times (1), or reports CONFIDENCE below the threshold, re-dispatch once with `model: fable`, after `mcp__jev__log_escalation` (from opus, to fable, reason naming what Opus could not resolve). If Fable is unavailable, stop and report to the user.
+5. A Fable failure comes to the user with every tier's report.
 
 ## 8. Finish
 Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then call `mcp__jev__log_merge` with task and branch (the worktree branch name), tasks_merged (the number of task sections in .orchestrate/PLAN.md) and cost_usd when you have the session cost from /cost or a cost notice; then remove the worktree.

@@ -26,7 +26,7 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | Execution | Orchestrator | `/orchestrate` (`claude/skills/orchestrate/`) on Opus |
 | Execution | Executor | `claude/agents/executor.md` on Sonnet |
 | Execution | Design specialists | [Impeccable](https://github.com/pbakaus/impeccable), [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) |
-| Escalation | Ladder and log | Sonnet → Opus → Fable, `mcp__jev__log_escalation` |
+| Escalation | Ladder and log | Haiku → Sonnet → Opus → Fable, `mcp__jev__log_escalation` |
 | Review | Review and gates | `/wreview`, `/interrogate`, pstack cleanup, `/benchmark-checklist`, `/commit` |
 
 ## Conformance

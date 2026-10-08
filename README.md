@@ -46,14 +46,14 @@ Brainstorm → Plan → Judge → Build → Escalate → Review → Ship
 - **Brainstorm**: settle the design with you before any code is written.
 - **Plan**: split the approved design into small tasks, each with a file scope and a done check.
 - **Judge**: a small model answers narrow questions (is this step risky? which model?) so the big model is called less.
-- **Build**: Sonnet executors do each task inside a git worktree.
-- **Escalate**: if Sonnet cannot finish a task, Opus tries it. Fable is used only if Opus also fails.
+- **Build**: Haiku executors do each task inside a git worktree; harder tasks start on Sonnet or Opus.
+- **Escalate**: if Haiku fails a task, Sonnet tries it; then Opus. Fable is used only if Opus also fails.
 - **Review**: the diff is reviewed and the tests are run before anything merges.
 - **Ship**: merge and commit, after verification.
 
 ## How the reference implementation works
 
-- **Escalation ladder.** Sonnet, then Opus, then Fable. Each step is logged with a reason.
+- **Escalation ladder.** Haiku, then Sonnet, then Opus, then Fable. Each step is logged with a reason.
 - **Scope lock.** An executor can only edit the files its task names. A hook blocks other edits.
 - **Parallel loops.** One project can run many loops at once. The rule is one agent per git worktree: each loop has its own worktree and branch, so loops never collide, and each merges only after its own review.
 - **Jev gating.** Jev is a small model that answers narrow, typed questions. It never writes code or plans. If it is unsure, the main model decides.

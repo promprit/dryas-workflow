@@ -15,8 +15,8 @@
 
 # Model policy (super workflow)
 - Orchestrator: Opus, always (`"model": "opus"` in ~/.claude/settings.json).
-- Executors: Sonnet (`~/.claude/agents/executor.md`).
-- Escalation ladder: Sonnet → Opus → Fable. A task Sonnet can't finish goes to an Opus executor; Fable is used only if the Opus executor also fails that task. If Opus gets it, no Fable. Every step is logged with its reason via `mcp__jev__log_escalation`.
+- Executors: Haiku first. `/orchestrate` passes `model: haiku` unless Jev's `needs_sonnet` or `needs_opus` (or Opus judgment) starts the task higher; `~/.claude/agents/executor.md` stays Sonnet so review dispatches never run on Haiku. Kill switch: `dispatch.haiku_default` in `~/.claude/jev/thresholds.json`.
+- Escalation ladder: Haiku → Sonnet → Opus → Fable. A task Haiku fails `escalation.haiku_failures_before_sonnet` times (default 1) goes to Sonnet; a task Sonnet can't finish goes to an Opus executor; Fable is used only if the Opus executor also fails that task. Stop at the first success. Every step is logged with its reason via `mcp__jev__log_escalation`.
 - Jev (via the `jev` MCP server and hooks) answers narrow typed questions only; it never writes code or plans. Below threshold or escalate → Opus decides.
 
 # Compact instructions
