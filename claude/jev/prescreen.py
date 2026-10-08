@@ -8,7 +8,7 @@ import re
 
 # A command word starts at text start or after whitespace / shell punctuation
 # or `/` (so /bin/rm matches) and ends at text end, whitespace or punctuation.
-_B = r"(?:^|(?<=[\s;|&()`$={}<>/]))"
+_B = r"(?:^|(?<=[\s;|&()`$={}<>/:]))"
 _A = r"(?=$|[\s;|&)`}<>])"
 # Start of a simple command: line start, after an operator, keyword or prefix command.
 _CMDPOS = (r"(?:^|[;&|()`{\n]|(?<![\w-])(?:then|do|else|elif|if|while|until|!"
@@ -32,10 +32,13 @@ _WORDS = (
     "prisma drizzle-kit dropdb createdb pg_restore pg_dump mongosh firebase wrangler "
     "netlify fly flyctl heroku gcloud az aws simctl turbo nx eas expo fastlane pypy3 "
     "just pulumi helm gradle mvn mvnw rake bundle cmake ninja dotnet mix bazel bazelisk "
-    "sbt lein cabal zig meson ant composer"
+    "sbt lein cabal zig meson ant composer "
+    # tracers, namespace/priority wrappers, compressors, remote shells, exec-capable tools
+    "socat rview vimdiff strace ltrace dtrace nsenter unshare taskset ionice chrt "
+    "gzip gunzip bzip2 xz unxz 7z mktemp telnet ftp"
 ).split()
 # Common English words: risky only as the command word (masked copy).
-_CMD_WORDS = "at batch watch script timeout gtimeout parallel env nice nohup R stack screen".split()
+_CMD_WORDS = "at batch watch script timeout gtimeout parallel env nice nohup R stack screen ex view link".split()
 _PM_VERBS = ("install add remove uninstall publish update upgrade up i ci link unlink "
              "exec dlx run x rebuild prune dedupe")
 # pip/uv/cargo/go/... also run project code on build/test (build.rs, go generate).
@@ -169,7 +172,8 @@ def risky(cmd):
         if not cmd.strip():
             return True
         masked = _mask(cmd)
+        norm = _NORM.sub("", cmd)  # quoting must not hide a command word
         return (_scan(cmd) or any(rx.search(masked) for rx in _RAW_RX)
-                or _scan(_NORM.sub("", cmd)))
+                or _scan(norm) or _RAW_RX[1].search(norm) is not None)
     except Exception:
         return True
