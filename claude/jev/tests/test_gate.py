@@ -30,8 +30,8 @@ class GateTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         os.environ["JEV_LOG_DIR"] = os.path.join(self.tmp, "logs")
-        os.environ["JEV_THRESHOLDS"] = os.path.join(self.tmp, "none.json")
         os.environ["JEV_SSD_ROOT"] = self.tmp
+        self.set_prescreen(False)  # existing tests cover allowlist/judge paths; prescreen tests opt in
 
     def bash(self, cmd):
         return {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": "/tmp/dev/projects/demo"}
@@ -39,6 +39,104 @@ class GateTest(unittest.TestCase):
     def log(self):
         with open(os.path.join(self.tmp, "logs", "gate.jsonl")) as f:
             return [json.loads(l) for l in f]
+
+    def set_prescreen(self, value):
+        path = os.path.join(self.tmp, "t.json")
+        with open(path, "w") as f:
+            json.dump({"gate": {"prescreen": value}}, f)
+        os.environ["JEV_THRESHOLDS"] = path
+
+    def test_prescreen_skips_non_risky_bash(self):
+        self.set_prescreen(True)
+        j = FakeJudge(answers(0.9))
+        self.assertIsNone(gate.run(self.bash("echo hello\ngrep -n foo README.md"), j))
+        self.assertEqual(j.calls, [])
+        rec = self.log()[-1]
+        self.assertEqual((rec["decision"], rec["via"]), ("skipped", "prescreen"))
+
+    def test_prescreen_on_by_default(self):
+        os.environ["JEV_THRESHOLDS"] = os.path.join(self.tmp, "missing.json")
+        j = FakeJudge(answers(0.9))
+        self.assertIsNone(gate.run(self.bash("echo hello\ngrep -n foo README.md"), j))
+        self.assertEqual(j.calls, [])
+        rec = self.log()[-1]
+        self.assertEqual((rec["decision"], rec["via"]), ("skipped", "prescreen"))
+
+    def test_prescreen_import_error_other_than_importerror_still_judges(self):
+        import builtins
+        import importlib
+        real = builtins.__import__
+
+        def bad(name, *a, **k):
+            if name == "prescreen":
+                raise SyntaxError("broken prescreen")
+            return real(name, *a, **k)
+        builtins.__import__ = bad
+        try:
+            importlib.reload(gate)
+        finally:
+            builtins.__import__ = real
+        try:
+            self.assertIsNone(gate.prescreen)
+            j = FakeJudge(answers(0.9))
+            gate.run(self.bash("echo hello\ngrep -n foo README.md"), j)
+            self.assertEqual(len(j.calls), 1)
+        finally:
+            importlib.reload(gate)
+
+    def test_prescreen_risky_bash_goes_to_judge(self):
+        self.set_prescreen(True)
+        j = FakeJudge(answers(0.9))
+        gate.run(self.bash("echo hi\nrm -rf build"), j)
+        self.assertEqual(len(j.calls), 1)
+
+    def test_prescreen_off_judges_non_risky(self):
+        self.set_prescreen(False)
+        j = FakeJudge(answers(0.9))
+        gate.run(self.bash("echo hello\ngrep -n foo README.md"), j)
+        self.assertEqual(len(j.calls), 1)
+
+    def test_prescreen_exception_counts_as_risky(self):
+        self.set_prescreen(True)
+        class Boom:
+            @staticmethod
+            def risky(cmd):
+                raise RuntimeError("x")
+        old = gate.prescreen
+        gate.prescreen = Boom
+        try:
+            j = FakeJudge(answers(0.9))
+            gate.run(self.bash("echo hello\ngrep -n foo README.md"), j)
+        finally:
+            gate.prescreen = old
+        self.assertEqual(len(j.calls), 1)
+
+    def test_prescreen_unavailable_counts_as_risky(self):
+        self.set_prescreen(True)
+        old = gate.prescreen
+        gate.prescreen = None
+        try:
+            j = FakeJudge(answers(0.9))
+            gate.run(self.bash("echo hello\ngrep -n foo README.md"), j)
+        finally:
+            gate.prescreen = old
+        self.assertEqual(len(j.calls), 1)
+
+    def test_prescreen_never_applies_to_edit_write(self):
+        self.set_prescreen(True)
+        j = FakeJudge(answers(0.9))
+        gate.run({"tool_name": "Write", "tool_input": {"file_path": "a.txt", "content": "x"}}, j)
+        gate.run({"tool_name": "Edit", "tool_input": {"file_path": "a.txt", "old_string": "a", "new_string": "b"}}, j)
+        self.assertEqual(len(j.calls), 2)
+
+    def test_allowlist_skip_logs_via_allowlist(self):
+        gate.run(self.bash("git status"), FakeJudge(answers(0.9)))
+        self.assertEqual(self.log()[-1]["via"], "allowlist")
+
+    def test_compound_skip_logs_via_compound(self):
+        gate.run(self.bash("git status && ls -la"), FakeJudge(answers(0.9)))
+        rec = self.log()[-1]
+        self.assertEqual((rec["decision"], rec["via"], rec["parts"]), ("skipped", "compound", 2))
 
     def test_other_tools_not_judged(self):
         j = FakeJudge(answers(0.9))
