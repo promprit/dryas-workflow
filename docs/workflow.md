@@ -47,7 +47,7 @@ Last updated: 2026-10-05.
   3. If Opus solves it, stop. **No Fable.**
   4. Only if the Opus executor also fails is the task re-run once on **Fable**.
   5. If Fable fails too, the task goes to you with every tier's report.
-  - Jev's per-task `needs_sonnet` answer can start an executor on Sonnet, and `needs_opus` on Opus. Nothing starts a task on Fable directly. A direct start on Opus is logged from sonnet whatever the kill switch says, so ESC-M1 stays comparable.
+  - Jev's per-task `needs_sonnet` answer can start an executor on Sonnet, and `needs_opus` on Opus. Nothing starts a task on Fable directly. A direct start on Opus is logged from sonnet whatever the kill switch says, so ESC-M1 stays comparable. Every start-tier log (Haiku → Sonnet and Sonnet → Opus) carries a reason that starts with `skip-up:`, so observers such as FlowObserve show it as a Build start, not a climb.
   - Every escalation step is logged with its reason via the `log_escalation` MCP tool.
 - **Root cause before each climb** (pstack picks). Before Haiku → Sonnet, Sonnet → Opus and Opus → Fable, the orchestrator runs systematic-debugging on the failing reports. A plan defect is fixed in PLAN.md and re-run on the same model; otherwise the climb carries the root cause in its prompt and its log_escalation reason.
 - **Jev answers narrow typed questions only.** A Jev answer below 0.7 confidence, or flagged to escalate, means Opus decides.
