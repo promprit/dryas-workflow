@@ -58,7 +58,7 @@ class _InstallBase(object):
         self.cd.mkdir()
         os.environ.pop("DRYAS_DATA_ROOT", None)
         self.saved = (di.run, di.confirm, di.capture)
-        di.run, di.confirm, di.capture = (lambda argv, cwd=None: 0), (lambda p: True), (lambda argv, *a, **k: (1, ""))
+        di.run, di.confirm, di.capture = (lambda argv, cwd=None, env=None: 0), (lambda p: True), (lambda argv, *a, **k: (1, ""))
 
     def tearDown(self):
         di.run, di.confirm, di.capture = self.saved

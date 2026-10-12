@@ -41,7 +41,7 @@ class InstallTest(unittest.TestCase):
         self.calls = []
         self.dist = Path(tempfile.mkdtemp()) / "cli-dist"
         self.dist.mkdir()
-        di.run = lambda argv, cwd=None: self.calls.append(argv) or 0
+        di.run = lambda argv, cwd=None, env=None: self.calls.append(argv) or 0
         di.detect = lambda: {"RUFLO_BIN": "/b/ruflo", "RUFLO_JS": "/b/ruflo.js", "RUFLO_NODE_FALLBACK": "/b/node", "RUFLO_NODE_MODULES": "/b/nm",
                              "RUFLO_CLI_DIST": str(self.dist)}
         di.confirm = lambda prompt: True
@@ -507,7 +507,7 @@ class FallbackTest(unittest.TestCase):
 
     def test_npm_failure_returns_1(self):
         rh.patched_helpers = self.fail_first
-        di.run = lambda argv, cwd=None: self.calls.append(argv) or 7
+        di.run = lambda argv, cwd=None, env=None: self.calls.append(argv) or 7
         rc, out = self.printed(yes=True)
         self.assertEqual(rc, 1)
         self.assertIn("npm install -g ruflo@%s failed (exit 7)" % self.tested, out)
