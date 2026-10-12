@@ -20,7 +20,7 @@ class CodexTemplatesTest(unittest.TestCase):
     def test_agents_template_small(self):
         t = sm.render_tokens((CODEX / "AGENTS.md.template").read_text(encoding="utf-8"), M)
         self.assertLess(len(t.encode("utf-8")), 8 * 1024)
-        self.assertIn("$orchestrate", t)
+        self.assertIn("$dryas:orchestrate", t)
 
     def test_hooks_fragment(self):
         r = sm.render(json.loads((CODEX / "hooks.fragment.json").read_text(encoding="utf-8")), M)

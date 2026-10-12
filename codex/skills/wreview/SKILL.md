@@ -1,6 +1,6 @@
 ---
 name: wreview
-description: Two-stage review (spec compliance, then code quality) of the current branch or worktree diff. Use for $wreview before any merge.
+description: Two-stage review (spec compliance, then code quality) of the current branch or worktree diff. Use for $dryas:wreview before any merge.
 ---
 
 Review the diff from the given base ref (default: the merge-base with the default branch) to HEAD.

@@ -41,6 +41,27 @@ def plugin_form(t):
     return t
 
 
+CODEX_SKILLS = re.compile(r"\$(benchmark-checklist|orchestrate|interrogate|wreview|commit|wplan|tune)(?![A-Za-z0-9_-])")
+CODEX_ROOT_LINE = ("`<dryas-root>` and `<dryas-py>` are given in the Dryas rules (\"Dryas paths:\"). If they are missing, "
+                   "the Dryas hooks are not trusted: tell the user to run /hooks in Codex and stop.\n\n")
+
+
+def codex_form(t, rel):
+    """The plugin rewrite of a pre-pstack Codex file: $dryas:<skill> names; skills use <dryas-root>/<dryas-py>
+    (given by the rules hook); AGENTS.md keeps {{CD}} (rendered by the hook) and points at ~/.dryas/docs."""
+    t = CODEX_SKILLS.sub(r"$dryas:\1", t)
+    if rel.endswith("AGENTS.md.template"):
+        return t.replace("Full reference: `{{CD}}/docs/dryas-workflow.md`.",
+                         "Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: "
+                         "`~/.dryas/docs/dryas-local.md`).")
+    for a, b in (('"{{PY}}" -X utf8 "{{CD}}/jev/', '"<dryas-py>" -X utf8 "<dryas-root>/jev/'),
+                 ("{{CD}}/jev/thresholds.json", "~/.dryas/jev/thresholds.json"), ("{{CD}}/", "<dryas-root>/")):
+        t = t.replace(a, b)
+    if rel.endswith("orchestrate/SKILL.md"):
+        t = t.replace("# Orchestrate (Codex)\n\n", "# Orchestrate (Codex)\n\n" + CODEX_ROOT_LINE, 1)
+    return t
+
+
 def read(rel):
     return (REPO / rel).read_text(encoding="utf-8")
 
@@ -56,6 +77,8 @@ class PstackLoopTest(unittest.TestCase):
             want = (FIX / fix).read_text(encoding="utf-8")
             if rel.startswith("claude/"):
                 want = plugin_form(want)
+            else:
+                want = codex_form(want, rel)
             self.assertEqual(render.gate_blocks(read(rel), []), want, rel)
 
     def test_orchestrate_on_content(self):
@@ -68,7 +91,7 @@ class PstackLoopTest(unittest.TestCase):
 
     def test_codex_orchestrate_on_content(self):
         on = render.gate_blocks(read("codex/skills/orchestrate/SKILL.md"), ["pstack-picks"])
-        for s in ("needs_interrogate", "$interrogate", "{{CD}}/pstack/cleanup.md", "root cause",
+        for s in ("needs_interrogate", "$dryas:interrogate", "<dryas-root>/pstack/cleanup.md", "root cause",
                   "after every build task has left `.orchestrate/active.json`"):
             self.assertIn(s, on, s)
         self.assertNotIn("Fable", on)

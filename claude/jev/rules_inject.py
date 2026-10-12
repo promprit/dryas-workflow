@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """SessionStart hook (startup, resume, clear, compact): Dryas rules as additionalContext.
 A plugin's CLAUDE.md is not loaded, so CLAUDE.md.template is injected here, with <!-- pstack-picks --> blocks
-resolved from chain.local.json "off". Fails silent (no output) on any error."""
+resolved from chain.local.json "off". With --harness codex it injects AGENTS.md.template instead, with {{CD}}
+resolved to the plugin root and a "Dryas paths:" line naming <dryas-root> and <dryas-py> for the skills.
+Fails silent (no output) on any error."""
 import json
 import os
 import sys
@@ -11,14 +13,26 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paths  # noqa: E402
 from gating import gate_blocks  # noqa: E402
 
-TEMPLATE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "CLAUDE.md.template")
+HERE = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES = {"claude": "CLAUDE.md.template", "codex": "AGENTS.md.template"}
+PATHS_LINE = "Dryas paths: <dryas-root> = %s, <dryas-py> = %s. Substitute them in Dryas skill commands."
 ALL = ("core", "jev", "ruflo", "superpowers", "design", "pstack-picks")
 SKIP_LINE = ("pstack-picks is not installed: in Dryas skills and agents, skip any block wrapped in "
              "pstack-picks HTML comment markers (an opening and a closing one).")
 
 
-def build(template: str, off: List[str]) -> str:
+def harness(argv: List[str]) -> str:
+    if "--harness" in argv:
+        i = argv.index("--harness")
+        if i + 1 < len(argv) and argv[i + 1] in TEMPLATES:
+            return argv[i + 1]
+    return "claude"
+
+
+def build(template: str, off: List[str], harness: str = "claude", root: str = "", py: str = "") -> str:
     text = gate_blocks(template, [c for c in ALL if c not in off]).strip()
+    if harness == "codex":
+        text = text.replace("{{CD}}", root) + "\n\n" + PATHS_LINE % (root, py)
     return text + ("\n\n" + SKIP_LINE if "pstack-picks" in off else "") + "\n"
 
 
@@ -31,11 +45,16 @@ def _off() -> List[str]:
         return []
 
 
-def main() -> None:
+def _fwd(p: str) -> str:
+    return p.replace("\\", "/")
+
+
+def main(argv: List[str]) -> None:
+    h = harness(argv)
     try:
         sys.stdin.read()
-        with open(TEMPLATE, encoding="utf-8") as f:
-            ctx = build(f.read(), _off())
+        with open(os.path.join(os.path.dirname(HERE), TEMPLATES[h]), encoding="utf-8") as f:
+            ctx = build(f.read(), _off(), h, _fwd(os.path.dirname(HERE)), _fwd(paths.python()))
     except Exception:
         return
     sys.stdout.write(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}))
@@ -43,7 +62,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     try:
-        main()
+        main(sys.argv[1:])
     except Exception:
         pass
     sys.exit(0)

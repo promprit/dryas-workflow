@@ -13,7 +13,7 @@ SUPERPOWERS = {"brainstorming", "using-git-worktrees", "test-driven-development"
                "receiving-code-review", "verification-before-completion", "writing-plans", "systematic-debugging",
                "subagent-driven-development", "executing-plans", "dispatching-parallel-agents",
                "finishing-a-development-branch", "diagnosing-superpowers", "writing-skills", "using-superpowers"}
-CD_PATH = re.compile(r"\{\{CD\}\}/([A-Za-z0-9_./-]+)")
+CD_PATH = re.compile(r"(?:\{\{CD\}\}|<dryas-root>)/([A-Za-z0-9_./-]+)")
 
 
 def skill(h, n):
