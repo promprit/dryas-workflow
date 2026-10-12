@@ -350,5 +350,77 @@ class UninstallTest(unittest.TestCase):
         self.assertTrue(real.exists())
 
 
+    def test_purge_never_removes_home(self):
+        e = Env(self)
+        with mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": str(e.home)}):
+            ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+            (e.home / "mine.txt").write_text("x")
+            ps.uninstall(e.a, purge=True)
+        self.assertTrue((e.home / "mine.txt").exists())
+        self.assertTrue((e.home / "chain.local.json").exists())
+
+    def test_purge_keeps_foreign_files(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        (e.root / "foreign.txt").write_text("x")
+        ps.uninstall(e.a, purge=True)
+        self.assertTrue((e.root / "foreign.txt").exists())
+        for n in ps.OWNED:
+            self.assertFalse((e.root / n).exists(), n)
+
+    def test_purge_refused_when_accounts_missing_or_corrupt(self):
+        for corrupt in (False, True):
+            e = Env(self)
+            ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+            acc = e.root / "accounts.json"
+            if corrupt:
+                acc.write_text("{not json")
+            else:
+                acc.unlink()
+            self.assertEqual(ps.uninstall(e.a, purge=True), 0)
+            self.assertFalse((e.a / ps.RECORD).exists())
+            self.assertTrue((e.root / "chain.local.json").exists())
+            if corrupt:
+                self.assertEqual(acc.read_text(), "{not json")
+
+    def test_corrupt_record_leaves_settings(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        before = (e.a / "settings.json").read_text()
+        (e.a / ps.RECORD).write_text("[1]")
+        self.assertEqual(ps.uninstall(e.a, purge=False), 0)
+        self.assertEqual((e.a / "settings.json").read_text(), before)
+        self.assertTrue((e.a / ps.RECORD).exists())
+
+    def test_non_dict_settings(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        (e.a / "settings.json").write_text("[1]")
+        self.assertEqual(ps.uninstall(e.a, purge=False), 1)
+        self.assertTrue((e.a / ps.RECORD).exists())
+        self.assertFalse([c for c in e.calls() if c[1:3] == ["plugin", "uninstall"]])
+
+    def test_user_keys_and_modified_values_survive(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        sp = e.a / "settings.json"
+        s = json.loads(sp.read_text())
+        s["theme"] = "dark"
+        s["env"]["DRYAS_PY"] = "/my/python"  # user changed a recorded value
+        sp.write_text(json.dumps(s))
+        ps.uninstall(e.a, purge=False)
+        s = json.loads(sp.read_text())
+        self.assertEqual(s["theme"], "dark")
+        self.assertEqual(s["env"]["DRYAS_PY"], "/my/python")
+
+    def test_settings_kept_when_not_created_by_dryas(self):
+        e = Env(self)
+        e.a.mkdir()
+        (e.a / "settings.json").write_text(json.dumps({"theme": "dark"}))
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        ps.uninstall(e.a, purge=False)
+        self.assertEqual(json.loads((e.a / "settings.json").read_text()), {"theme": "dark"})
+
+
 if __name__ == "__main__":
     unittest.main()

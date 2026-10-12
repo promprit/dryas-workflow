@@ -260,8 +260,60 @@ def verify(cd: Path, comps: List[str]) -> int:
     return fails
 
 
+OWNED = ("accounts.json", "chain.local.json", "docs", "jev", "ruflo")  # what setup writes under the data root
+
+
+def _within(a: Path, b: Path) -> bool:
+    """True when a equals b or is an ancestor of b."""
+    a, b = os.path.normcase(str(a)), os.path.normcase(str(b))
+    return b == a or b.startswith(a.rstrip("\\/") + os.sep)
+
+
+def _purge_refusal(root: Path, cd: Path) -> Optional[str]:
+    if root.parent == root:
+        return "a filesystem root"
+    for name, p in (("your home folder", Path.home()), ("the current folder", Path.cwd()), ("the config dir", cd)):
+        if _within(root, norm(p)):
+            return "it contains " + name
+    return None
+
+
+def _rm_error(func, path, exc):
+    try:  # read-only file: make writable and retry once
+        if os.name != "nt":
+            os.chmod(path, 0o700)
+        func(path)
+    except OSError:
+        print("kept %s, remove by hand" % path)
+
+
+def _rm_owned(p: Path) -> None:
+    if p.is_symlink() or (p.exists() and not p.is_dir()):
+        p.unlink()
+    elif p.is_dir():
+        link = p / "mcp-shim" / "dist"  # dir link (junction on Windows) to the Ruflo CLI: unlink it, never follow
+        if os.path.lexists(str(link)):
+            pu.remove_path(str(link))
+        shutil.rmtree(str(p), onerror=_rm_error)
+    if not os.path.lexists(str(p)):
+        print("removed %s" % p)
+
+
+def _purge(root: Path) -> None:
+    for name in OWNED:
+        p = root / name
+        if os.path.lexists(str(p)):
+            _rm_owned(p)
+    try:
+        root.rmdir()
+        print("removed %s" % root)
+    except OSError:
+        print("kept %s (contains files Dryas did not create)" % root)
+
+
 def uninstall(cd: Path, purge: bool) -> int:
-    cd, root = norm(cd), data_root()
+    cd, raw = norm(cd), data_root()
+    root = norm(raw)
     rec_path = cd / RECORD
     if not rec_path.exists():
         print("nothing to uninstall in %s" % cd)
@@ -273,29 +325,49 @@ def uninstall(cd: Path, purge: bool) -> int:
     except SystemExit as e:
         print("error: %s: %s; nothing removed" % (spath, e))
         return 1
+    if not isinstance(cur, dict):
+        print("error: %s is not a JSON object; nothing removed" % spath)
+        return 1
     argv = ["claude", "plugin", "uninstall", ID, "--scope", "user", "--keep-data"]
     print("CLAUDE_CONFIG_DIR=%s %s" % (cd, " ".join(argv)))
     rc = di.run(argv, env=child_env(cd))
     if rc != 0:  # settings cleanup still runs
         print("warning: `claude plugin uninstall` failed (exit %d); remove %s by hand with /plugin" % (rc, ID))
-    if spath.exists():
-        new = sm.unmerge(cur, rec.get("settings", {}))
-        if rec.get("settings_created") and new == {}:
-            spath.unlink()
-            print("removed %s (Dryas created it)" % spath)
-        elif new != cur:
-            spath.write_text(json.dumps(new, indent=2) + "\n", encoding="utf-8")
-            print("removed Dryas entries from %s" % spath)
-    rec_path.unlink()
-    left = remove_account(root, cd)
-    if purge and left:
-        print("kept %s: still used by %s" % (root, ", ".join(left)))
-    elif purge:
-        if root.is_dir() and not root.is_symlink():
-            shutil.rmtree(str(root))
-            print("removed %s" % root)
-        elif root.exists() or root.is_symlink():
-            print("kept %s: not a plain directory" % root)
+    added = rec.get("settings")
+    if not isinstance(added, dict):
+        print("warning: %s is unreadable or has no settings entry; %s left untouched and the record kept" % (rec_path, spath))
+    else:
+        if spath.exists():
+            new = sm.unmerge(cur, added)
+            if rec.get("settings_created") and new == {}:
+                spath.unlink()
+                print("removed %s (Dryas created it)" % spath)
+            elif new != cur:
+                spath.write_text(json.dumps(new, indent=2) + "\n", encoding="utf-8")
+                print("removed Dryas entries from %s" % spath)
+        rec_path.unlink()
+    acc_path = root / "accounts.json"
+    try:
+        known = isinstance(json.loads(acc_path.read_text(encoding="utf-8")), dict)
+    except (OSError, ValueError):
+        known = False
+    left = None  # None = account list unknown
+    if known:
+        left = remove_account(root, cd)
+    elif acc_path.exists():
+        print("warning: %s is unreadable; left as it is" % acc_path)
+    if purge:
+        why = None
+        if left is None:
+            why = "the list of accounts using it is missing or unreadable"
+        elif left:
+            why = "still used by " + ", ".join(left)
+        else:
+            why = "it is a symlink" if raw.is_symlink() else _purge_refusal(root, cd)
+        if why:
+            print("kept %s: %s" % (root, why))
+        else:
+            _purge(root)
     print("uninstalled Dryas from %s" % cd)
     if rec.get("settings_backup"):
         print("settings backup from before the merge (manual fallback): %s" % rec["settings_backup"])
