@@ -30,8 +30,9 @@ class PluginShapeTest(unittest.TestCase):
         self.assertRegex(p["version"], r"^\d+\.\d+\.\d+$")
         dep = [d for d in p["dependencies"] if d["name"] == "superpowers"][0]
         self.assertEqual(dep["marketplace"], "claude-plugins-official")
-        tested = load(ROOT / "install" / "components.json")["superpowers"]["plugin_tested"]
-        self.assertEqual(dep["version"], ">=" + tested)
+        # no version range: claude-plugins-official pins superpowers to a commit, and Claude Code then finds
+        # "no git tag satisfying" any range, so the install fails; the tested version is checked by setup instead
+        self.assertNotIn("version", dep)
         self.assertTrue(p["userConfig"]["openrouter_key"]["sensitive"])
 
     def test_hooks_point_at_shipped_files(self):
@@ -55,6 +56,7 @@ class PluginShapeTest(unittest.TestCase):
         m = load(PLUGIN / ".mcp.json")["mcpServers"]["jev"]
         self.assertEqual(m["env"]["DRYAS_OPENROUTER_KEY"], "${user_config.openrouter_key}")
         self.assertIn("${CLAUDE_PLUGIN_ROOT}/jev/jev_mcp.py", m["args"])
+        self.assertEqual(m["command"], "${DRYAS_PY:-python3}")  # DRYAS_PY from settings env; expands in Claude Code
         self.assertTrue((PLUGIN / "jev" / "jev_mcp.py").is_file())
 
     def test_markdown_has_no_install_tokens(self):
