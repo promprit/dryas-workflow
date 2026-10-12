@@ -119,10 +119,22 @@ class E2ETest(unittest.TestCase):
         self.assertFalse((cdx / "AGENTS.md").exists())  # rules come from the plugin's SessionStart hook now
         self.assertFalse((self.home / ".agents" / "skills" / "orchestrate").exists())
         self.codex_hooks_run(cdx)
-        u = self.installer("--harness", "codex", "--uninstall")  # plugin uninstall per CODEX_HOME: Task 7
+        self.assertIn("hooks.state", (cdx / "config.toml").read_text(encoding="utf-8"))
+        cd = (self.home / ".claude").resolve()
+        u = self.installer("--harness", "codex", "--uninstall")
         self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
-        self.assertFalse((cdx / ".dryas-installed.json").exists())
-        self.assertFalse((self.home / ".agents" / "skills" / "orchestrate").exists())
+        state = json.loads((cdx / "fake_codex.json").read_text(encoding="utf-8"))
+        self.assertNotIn("dryas@dryas-workflow", state["plugins"])
+        self.assertNotIn("dryas-workflow", state["marketplaces"])
+        self.assertFalse((cdx / ".dryas-codex-plugin.json").exists())
+        self.assertNotIn("dryas", (cdx / "config.toml").read_text(encoding="utf-8"))
+        accounts = json.loads((self.home / ".dryas" / "accounts.json").read_text(encoding="utf-8"))
+        self.assertEqual((accounts["codex_dirs"], accounts["claude_dirs"]), ([], [str(cd)]))
+        self.assertTrue((cd / ".dryas-plugin.json").exists())  # the Claude Code plugin install is untouched
+        u = self.installer("--harness", "claude", "--uninstall", "--purge")
+        self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
+        self.assertFalse((cd / ".dryas-plugin.json").exists())
+        self.assertFalse((self.home / ".dryas").exists())  # no account left: purged
 
     def test_codex_copy_install_migrated(self):
         cdx = self.home / ".codex"

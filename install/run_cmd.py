@@ -7,7 +7,7 @@
 Claude Code: the dryas plugin in one config dir (--claude-dir, else $CLAUDE_CONFIG_DIR, else ~/.claude); a copy
 install found there is migrated first. Codex: the dryas plugin in one CODEX_HOME (--codex-dir, else $CODEX_HOME,
 else ~/.codex); a Codex copy install found there is migrated.
---harness claude --uninstall touches only that config dir.
+--uninstall touches only that config dir / CODEX_HOME; --purge also removes the data root once no account uses it.
 """
 import argparse
 import json
@@ -24,9 +24,12 @@ OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
 HARNESSES = ("claude", "codex", "both")
 NO_SPACE_RUFLO = ("Your Python, Dryas data folder or Dryas plugin path contains a space and has no short form; "
                   "Ruflo's hook override cannot handle that. Re-run with --no-ruflo.")
-LEGACY_REFUSAL = ("A Codex copy install (%s) uses %s; run install.sh --harness both to move Claude Code and Codex to "
-                  "their plugins (nothing changed).")
+LEGACY_REFUSAL = ("A Codex copy install (%s) uses %s; run install.sh --harness both (install.ps1 on Windows) to move "
+                  "Claude Code and Codex to their plugins. If you no longer use Codex, remove its copy install first "
+                  "with install.sh --uninstall --harness codex (Claude Code is not touched), then re-run. Nothing changed.")
 NO_PYTHON3 = "Codex runs the Dryas hooks with python3: install Python 3.9+ as python3 and re-run."
+NO_PYTHON_WIN = ("warning: `python` is not on PATH; on Windows Codex runs the Dryas hooks with `python` "
+                 "(install Python 3.9+ from python.org and tick \"Add python.exe to PATH\").")
 
 
 def parse(argv: List[str]) -> argparse.Namespace:
@@ -86,8 +89,13 @@ def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Seq
         if ver is None or ver < want:
             probs.append("Dryas needs Codex CLI %s or newer (found: %s). Update it (npm install -g @openai/codex) and "
                          "re-run." % (".".join(map(str, want)), ".".join(map(str, ver)) if ver else "no version"))
-    if harness in ("codex", "both") and not pu.IS_WINDOWS and not pu.which("python3"):
-        probs.append(NO_PYTHON3)
+    if harness in ("codex", "both"):
+        import codex_plugin_setup as cps
+        if pu.IS_WINDOWS:
+            if not pu.which("python"):
+                print(NO_PYTHON_WIN)
+        elif not cps.python3_ok():
+            probs.append(NO_PYTHON3)
     return probs
 
 
@@ -153,11 +161,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     codex_comps = legacy if (legacy is not None and no_flags) else comps
     if a.harness == "codex" and not a.uninstall and ("superpowers" in comps or "design" in comps):
         print("note: superpowers and design are Claude Code plugins; skipped for Codex.")
-    if a.uninstall:
-        copy_cd = home / ".claude"
-        rc = ct.uninstall_codex(ct.codex_dir(), home, di.run) if want_codex else 0
-        rc = rc or (di.uninstall(copy_cd) if want_codex else 0)
-        return rc or (ps.uninstall(cd, a.purge) if want_claude else 0)
+    if a.uninstall:  # Codex first: Claude's --purge then sees whether a CODEX_HOME still uses the data root
+        rc = cps.uninstall(cdx) if want_codex else 0
+        if rc:
+            return rc
+        if want_claude:
+            return ps.uninstall(cd, a.purge)
+        if a.purge:
+            ps.purge_shared()
+        return 0
     if want_claude and (cd / di.RECORD).exists():
         try:
             if not isinstance(di.load_record(cd), dict):

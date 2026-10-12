@@ -620,6 +620,47 @@ class UninstallTest(unittest.TestCase):
             ps.uninstall(e.a, purge=True)
             self.assertFalse(e.root.exists(), where)
 
+    def test_purge_refused_while_codex_listed(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        ps.add_account(e.root, e.t / "codex-home", "codex_dirs")
+        out = _out(lambda: ps.uninstall(e.a, purge=True))
+        self.assertTrue(e.root.exists())
+        self.assertIn("Codex in %s" % (e.t / "codex-home"), out)
+
+    def test_purge_shared_after_last_account(self):
+        e = Env(self)
+        ps.add_account(e.root, e.t / "codex-home", "codex_dirs")
+        self.assertFalse(ps.purge_shared())
+        ps.remove_account(e.root, e.t / "codex-home", "codex_dirs")
+        self.assertTrue(ps.purge_shared())
+        self.assertFalse(e.root.exists())
+
+    def test_purge_shared_refusals(self):
+        e = Env(self)
+        _out(lambda: self.assertFalse(ps.purge_shared()))  # no accounts.json: unknown users
+        ps.add_account(e.root, e.a, "claude_dirs")
+        out = _out(lambda: self.assertFalse(ps.purge_shared()))
+        self.assertIn("still used by %s" % e.a, out)
+        ps.remove_account(e.root, e.a, "claude_dirs")
+        cdx = e.t / "codex"
+        cdx.mkdir()
+        (cdx / ".dryas-installed.json").write_text("{}")
+        _patch_env(self, {"CODEX_HOME": str(cdx)})
+        out = _out(lambda: self.assertFalse(ps.purge_shared()))
+        self.assertIn("Codex copy install", out)
+        self.assertTrue(e.root.exists())
+
+    def test_shared_warning_names_codex_dirs_not_the_current_one(self):
+        e = Env(self)
+        ps.write_chain_local(e.root, COMPS, False, REPO)
+        ps.add_account(e.root, e.t / "cx-a", "codex_dirs")
+        ps.add_account(e.root, e.t / "cx-b", "codex_dirs")
+        out = _out(lambda: ps.write_chain_local(e.root, ["core"], False, REPO, e.t / "cx-a"))
+        self.assertIn("warning: component choices", out)
+        self.assertIn("Codex in %s" % (e.t / "cx-b"), out)
+        self.assertNotIn(str(e.t / "cx-a"), out)
+
     def test_purge_message_names_notes(self):
         e = Env(self)
         ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)

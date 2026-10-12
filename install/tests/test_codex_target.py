@@ -95,7 +95,10 @@ class CodexTargetTest(unittest.TestCase):
             with self.assertRaises(OSError):
                 self.uninstall()
         self.assertTrue((self.cdx / ct.RECORD).exists())  # the record goes last: a re-run resumes
-        self.assertEqual(self.uninstall(), 0)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(ct.uninstall_codex(self.cdx, self.home, self.run_fake), 0)
+        self.assertIn("kept %s" % (ct.skills_dir(self.home) / "orchestrate"), buf.getvalue())
         self.assertEqual((ct.skills_dir(self.home) / "orchestrate" / "SKILL.md").read_text(encoding="utf-8"), "MINE")
         self.assertFalse((self.cdx / ct.RECORD).exists())
 

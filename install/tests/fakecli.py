@@ -240,7 +240,7 @@ def _main():
     elif _a[:2] == ["plugin", "remove"] and "plugin remove" not in _FAIL:
         p = s["plugins"].pop(_a[2], None)
         if p:
-            _sh.rmtree(p["path"], ignore_errors=True)
+            _sh.rmtree(_os.path.dirname(p["path"]), ignore_errors=True)  # like 0.162.1: cache/<mkt>/<name> goes, cache/<mkt> stays
             _write_toml(_toml().replace('\n[plugins."%s"]\nenabled = true\n' % _a[2], ""))
     elif _a[:2] == ["mcp", "list"]:
         text, out = _toml(), []

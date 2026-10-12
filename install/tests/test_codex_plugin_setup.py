@@ -595,5 +595,200 @@ class MigrationTest(unittest.TestCase):
         self.assertNotIn(["codex", "mcp", "remove", "jev"], e.calls())
 
 
+class UninstallTest(unittest.TestCase):
+    def test_removes_everything_it_added(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core"], yes=True)  # jev off: overlay block present
+        quiet(cps.setup, REPO, e.b, COMPS, yes=True)
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0)
+        t = e.toml(e.a)
+        self.assertNotIn("hooks.state", t)
+        self.assertNotIn(cps.TOML_START, t)
+        self.assertNotIn(cps.ID, e.state(e.a)["plugins"])
+        self.assertNotIn(cps.MARKET, e.state(e.a)["marketplaces"])
+        self.assertFalse((e.a / cps.RECORD).exists())
+        acc = json.loads((e.root / "accounts.json").read_text(encoding="utf-8"))
+        self.assertEqual(acc["codex_dirs"], [str(cps.ps.norm(e.b))])
+        self.assertIn(cps.ID, e.state(e.b)["plugins"])  # the other CODEX_HOME is untouched
+
+    def test_marketplace_kept_when_not_added_by_setup(self):
+        e = Env(self)
+        cps.di.run(["codex", "plugin", "marketplace", "add", str(REPO)], env=dict(os.environ, CODEX_HOME=str(e.a)))
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        quiet(cps.uninstall, e.a)
+        self.assertIn(cps.MARKET, e.state(e.a)["marketplaces"])
+
+    def test_nothing_to_uninstall(self):
+        e = Env(self)
+        self.assertEqual(quiet(cps.uninstall, e.a)[0], 0)
+
+    def test_plugin_remove_failure_still_cleans_config(self):
+        e = Env(self, fail=["plugin remove"])
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0)
+        self.assertIn("warning", out)
+        self.assertNotIn("hooks.state", e.toml(e.a))
+
+    def test_user_content_kept(self):
+        e = Env(self)
+        e.a.mkdir()
+        user = 'model = "o3"\n\n[mcp_servers.mine]\ncommand = "echo"\n\n[hooks.state."other@m:hooks/hooks.json:stop:0:0"]\n' \
+               'trusted_hash = "sha256:b"\n'
+        (e.a / "config.toml").write_text(user, encoding="utf-8")
+        quiet(cps.setup, REPO, e.a, ["core", "jev", "ruflo"], yes=True)
+        with open(e.a / "config.toml", "a", encoding="utf-8") as f:
+            f.write('\n[profiles.p]\nmodel = "x"\n')  # added after setup, at the end, after our tables
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0, out)
+        t = e.toml(e.a)
+        for kept in ('model = "o3"', "[mcp_servers.mine]", "other@m:hooks", "[profiles.p]"):
+            self.assertIn(kept, t)
+        self.assertNotIn("dryas", t)
+
+    def test_codex_moved_end_marker_after_trust(self):
+        # real 0.162.1: Codex writes [hooks.state] + the trust tables inside our markers (before the end marker)
+        e = Env(self, py3=False)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        cfg = e.a / "config.toml"
+        t = cfg.read_text(encoding="utf-8").replace(cps.TOML_END + "\n", "")
+        t = t.replace('[hooks.state."', '[hooks.state]\n\n[hooks.state."', 1) + cps.TOML_END + "\n"
+        cfg.write_text(t, encoding="utf-8")
+        self.assertIn("[mcp_servers.jev]", t)
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("hooks.state", e.toml(e.a))
+        self.assertNotIn("mcp_servers.jev", e.toml(e.a))
+        self.assertNotIn("dryas", e.toml(e.a))
+
+    def test_changed_table_left_with_warning(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core"], yes=True)
+        cfg = e.a / "config.toml"
+        cfg.write_text(cfg.read_text(encoding="utf-8").replace("enabled = false", "enabled = true"), encoding="utf-8")
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0)
+        self.assertIn("was changed after Dryas setup wrote it", out)
+        t = e.toml(e.a)
+        self.assertIn("enabled = true", t)
+        self.assertNotIn(cps.TOML_START, t)  # no markers left to claim it later
+
+    def test_resume_after_marketplace_already_removed(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        cps.di.run(["codex", "plugin", "marketplace", "remove", cps.MARKET], env=dict(os.environ, CODEX_HOME=str(e.a)))
+        n = len(e.calls())
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn(["codex", "plugin", "marketplace", "remove", cps.MARKET], e.calls()[n:])
+        self.assertFalse((e.a / cps.RECORD).exists())
+
+    def test_unreadable_record_kept(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        (e.a / cps.RECORD).write_text("[1]", encoding="utf-8")
+        n = len(e.calls())
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 1)
+        self.assertIn("nothing removed", out)
+        self.assertTrue((e.a / cps.RECORD).exists())
+        self.assertEqual(e.calls()[n:], [])
+
+    def test_unreadable_accounts_left(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        (e.root / "accounts.json").write_text("{bad", encoding="utf-8")
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0)
+        self.assertIn("unreadable", out)
+        self.assertEqual((e.root / "accounts.json").read_text(encoding="utf-8"), "{bad")
+
+    def test_codex_cache_dir_of_ours_removed(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        quiet(cps.uninstall, e.a)
+        self.assertFalse((e.a / "plugins" / "cache" / cps.MARKET).exists())
+
+    def test_legacy_copy_install_removed_live_claude_copy_kept(self):
+        e = Env(self)
+        with mock.patch.object(cps.migrate, "is_copy_install", lambda cd: True):
+            cd = legacy_codex.legacy(e.home, e.a, claude_copy=True)
+            rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((e.a / ct.RECORD).exists())
+        self.assertEqual((e.a / "AGENTS.md").read_text(encoding="utf-8"), "mine\n")
+        self.assertTrue((cd / di.RECORD).exists())  # the live Claude copy install is not touched
+        self.assertTrue((cd / "jev" / "chain.py").exists())
+
+    def test_legacy_runtime_copy_state_moved_not_deleted(self):
+        e = Env(self)
+        cd = legacy_codex.legacy(e.home, e.a)
+        (cd / "jev" / "logs").mkdir()
+        (cd / "jev" / "logs" / "jev.jsonl").write_text('{"a": 1}\n', encoding="utf-8")
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((cd / di.RECORD).exists())
+        self.assertEqual((e.root / "jev" / "logs" / "jev.jsonl").read_text(encoding="utf-8"), '{"a": 1}\n')
+
+    def test_unreadable_legacy_stops(self):
+        e = Env(self)
+        legacy_codex.legacy(e.home, e.a)
+        (e.a / ct.RECORD).write_text("[]", encoding="utf-8")
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 1)
+        self.assertIn("nothing changed", out)
+        self.assertEqual((e.a / "AGENTS.md").read_text(encoding="utf-8"), legacy_codex.AGENTS)
+
+    def test_created_codex_home_removed_only_when_empty(self):
+        for extra in (False, True):
+            e = Env(self)
+            e.a.mkdir()
+            (e.a / cps.RECORD).write_text(json.dumps({"dir_created": True, "trusted": {}}), encoding="utf-8")
+            if extra:
+                (e.a / "history.jsonl").write_text("x", encoding="utf-8")
+            with mock.patch.object(cps, "_say_run", lambda *a: 0):
+                self.assertEqual(quiet(cps.uninstall, e.a)[0], 0)
+            self.assertEqual(e.a.exists(), extra)
+
+
+class LegacyProblemTest(unittest.TestCase):
+    def test_element_types_checked(self):
+        bad = {"skills": [1], "skill_backups": {"orchestrate": 3}, "hooks": {"hooks": [["PreToolUse", "x"]]},
+               "mcp": {"jev": 1}}
+        for k, v in bad.items():
+            e = Env(self)
+            legacy_codex.legacy(e.home, e.a)
+            rec = json.loads((e.a / ct.RECORD).read_text(encoding="utf-8"))
+            rec[k] = v
+            (e.a / ct.RECORD).write_text(json.dumps(rec), encoding="utf-8")
+            self.assertIn(str(e.a / ct.RECORD), cps.legacy_problem(e.a, e.home), k)
+
+    def test_skill_name_must_stay_in_skills_dir(self):
+        for name in ("..", "a/b", "", "."):
+            e = Env(self)
+            legacy_codex.legacy(e.home, e.a)
+            rec = json.loads((e.a / ct.RECORD).read_text(encoding="utf-8"))
+            rec["skills"] = [name]
+            (e.a / ct.RECORD).write_text(json.dumps(rec), encoding="utf-8")
+            self.assertTrue(cps.legacy_problem(e.a, e.home), name)
+
+    def test_good_record_passes(self):
+        e = Env(self)
+        legacy_codex.legacy(e.home, e.a)
+        self.assertEqual(cps.legacy_problem(e.a, e.home), "")
+
+    def test_any_uninstall_error_is_a_legacy_error(self):
+        e = Env(self)
+        legacy_codex.legacy(e.home, e.a)
+
+        def boom(*a, **k):
+            raise KeyError("x")
+        with mock.patch.object(ct, "uninstall_codex", boom):
+            with self.assertRaises(cps.LegacyError):
+                quiet(cps.migrate_legacy, e.a, e.home)
+        self.assertTrue((e.a / ct.RECORD).exists())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -141,8 +141,13 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool],
     _save_json(p, loc)
 
 
-def _codex_installed() -> Optional[str]:
-    """Where a Codex Dryas install is recorded (it reads the same data root and chain.local.json); None = none."""
+def _codex_dirs(root: Path) -> List[str]:
+    acc = _load_json(Path(root) / "accounts.json", {})
+    return [d for d in acc.get("codex_dirs", []) if isinstance(d, str)]
+
+
+def _codex_legacy() -> Optional[str]:
+    """Where a legacy Codex copy install (or its ~/.claude runtime copy) is recorded; None = none."""
     import codex_target as ct
     for p in (ct.codex_dir() / ct.RECORD, Path.home() / ".claude" / di.RECORD):
         if p.exists():
@@ -150,13 +155,24 @@ def _codex_installed() -> Optional[str]:
     return None
 
 
+def _codex_installed() -> Optional[str]:
+    """A Codex Dryas install that reads the same data root and chain.local.json: the first CODEX_HOME listed in
+    accounts.json ("Codex in <dir>"), else a legacy record's path; None = none."""
+    dirs = _codex_dirs(norm(data_root()))
+    return ("Codex in %s" % dirs[0]) if dirs else _codex_legacy()
+
+
 def _shared_warning(root: Path, old, new: List[str], cd: Optional[Path] = None) -> None:
-    """chain.local.json is shared by every account and Codex: say what a change of the "off" set does to them."""
+    """chain.local.json is shared by every account and Codex: say what a change of the "off" set does to them.
+    cd: the Claude config dir or CODEX_HOME being set up (not named)."""
     if not isinstance(old, list) or sorted(old) == new:
         return
-    users = [d for d in _load_json(Path(root) / "accounts.json", {}).get("claude_dirs", [])
-             if isinstance(d, str) and not (cd and pu.same_path(d, norm(cd)))]
-    if _codex_installed():
+    acc = _load_json(Path(root) / "accounts.json", {})
+
+    def others(key):
+        return [d for d in acc.get(key, []) if isinstance(d, str) and not (cd and pu.same_path(d, norm(cd)))]
+    users = others("claude_dirs") + ["Codex in %s" % d for d in others("codex_dirs")]
+    if not acc.get("codex_dirs") and _codex_legacy():
         users.append("Codex")
     if not users:
         return
@@ -423,6 +439,35 @@ def _purge(root: Path) -> None:
     except OSError:
         left = sorted(str(p.relative_to(root)).replace("\\", "/") for p in root.rglob("*") if not p.is_dir())
         print("kept %s (%s)" % (root, "your notes" if left == [KEEP] else "contains files Dryas did not create"))
+
+
+def purge_shared() -> bool:
+    """--purge without a Claude config dir (Codex-only uninstall): remove the data root only when accounts.json is
+    readable and lists no Claude config dir and no CODEX_HOME, and no legacy Codex copy install uses it."""
+    raw = data_root()
+    root = norm(raw)
+    if not os.path.lexists(str(raw)):
+        return False
+    try:
+        acc = json.loads((root / "accounts.json").read_text(encoding="utf-8"))
+        if not isinstance(acc, dict):
+            raise ValueError("not an object")
+    except (OSError, ValueError):
+        print("kept %s: the list of accounts using it is missing or unreadable" % root)
+        return False
+    left = [d for k in ("claude_dirs", "codex_dirs") for d in acc.get(k, []) if isinstance(d, str)]
+    legacy = _codex_legacy()
+    if left:
+        why = "still used by " + ", ".join(left)
+    elif legacy:
+        why = "a Codex copy install uses it (%s); uninstall it first (install.sh --uninstall --harness codex)" % legacy
+    else:
+        why = "it is a symlink" if raw.is_symlink() else _purge_refusal(root, Path.home() / ".codex")
+    if why:
+        print("kept %s: %s" % (root, why))
+        return False
+    _purge(root)
+    return True
 
 
 def uninstall(cd: Path, purge: bool) -> int:

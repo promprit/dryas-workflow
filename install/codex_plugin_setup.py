@@ -2,7 +2,7 @@
 
   setup(repo, cdx, comps, yes)   one CODEX_HOME; run once per Codex account (install.sh --harness codex --codex-dir DIR)
   verify(cdx, comps)             PASS/FAIL/SKIP lines; returns the number of FAILs
-  uninstall(cdx)                 that CODEX_HOME only (Task 7)
+  uninstall(cdx)                 that CODEX_HOME only: plugin, trust, our config tables, its accounts entry
   migrate_legacy(cdx, home)      today's Codex copy install in cdx, and its runtime copy in home/.claude, removed
 """
 import json
@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_appserver as ca  # noqa: E402
 import codex_target as ct  # noqa: E402
+import codex_toml as tt  # noqa: E402
 import dryas_install as di  # noqa: E402
 import migrate  # noqa: E402
 import platform_util as pu  # noqa: E402
@@ -104,67 +105,8 @@ def toml_block(comps: List[str], plugin_root, data_root, ruflo_env: Dict[str, st
     return "\n".join(lines).strip()
 
 
-HEADER_RE = re.compile(r"^\s*(\[{1,2})([^\]=\[]+)(\]{1,2})\s*(#.*)?$")
-KEY_RE = re.compile(r"""\s*("(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+)\s*(?:\.|$)""")
-KeyPath = Tuple[str, ...]
-
-
-def norm_header(line: str) -> Optional[Tuple[KeyPath, bool]]:
-    """(key path, is array-of-tables) of a TOML table header line; None = not a header. Whitespace, quotes around
-    plain keys and a trailing comment do not matter: [ a . "b" ] # x  ==  [a.b]."""
-    m = HEADER_RE.match(line)
-    if not m or len(m.group(1)) != len(m.group(3)):
-        return None
-    inner, keys, pos = m.group(2), [], 0
-    while pos < len(inner):
-        k = KEY_RE.match(inner, pos)
-        if not k or k.end() == pos:
-            return None
-        tok = k.group(1)
-        try:
-            keys.append(json.loads(tok) if tok.startswith('"') else tok.strip("'"))
-        except ValueError:
-            return None
-        pos = k.end()
-    return (tuple(keys), len(m.group(1)) == 2) if keys else None
-
-
-def _scan(line: str, st: dict) -> None:
-    """Track multi-line strings and open brackets across lines (a header can only start outside both)."""
-    i = 0
-    while i < len(line):
-        if st["ml"]:
-            j = line.find(st["ml"], i)
-            if j < 0:
-                return
-            st["ml"], i = None, j + 3
-            continue
-        c = line[i]
-        if line[i:i + 3] in ('"' * 3, "'" * 3):
-            st["ml"], i = line[i:i + 3], i + 3
-        elif c in "\"'":
-            j = i + 1
-            while j < len(line) and line[j] != c:
-                j += 2 if c == '"' and line[j] == "\\" else 1
-            i = j + 1
-        elif c == "#":
-            return
-        else:
-            st["depth"] += (c in "[{") - (c in "]}")
-            i += 1
-
-
-def _lines(text: str) -> List[Tuple[str, Optional[Tuple[KeyPath, bool]]]]:
-    st, out = {"ml": None, "depth": 0}, []  # type: ignore[var-annotated]
-    for line in text.splitlines(True):
-        hdr = None
-        if st["ml"] is None and st["depth"] <= 0:
-            st["depth"] = 0
-            hdr = norm_header(line)
-        if hdr is None:
-            _scan(line, st)
-        out.append((line, hdr))
-    return out
+KeyPath = tt.KeyPath
+norm_header, _lines = tt.norm_header, tt.lines  # shared with codex_toml (trust removal)
 
 
 def _sections(text: str) -> Dict[KeyPath, List[str]]:
@@ -376,6 +318,23 @@ def _runtime_users(cdx: Path, home: Path) -> List[Path]:
     return out
 
 
+def _check_legacy_items(rec: dict) -> None:
+    """The element shapes ct.uninstall_codex relies on; a skill name must name one folder in ~/.agents/skills."""
+    for n in rec.get("skills", []):
+        if not isinstance(n, str) or n in ("", ".", "..") or "/" in n or "\\" in n or ":" in n:
+            raise ValueError('"skills" holds %s, not a skill folder name' % json.dumps(n))
+    for n, b in rec.get("skill_backups", {}).items():
+        if b is not None and not isinstance(b, str):
+            raise ValueError('"skill_backups" for %s is not a path' % json.dumps(n))
+    hk = rec.get("hooks", {}).get("hooks", [])
+    if not isinstance(hk, list) or not all(
+            isinstance(h, list) and len(h) == 3 and isinstance(h[0], str) and isinstance(h[2], str)
+            and (h[1] is None or isinstance(h[1], str)) for h in hk):
+        raise ValueError('"hooks" is not a list of [event, matcher, command]')
+    if not all(isinstance(v, str) for v in rec.get("mcp", {}).values()):
+        raise ValueError('"mcp" values are not strings')
+
+
 def legacy_problem(cdx: Path, home: Path) -> str:
     """Why the legacy Codex copy install (or its ~/.claude runtime copy) cannot be removed safely; "" = it can.
     Checked before setup changes anything."""
@@ -389,6 +348,7 @@ def legacy_problem(cdx: Path, home: Path) -> str:
             for k, t in (("skills", list), ("skill_backups", dict), ("hooks", dict), ("mcp", dict)):
                 if not isinstance(rec.get(k, t()), t):
                     raise ValueError('"%s" is not a %s' % (k, t.__name__))
+            _check_legacy_items(rec)
         except (OSError, ValueError) as e:
             return "%s cannot be read (%s)" % (p, e)
         try:
@@ -416,7 +376,7 @@ def migrate_legacy(cdx: Path, home: Path, dry: bool = False) -> List[str]:
             print("Removing the Codex copy install in %s (the plugin replaces it)" % cdx)
             try:
                 ct.uninstall_codex(cdx, home, lambda argv: di.run(argv, env=child_env(cdx)))
-            except (OSError, ValueError, SystemExit) as e:
+            except (Exception, SystemExit) as e:  # any failure: keep the record, the user gets "fix and re-run"
                 raise LegacyError("removing the Codex copy install in %s failed: %s" % (cdx, e))
             msgs.append("removed the Codex copy install in %s" % cdx)
     cd = home / ".claude"
@@ -530,7 +490,7 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     trust_hooks(cdx, rec, yes)
     ps._save_json(rec_path, rec)  # trust is written: uninstall must be able to remove it even if a later step fails
     ps.write_workflow_doc(repo, root)
-    ps.write_chain_local(root, comps, None, repo, None)
+    ps.write_chain_local(root, comps, None, repo, cdx)  # the shared-choices warning names the other accounts only
     ps.add_account(root, cdx, "codex_dirs")
     rec.update(components=sorted(set(comps)), version=want, plugin_root=plugin_root)
     ps._save_json(rec_path, rec)
@@ -539,6 +499,95 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     if "jev" in comps and not (os.environ.get("OPENROUTER_API_KEY") or "").strip():
         print("note: Jev reads OPENROUTER_API_KEY from the shell Codex runs in; set it in your shell profile.")
     print("Dryas set up in %s (plugin at %s, state in %s)" % (cdx, plugin_root, root))
+    return 0
+
+
+def _remove_config(cfg: Path, rec: dict) -> None:
+    """Drop the recorded trust keys and the tables setup wrote (only while unchanged) from config.toml; everything
+    else in the file stays as it is."""
+    try:
+        with open(cfg, encoding="utf-8", newline="") as fh:
+            text = fh.read()
+    except FileNotFoundError:
+        return
+    except OSError as e:
+        print("warning: %s cannot be read (%s); remove the Dryas entries by hand" % (cfg, e))
+        return
+    owned, changed = owned_tables(text, rec.get("toml_body"))
+    for path in changed:
+        print("warning: %s in %s was changed after Dryas setup wrote it; left as it is" % (_show(path), cfg))
+    new = text
+    if owned or any(ln.strip() in (TOML_START, TOML_END) for ln, _ in _lines(text)):
+        new = rewrite_config(text, "", owned)  # also drops lone markers: nothing later may claim what they enclose
+    # trust after the markers are gone: Codex writes [hooks.state] and the trust tables in front of our end marker
+    new, missing = tt.remove_trust(new, sorted(rec.get("trusted") or {}))
+    if len(missing) < len(rec.get("trusted") or {}):
+        print("removed the Dryas hook trust from %s" % cfg)
+    if new == text:
+        return
+    if not new.strip() and rec.get("toml_created"):
+        cfg.unlink()
+        print("removed %s (Dryas created it)" % cfg)
+        return
+    with open(cfg, "w", encoding="utf-8", newline="") as fh:
+        fh.write(new)
+    if owned:
+        print("removed the Dryas tables from %s" % cfg)
+
+
+def uninstall(cdx: Path) -> int:
+    """Dryas out of one CODEX_HOME: the plugin, the marketplace (when setup added it), the recorded hook trust and
+    the config tables setup wrote, the accounts.json entry, the record. A legacy Codex copy install there goes the
+    way setup migrates it (a live Claude copy install is kept). Other CODEX_HOMEs and the data root stay."""
+    cdx, home, root = codex_home(str(cdx)), Path.home(), ps.data_root()
+    problem = legacy_problem(cdx, home)
+    if problem:
+        print("error: %s; fix or remove it and re-run (nothing changed)" % problem)
+        return 1
+    try:
+        migrate_legacy(cdx, home)
+    except LegacyError as e:
+        print("error: %s. Fix the error above and re-run the uninstall (it resumes)" % e)
+        return 1
+    rec_path = cdx / RECORD
+    if not rec_path.exists():
+        print("no Dryas plugin install recorded in %s" % cdx)
+        return 0
+    rec = ps._load_json(rec_path, {})
+    if not rec or not isinstance(rec.get("trusted", {}), dict):
+        print("error: %s cannot be read; nothing removed (fix or remove it and re-run)" % rec_path)
+        return 1
+    rc = _say_run(["codex", "plugin", "remove", ID], cdx, False)
+    if rc:
+        print("warning: `codex plugin remove` failed (exit %d); remove %s by hand (codex plugin remove %s)"
+              % (rc, ID, ID))
+    if rec.get("marketplace_added"):
+        mk = marketplaces(cdx)
+        if mk is None:
+            print("warning: `codex plugin marketplace list` failed; if %s is still listed, remove it with "
+                  "`codex plugin marketplace remove %s`" % (MARKET, MARKET))
+        elif MARKET in mk:
+            rc = _say_run(["codex", "plugin", "marketplace", "remove", MARKET], cdx, False)
+            if rc:
+                print("warning: `codex plugin marketplace remove` failed (exit %d); remove %s by hand" % (rc, MARKET))
+    _remove_config(cdx / "config.toml", rec)
+    try:
+        (cdx / "plugins" / "cache" / MARKET).rmdir()  # Codex leaves the empty marketplace folder behind
+    except OSError:
+        pass
+    acc = root / "accounts.json"
+    try:
+        known = isinstance(json.loads(acc.read_text(encoding="utf-8")), dict)
+    except (OSError, ValueError):
+        known = False
+    if known:
+        ps.remove_account(root, cdx, "codex_dirs")
+    elif acc.exists():
+        print("warning: %s is unreadable; left as it is" % acc)
+    rec_path.unlink()
+    if rec.get("dir_created") and cdx.is_dir() and not os.listdir(str(cdx)):
+        cdx.rmdir()
+    print("uninstalled Dryas from %s" % cdx)
     return 0
 
 

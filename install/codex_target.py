@@ -50,7 +50,8 @@ def uninstall_codex(cdx: Path, home: Path, run: Callable[[List[str]], int]) -> i
     for name in rec.get("skills", []):
         b = rec.get("skill_backups", {}).get(name)
         if b and not os.path.exists(b):
-            continue  # restored by an earlier, interrupted run: what is there now is the user's skill
+            print("kept %s (restored by an earlier, interrupted run)" % (sd / name))
+            continue  # what is there now is the user's skill
         shutil.rmtree(str(sd / name), ignore_errors=True)
         if b:
             shutil.move(b, str(sd / name))

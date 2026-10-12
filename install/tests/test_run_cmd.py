@@ -51,17 +51,42 @@ class RunCmdTest(unittest.TestCase):
         self.assertNotIn("claude(", run_cmd.preflight(["core"], "codex", Path("/x/.claude"))[0])
 
     def test_preflight_codex_python3(self):
-        pu.which = lambda n: "" if n == "python3" else "/bin/" + n
-        orig = pu.IS_WINDOWS
-        pu.IS_WINDOWS = False
-        try:
-            probs = run_cmd.preflight(["core"], "codex", Path("/x/.claude"))
-        finally:
-            pu.IS_WINDOWS = orig
-        self.assertTrue(any("python3" in p for p in probs), probs)
+        from unittest import mock
+        import codex_plugin_setup as cps
+        pu.which = lambda n: "/bin/" + n
+        pu.space_free = lambda p: str(p)
+        with mock.patch.object(run_cmd, "codex_version", lambda: (0, 162, 1)), \
+                mock.patch.object(pu, "IS_WINDOWS", False):
+            for ok in (False, True):
+                with mock.patch.object(cps, "python3_ok", lambda: ok):
+                    probs = run_cmd.preflight(["core"], "codex", Path("/x/.claude"))
+                    self.assertEqual(any("python3" in p and "3.9" in p for p in probs), not ok, probs)
+            with mock.patch.object(cps, "python3_ok", lambda: False):
+                self.assertEqual(run_cmd.preflight(["core"], "claude", Path("/x/.claude")), [])
+
+    def test_preflight_windows_warns_without_python(self):
+        import io
+        from contextlib import redirect_stdout
+        from unittest import mock
+        import codex_plugin_setup as cps
+        pu.space_free = lambda p: str(p)
+        with mock.patch.object(run_cmd, "codex_version", lambda: (0, 162, 1)), \
+                mock.patch.object(pu, "IS_WINDOWS", True), \
+                mock.patch.object(cps, "python3_ok", lambda: False):
+            for have in (False, True):
+                pu.which = lambda n: "" if (n == "python" and not have) else "/bin/" + n
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    probs = run_cmd.preflight(["core"], "codex", Path("/x/.claude"))
+                self.assertEqual(probs, [])
+                self.assertEqual("warning: `python` is not on PATH" in buf.getvalue(), not have, buf.getvalue())
 
     def test_preflight_codex_version(self):
         from unittest import mock
+        import codex_plugin_setup as cps
+        p = mock.patch.object(cps, "python3_ok", lambda: True)
+        p.start()
+        self.addCleanup(p.stop)
         pu.which = lambda n: "/bin/" + n
         pu.space_free = lambda p: str(p)
         with mock.patch.object(run_cmd, "codex_version", lambda: (0, 150, 0)):
@@ -75,6 +100,10 @@ class RunCmdTest(unittest.TestCase):
 
     def test_preflight_codex_ruflo_needs_node_npm(self):
         from unittest import mock
+        import codex_plugin_setup as cps
+        p = mock.patch.object(cps, "python3_ok", lambda: True)
+        p.start()
+        self.addCleanup(p.stop)
         pu.which = lambda n: "" if n in ("node", "npm") else "/bin/" + n
         with mock.patch.object(run_cmd, "codex_version", lambda: (0, 162, 1)):
             probs = run_cmd.preflight(["core", "ruflo"], "codex", Path("/x/.claude"))
@@ -122,9 +151,10 @@ class MainStubs(object):
         patches = [mock.patch.object(di, "uninstall", rec("di.uninstall")),
                    mock.patch.object(di, "confirm", lambda *a: False),
                    mock.patch.object(cps, "setup", rec("cps.setup")), mock.patch.object(cps, "verify", rec("cps.verify")),
-                   mock.patch.object(cps, "uninstall", rec("cps.uninstall"), create=True),
+                   mock.patch.object(cps, "uninstall", rec("cps.uninstall")),
                    mock.patch.object(cps, "codex_home", lambda arg: Path(arg) if arg else self.tmp / ".codex"),
                    mock.patch.object(run_cmd, "codex_version", lambda: cps.MIN_CODEX),
+                   mock.patch.object(cps, "python3_ok", lambda: True),
                    mock.patch.object(ct, "uninstall_codex", rec("ct.uninstall_codex")),
                    mock.patch.object(ct, "codex_dir", lambda: self.tmp / ".codex"),
                    mock.patch.object(migrate, "migrate", rec("migrate")),
@@ -233,11 +263,33 @@ class MainTest(unittest.TestCase):
         self.assertEqual(st.steps(), ["ps.uninstall"])
         self.assertEqual(st.call("ps.uninstall")[0], (cd.resolve(), True))
 
-    def test_both_uninstall(self):
+    def test_both_uninstall_codex_first(self):
         st = MainStubs(self)
         self.main("--uninstall", "--harness", "both")
-        self.assertEqual(st.steps(), ["ct.uninstall_codex", "di.uninstall", "ps.uninstall"])
-        self.assertEqual(st.call("di.uninstall")[0], (st.tmp / ".claude",))
+        self.assertEqual(st.steps(), ["cps.uninstall", "ps.uninstall"])
+
+    def test_codex_only_purge(self):
+        st = MainStubs(self)
+        import plugin_setup as ps
+        from unittest import mock
+        seen = []
+        with mock.patch.object(ps, "purge_shared", lambda: seen.append(1) or True):
+            self.main("--uninstall", "--purge", "--harness", "codex")
+        self.assertEqual((st.steps(), seen), (["cps.uninstall"], [1]))
+
+    def test_codex_uninstall_one_codex_home_never_claude(self):
+        st = MainStubs(self)
+        self.assertEqual(self.main("--uninstall", "--harness", "codex", "--codex-dir", str(st.tmp / "cx2")), 0)
+        self.assertEqual(st.steps(), ["cps.uninstall"])  # no copy uninstall of ~/.claude (a live Claude install)
+        self.assertEqual(st.call("cps.uninstall")[0], (st.tmp / "cx2",))
+
+    def test_codex_uninstall_failure_stops_before_claude(self):
+        st = MainStubs(self)
+        import codex_plugin_setup as cps
+        from unittest import mock
+        with mock.patch.object(cps, "uninstall", lambda cdx: 1):
+            self.assertEqual(self.main("--uninstall", "--purge", "--harness", "both"), 1)
+        self.assertEqual(st.steps(), [])
 
     def test_setup_failure_stops(self):
         st = MainStubs(self)
@@ -291,6 +343,8 @@ class MainTest(unittest.TestCase):
         self.assertEqual(self.main("--claude-dir", str(st.tmp / ".claude")), 1)
         self.assertEqual(st.steps(), [])
         self.assertIn("--harness both", self.out)
+        self.assertIn("--uninstall --harness codex", self.out)  # for users who dropped Codex
+        self.assertIn("install.ps1", self.out)
 
     def test_claude_only_other_dir_ignores_legacy_codex(self):
         st = MainStubs(self)
