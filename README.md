@@ -13,6 +13,8 @@ This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.m
 
 Built and run by [Dryas Studio](https://dryasstudio.com), which delivers every client project with it.
 
+See it running: [FlowObserve](https://github.com/promprit/flowobserve) shows every live session's stage in the loop and tells you when one needs you. [Live demo](https://dryasstudio.com/demos/flowobserve/), nothing to install.
+
 ## Why not just install the skills?
 
 You can install Superpowers, Ruflo and a few design skills on their own. Side by side, their rules are prompts the agent may skip, they compete for the same jobs, their hooks fire in install order and nothing controls model spend. Dryas makes them one system: hooks enforce the rules, each job has one owner, the hook chain has a fixed order, a logged ladder picks the model, and a weekly tune checks that the guardrails fit. The full comparison: [Why not just install the skills?](docs/why-dryas.md#why-not-just-install-the-skills)
@@ -100,6 +102,8 @@ These are the reference implementation's bindings, not part of the method; each 
 | [Superpowers](https://github.com/obra/superpowers) | Process skills (brainstorming, worktrees, review) | `--no-superpowers` |
 | [Impeccable](https://github.com/pbakaus/impeccable) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Design skills | `--no-design` |
 | [pstack](https://github.com/michael-denyer/pstack-claude) picks | Interrogate review, cleanup, benchmark checklist, executor principles (vendored, adapted) | `--no-pstack-picks` |
+
+Optional, installed separately: [FlowObserve](https://github.com/promprit/flowobserve), an observe-only monitor for live Claude Code sessions. With Dryas it also shows escalations, one build lane per plan task, Jev spend against budget and per-stage timings. It never blocks or changes anything.
 
 ## Requirements
 
