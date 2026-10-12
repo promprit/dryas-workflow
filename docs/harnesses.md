@@ -3,7 +3,7 @@
 | Harness | Status |
 | --- | --- |
 | Claude Code | Supported: plugin `dryas@dryas-workflow` |
-| Codex | Supported via `install.sh --harness codex`; a Codex plugin is next |
+| Codex | Supported: plugin `dryas@dryas-workflow` |
 | Pi, OpenCode, Roo, Cursor | Later |
 
 
@@ -13,9 +13,9 @@ Supported. This is where the whole workflow runs: commands, agents, the scope lo
 
 ## Codex
 
-Supported: rules, skills, MCP, and the safety and routing hooks. A Codex plugin is next on the [roadmap](roadmap.md). Until then, install with `--harness codex` or `--harness both` (see [install.md](install.md)).
+Supported: rules, skills, MCP, and the safety and routing hooks. It ships as a Codex plugin with the same id, `dryas@dryas-workflow` (the `codex/` folder), set up once per Codex home (`CODEX_HOME`) with `install.sh --harness codex` or `--harness both` (see [install.md](install.md#codex-plugin-plus-setup)).
 
-Codex gets: the `AGENTS.md` rules block; the skills `$orchestrate`, `$wplan`, `$wreview`, `$commit`, `$tune`, `$interrogate`, `$benchmark-checklist`; the scope lock (including `apply_patch` edits, which are checked file by file and denied when the patch cannot be read), the Jev gate and the Jev route hint (`escalate: yes/no` instead of `opus: yes/no`); the `jev` and `ruflo` MCP servers. With pstack picks, Codex runs the same root-cause, interrogate and cleanup steps; its interrogate panel is two Codex sub-agents (cheaper, then stronger).
+Codex gets: the rules, injected at session start by a SessionStart hook (Codex plugins have no rules file); the plugin skills `$dryas:orchestrate`, `$dryas:wplan`, `$dryas:wreview`, `$dryas:commit`, `$dryas:tune`, `$dryas:interrogate`, `$dryas:benchmark-checklist` (the prefixed form is how Codex lists plugin skills; whether the TUI also takes the short form, such as `$interrogate`, is a manual release check step); the scope lock (including `apply_patch` edits, which are checked file by file and denied when the patch cannot be read), the Jev gate and the Jev route hint (`escalate: yes/no` instead of `opus: yes/no`); the `jev` MCP server from the plugin and the `ruflo` MCP server from setup. Codex runs plugin hooks only once they are trusted: setup trusts the Dryas hooks after you agree, otherwise trust them in Codex's `/hooks`. With pstack picks, Codex runs the same root-cause, interrogate and cleanup steps; its interrogate panel is two Codex sub-agents (cheaper, then stronger).
 
 Claude Code only: context-window warnings, compaction keep/restore, `/handoff`, the Ruflo hooks, the `dryas:executor` agent and the Haiku → Sonnet → Opus → Fable ladder, FlowObserve, the read-only executor review panel (scope lock with an empty Scope). In Codex, use its own sub-agents and models: cheaper first, stronger on failure, every step logged with `log_escalation`.
 
@@ -28,7 +28,9 @@ You can run Dryas on several Claude Code accounts side by side, for example a pe
 ./install/install.sh --claude-dir ~/.claude-team
 ```
 
-Each dir gets the plugin and its own settings merge. All accounts share one state root, `~/.dryas`: Jev logs, `/tune` thresholds, handoffs, `chain.local.json` and the Ruflo runtime. So `/tune` sees the work of every account. Component choices are shared the same way: `chain.local.json` is one file, so a `--no-` flag on one account's setup run turns that component's stages off for every account and for Codex (setup prints a warning naming them). `~/.dryas/accounts.json` lists the config dirs set up so far; uninstall removes a dir from it, and `--purge` only clears `~/.dryas` (logs, thresholds, handoffs; your `dryas-local.md` stays) once no account is left and no Codex install uses it.
+Each dir gets the plugin and its own settings merge. All accounts share one state root, `~/.dryas`: Jev logs, `/tune` thresholds, handoffs, `chain.local.json` and the Ruflo runtime. So `/tune` sees the work of every account. Component choices are shared the same way: `chain.local.json` is one file, so a `--no-` flag on one account's setup run turns that component's stages off for every account and for Codex (setup prints a warning naming them). `~/.dryas/accounts.json` lists the config dirs set up so far; uninstall removes a dir from it, and `--purge` only clears `~/.dryas` (logs, thresholds, handoffs; your `dryas-local.md` stays) once no account is left and no Codex home uses it.
+
+Several Codex accounts work the same way: each has its own Codex home (`CODEX_HOME`, for example `~/.codex` and `~/.codex-work`), set up once each with `--codex-dir`. Each home gets its own plugin copy, hook trust and config block, and all share `~/.dryas` (`accounts.json` lists them under `codex_dirs`).
 
 FlowObserve reads the Jev logs in `~/.dryas/jev/logs`, so it sees escalations and spend from every account. Its transcript reader still looks in `~/.claude` only; reading transcripts from other config dirs is a FlowObserve follow-up.
 

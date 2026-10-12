@@ -16,10 +16,12 @@
 ## Plugin version
 
 - The plugin runs in place from the clone, so a `git pull` is enough for directory installs. Still bump `version` in `claude/.claude-plugin/plugin.json` (and the plugin entry in `.claude-plugin/marketplace.json`) when shipped plugin content changes between releases: cache entries and non-directory installs only update on a new version.
+- Codex runs a copy of `codex/` from `$CODEX_HOME/plugins/cache/dryas-workflow/dryas/<version>/`; users get changes by re-running setup (`codex plugin add` refreshes the copy). Bump `version` in `codex/.codex-plugin/plugin.json` when shipped Codex plugin content changes between releases.
 
 ## Running the tests
 
 ```
 python -m pytest -q claude/jev/tests install/tests claude/ruflo/tests
 node claude/ruflo/tests/test_ns.cjs
+python tools/sync_codex_plugin.py --check
 ```

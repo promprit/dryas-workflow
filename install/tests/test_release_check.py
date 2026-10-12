@@ -1,11 +1,13 @@
 """release_check.py against the plugin in this repo (a config dir whose installed_plugins.json points at <repo>/claude)
-and a hand-built Codex copy install in a temp home, with fake `claude` and `codex`."""
+with a fake `claude`, and against the Codex plugin set up by codex_plugin_setup with the fake `codex`."""
 import contextlib, io, json, os, shutil, subprocess, sys, tempfile, unittest
 from unittest import mock
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import fakecli
+import codex_plugin_setup as cps
+from test_codex_plugin_setup import Env, quiet
 REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / "tools"))
 import release_check
@@ -19,33 +21,14 @@ class ReleaseCheckTest(unittest.TestCase):
         fb = self.tmp / "bin"
         self.fb = fb
         fakecli.make(fb, "claude", self.tmp / "calls.jsonl", outputs={"mcp list": "jev: ok\n"}, plugin_list=True)
-        fakecli.make(fb, "codex", self.tmp / "calls.jsonl", outputs={"mcp list": "jev\n"})
         self.env = {k: v for k, v in os.environ.items() if k not in release_check.KEY_VARS + (
             "DRYAS_DATA_ROOT", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "DRYAS_PY", "JEV_CHAIN_LOCAL")}
         self.env.update(HOME=str(self.home), USERPROFILE=str(self.home), PATH=str(fb) + os.pathsep + os.environ["PATH"],
                         CODEX_HOME=str(self.home / ".codex"), DRYAS_DATA_ROOT=str(self.tmp / "data"),
                         JEV_LOG_DIR=str(self.tmp / "logs"), JEV_HANDOFF_DIR=str(self.tmp / "handoff"),
                         JEV_COMPACT_DIR=str(self.tmp / "compact"))
-        self.codex_copy_install(self.home / ".codex")
         self.cd = self.tmp / "claude-a"
         self.plugin(self.cd, REPO / "claude")
-
-    def codex_copy_install(self, cdx):
-        """A Codex copy install as release_check reads it (install_codex is gone; Task 8 moves the check to the
-        plugin): hooks.json entries recorded in .dryas-installed.json, running this repo's chain.py."""
-        py, chain = sys.executable.replace("\\", "/"), (REPO / "claude" / "jev" / "chain.py").as_posix()
-        hooks = [["PreToolUse", "Bash|apply_patch|Edit|Write", '"%s" -X utf8 "%s" pretool --harness codex' % (py, chain)],
-                 ["UserPromptSubmit", None, '"%s" -X utf8 "%s" prompt --harness codex' % (py, chain)]]
-        cdx.mkdir(parents=True)
-        data = {"hooks": {}}
-        for ev, matcher, cmd in hooks:
-            g = {"hooks": [{"type": "command", "command": cmd, "timeout": 20}]}
-            if matcher:
-                g["matcher"] = matcher
-            data["hooks"][ev] = [g]
-        (cdx / "hooks.json").write_text(json.dumps(data), encoding="utf-8")
-        (cdx / ".dryas-installed.json").write_text(json.dumps({"components": ["core", "jev"], "skills": [],
-                                                               "hooks": {"hooks": hooks}, "mcp": {}}), encoding="utf-8")
 
     def plugin(self, cd, root):
         (cd / "plugins").mkdir(parents=True)
@@ -60,7 +43,9 @@ class ReleaseCheckTest(unittest.TestCase):
         for d in dirs or (self.cd,):
             argv += ["--claude-dir", str(d)]
         buf = io.StringIO()
-        with mock_env(self.env), contextlib.redirect_stdout(buf):
+        real = shutil.which
+        no_codex = lambda t, *a, **k: None if t == "codex" else real(t, *a, **k)  # Codex: CodexPluginReleaseCheckTest
+        with mock_env(self.env), contextlib.redirect_stdout(buf), mock.patch.object(release_check.shutil, "which", no_codex):
             rc = release_check.main(argv + ["--codex-dir", str(self.home / ".codex")])
         return rc, buf.getvalue()
 
@@ -74,12 +59,13 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertIn("PASS  plugin hooks run (UserPromptSubmit)", out)
         self.assertIn("PASS  plugin hooks run (PreCompact)", out)
         self.assertIn("PASS  Scope lock (claude)", out)
-        self.assertIn("PASS  Scope lock (codex)", out)
+        self.assertIn("SKIP  dryas plugin installed (Codex)  (codex not on PATH)", out)
         self.assertIn("SKIP  Jev route", out)
         self.assertIn("PASS  plugin manifests valid", out)
         self.assertIn("Manual checks (needs the app open):", out)
         self.assertIn("5. In each account's Claude Code, run /plugin", out)
         self.assertIn("6. Run /tune and /handoff once in each account", out)
+        self.assertIn("type $dryas:orchestrate in the TUI", out)
 
     def test_hooks_leave_no_state_behind(self):
         def files():
@@ -205,6 +191,70 @@ class ReleaseCheckTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(io.StringIO()):
             release_check.main(["--help"])
         self.assertEqual(cm.exception.code, 0)
+
+
+class CodexPluginReleaseCheckTest(unittest.TestCase):
+    """The Codex part: the plugin per --codex-dir, set up by codex_plugin_setup against the fake codex."""
+
+    def run_check(self, e, *cdxs):
+        args = ["--claude-dir", str(e.t / "no-claude")]
+        for c in cdxs:
+            args += ["--codex-dir", str(c)]
+        return quiet(release_check.main, args)[1]
+
+    def test_codex_lines_pass_after_setup(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core", "jev"], yes=True)
+        out = self.run_check(e, e.a)
+        for line in ("PASS  dryas plugin installed (Codex)", "PASS  Codex hooks trusted",
+                     "PASS  Codex plugin hooks run (PreToolUse)", "PASS  Codex plugin hooks run (SessionStart)",
+                     "PASS  Codex plugin hooks run (UserPromptSubmit)", "PASS  Codex rules hook output",
+                     "PASS  Scope lock (codex)", "PASS  legacy Codex copy install"):
+            self.assertIn(line, out)
+        self.assertIn("Codex: %s" % e.a, out)
+
+    def test_each_codex_dir_checked(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core", "jev"], yes=True)
+        out = self.run_check(e, e.a, e.b)
+        self.assertEqual(out.count("PASS  dryas plugin installed (Codex)"), 1, out)
+        self.assertEqual(out.count("FAIL  dryas plugin installed (Codex)"), 1, out)
+        self.assertLess(out.index("Codex: %s" % e.a), out.index("Codex: %s" % e.b))
+
+    def test_hooks_leave_no_state_behind(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core", "jev"], yes=True)
+        before = sorted(str(p) for p in e.root.rglob("*"))
+        self.run_check(e, e.a)
+        self.assertEqual(sorted(str(p) for p in e.root.rglob("*")), before)
+
+    def test_untrusted_and_legacy_fail(self):
+        e = Env(self)
+        with mock.patch.object(cps.di, "confirm", lambda *a: False):
+            quiet(cps.setup, REPO, e.a, ["core", "jev"], yes=False)
+        (e.a / ".dryas-installed.json").write_text("{}", encoding="utf-8")
+        out = self.run_check(e, e.a)
+        self.assertIn("FAIL  Codex hooks trusted", out)
+        self.assertIn("run /hooks in Codex", out)
+        self.assertIn("FAIL  legacy Codex copy install", out)
+
+    def test_trust_needs_every_shipped_event(self):
+        listed = [{"pluginId": release_check.PLUGIN_ID, "eventName": ev, "key": "k" + ev, "trustStatus": "trusted"}
+                  for ev in ("preToolUse", "sessionStart")]
+        rep = release_check.Report()
+        with mock.patch.object(release_check.ca, "list_hooks", lambda *a: listed):
+            out = quiet(release_check.codex_trust, rep, {})[1]
+        self.assertIn("FAIL  Codex hooks trusted  (missing: UserPromptSubmit", out)
+
+    def test_not_installed(self):
+        e = Env(self)
+        self.assertIn("FAIL  dryas plugin installed (Codex)", self.run_check(e, e.b))
+
+    def test_default_codex_dir(self):
+        e = Env(self)
+        with mock.patch.dict(os.environ, {"CODEX_HOME": str(e.b)}):
+            out = quiet(release_check.main, ["--claude-dir", str(e.t / "no-claude")])[1]
+        self.assertIn("Codex: %s" % e.b, out)
 
 
 @contextlib.contextmanager

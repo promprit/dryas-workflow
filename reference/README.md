@@ -9,9 +9,9 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | Path | What |
 | --- | --- |
 | `claude/` | Claude Code edition, packaged as the plugin `dryas@dryas-workflow`: rules template, `hooks/hooks.json`, `.mcp.json`, commands, skills, `dryas:executor` agent, Jev and Ruflo hooks |
-| `codex/` | Codex edition: `AGENTS.md` template, skills, hooks fragment |
+| `codex/` | Codex edition, packaged as the Codex plugin `dryas@dryas-workflow` (marketplace `.agents/plugins/marketplace.json`): rules template (`AGENTS.md.template`), `hooks/hooks.json`, `.mcp.json`, skills; `codex/jev` and `codex/pstack` are generated from `claude/` by `tools/sync_codex_plugin.py` |
 | `claude/jev/` | Harness-agnostic Python shared by both editions: scope lock, gate, route, plan-file tools, handoff, logs |
-| `install/` | Installer for both editions (`--harness claude|codex|both`): plugin setup per Claude config dir, Codex copy install |
+| `install/` | Installer for both editions (`--harness claude|codex|both`): plugin setup per Claude config dir and per Codex home (`CODEX_HOME`) |
 | `~/.dryas` | Shared state for every account (`$DRYAS_DATA_ROOT`): Jev logs, thresholds, handoffs, `chain.local.json`, `accounts.json`, Ruflo runtime |
 
 ## Bindings
@@ -29,9 +29,10 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | Execution | Design specialists | [Impeccable](https://github.com/pbakaus/impeccable), [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) |
 | Escalation | Ladder and log | Haiku → Sonnet → Opus → Fable, `mcp__plugin_dryas_jev__log_escalation` |
 | Review | Review and gates | `/wreview`, `/interrogate`, pstack cleanup, `/benchmark-checklist`, `/commit` |
-| Harness | Rules binding | SessionStart hook `claude/jev/rules_inject.py` (injects `claude/CLAUDE.md.template`) |
-| Harness | Hooks binding | Plugin `claude/hooks/hooks.json` |
-| Harness | MCP binding | Plugin `claude/.mcp.json` (Jev MCP server) |
+| Harness | Rules binding | SessionStart hook `claude/jev/rules_inject.py` (injects `claude/CLAUDE.md.template`); Codex: the same hook with `--harness codex` (injects `codex/AGENTS.md.template`) |
+| Harness | Hooks binding | Plugin `claude/hooks/hooks.json`; Codex: plugin `codex/hooks/hooks.json`, trusted by setup after consent (or in `/hooks`) |
+| Harness | MCP binding | Plugin `claude/.mcp.json` (Jev MCP server); Codex: plugin `codex/.mcp.json`, plus setup's `config.toml` block for Ruflo and the `python3` fallback |
+| Harness | Skills binding | Plugin `claude/skills/` and `claude/commands/`; Codex: plugin `codex/skills/` (`$dryas:<name>`) |
 | Harness | State | `~/.dryas` (`$DRYAS_DATA_ROOT`), shared by every Claude config dir and Codex |
 
 ## Conformance
@@ -40,11 +41,11 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 
 | Rule | CC | CX | How |
 | --- | --- | --- | --- |
-| WF-1 | met | met | `/orchestrate` skill; `$orchestrate` in Codex |
+| WF-1 | met | met | `/orchestrate` skill; `$dryas:orchestrate` in Codex |
 | WF-2 | met | met | Brainstorm-first rule in the always-loaded rules; Superpowers brainstorming |
 | WF-3 | met | met | Superpowers brainstorming writes the design doc before orchestration |
 | WF-4 | met | met | Rules: single-file fix runs plainly; review still applies |
-| WF-5 | met | met | `claude/CLAUDE.md.template`, injected by the plugin's SessionStart hook; `codex/AGENTS.md.template`, rendered by the installer |
+| WF-5 | met | met | `claude/CLAUDE.md.template`, injected by the plugin's SessionStart hook; `codex/AGENTS.md.template`, injected by the Codex plugin's SessionStart hook |
 | MEM-1 | met | met | Ruflo is the only memory layer |
 | MEM-2 | met | met | Namespace = main repo folder name |
 | MEM-3 | met | met | Orchestrate skill: `memory_search` first, `memory_store` on return |

@@ -7,7 +7,7 @@
 The method is the asset; the tools are replaceable. This repo holds both:
 
 - **The framework:** why it exists, five layers, one loop, and a draft specification any harness can implement.
-- **A reference implementation**: a Claude Code plugin (`dryas@dryas-workflow`) and a Codex install, built on Superpowers, Ruflo, Jev and a few design skills.
+- **A reference implementation**: a Claude Code plugin (`dryas@dryas-workflow`) and a Codex plugin, built on Superpowers, Ruflo, Jev and a few design skills.
 
 This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
 
@@ -99,7 +99,7 @@ Details, flags and troubleshooting: [docs/install.md](docs/install.md).
 | Harness | Status |
 | --- | --- |
 | Claude Code | Plugin `dryas@dryas-workflow` |
-| Codex | `install/install.sh --harness codex` (or `both`); a Codex plugin is next |
+| Codex | Plugin `dryas@dryas-workflow` (`install/install.sh --harness codex`) |
 | Pi, OpenCode, Roo, Cursor | Later |
 
 Several accounts side by side (for example in T3 Code) share one `~/.dryas`. Details: [docs/harnesses.md](docs/harnesses.md).
@@ -133,8 +133,8 @@ Optional, installed separately: [FlowObserve](https://github.com/promprit/flowob
 
 ## Requirements
 
-- A Claude subscription with Claude Code, or the Codex CLI.
-- An OpenRouter API key for Jev. Jev is bring-your-own-key: set `OPENROUTER_API_KEY` in your shell, or pass `--openrouter-key` to setup (stored in Claude Code's secure storage). Without a key, Jev checks are skipped and the workflow still runs.
+- A Claude subscription with Claude Code, or the Codex CLI (0.162.1 or newer).
+- An OpenRouter API key for Jev. Jev is bring-your-own-key: set `OPENROUTER_API_KEY` in your shell, or pass `--openrouter-key` to setup (stored in Claude Code's secure storage; Codex reads the key from the shell only). Without a key, Jev checks are skipped and the workflow still runs.
 - macOS, Linux, WSL or Windows.
 - Python 3.9+, Node and npm (for Ruflo), git.
 

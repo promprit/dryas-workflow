@@ -1,6 +1,6 @@
 # Dryas as a Codex CLI plugin
 
-Date: 2026-10-13. Status: approved for autonomous build (the user approved building it on 2026-10-12; decisions marked **[J]** were made by judgment while writing and are listed under [Decisions made by judgment](#decisions-made-by-judgment)). **Contested: no** (packaging, setup and paths; the scope lock and the Jev gate keep their deny behavior).
+Date: 2026-10-13. Status: implemented on `feat/plugin-packaging` (Tasks 1–8, 2026-10-12); CI on all jobs and the manual release check (real model run, TUI skill syntax, Windows) still to do. Implementation decisions: [Amendments from the build](#amendments-from-the-build). Originally: approved for autonomous build (the user approved building it on 2026-10-12; decisions marked **[J]** were made by judgment while writing and are listed under [Decisions made by judgment](#decisions-made-by-judgment)). **Contested: no** (packaging, setup and paths; the scope lock and the Jev gate keep their deny behavior).
 
 ## Goal
 
@@ -171,3 +171,18 @@ All in the existing CI matrix (macOS, Ubuntu, Windows; Python 3.9 and 3.12). The
 - **[J5] Windows `commandWindows` uses cmd syntax and `python`**, shipped unverified behind a manual release-check gate.
 - **[J6] Trust is written through the app-server; trust removal edits `config.toml` text** for the recorded keys only (the app-server has no verified delete).
 - **[J7] Setup's own `config.toml` entries live in one marked block with new markers** (`dryas plugin`), so a half-migrated legacy block (`dryas-workflow` markers) is never confused with it.
+
+## Amendments from the build
+
+Decisions made while implementing (task reports in `.superpowers/cdx/`). Each keeps the design above; where it differs, this section wins.
+
+- **[B1] Event names.** Codex 0.162.1's `hooks/list` names events in camelCase (`preToolUse`, `sessionStart`, `userPromptSubmit`); trust keys use snake_case. Verify and the release check compare event names with case and `_` ignored. (Task 3, Task 6)
+- **[B2] Trust guard.** `codex_appserver.write_trust(..., plugin_id=ID)` refuses any entry of another plugin before it starts the app-server; the argument is optional so the signature stays compatible. Setup always passes it. (Task 3)
+- **[B3] Config block ownership by table, not by marker.** `codex mcp add/remove` re-renders `[mcp_servers]` and drops or moves comment lines, so a lone marker is a normal state. Setup owns the tables it recorded (`toml_body`) plus its known tables the markers still enclose; it removes those and appends the block at the end. Tables Codex adds inside the markers (other MCP servers, `hooks.state`) stay. If a table setup would write already exists and is not Dryas's, setup warns and leaves `config.toml` alone. (Task 4)
+- **[B4] Recorded trust is merged.** `trusted` in the record keeps earlier keys and adds every Dryas hook seen trusted, so uninstall can remove trust for hooks a plugin update dropped. A fresh decline still records nothing. (Task 5)
+- **[B5] Verify.** The plugin line also fails when the listed version differs from the version setup recorded; `codex plugin list` is skipped when the Codex home does not exist (the real CLI errors there); the trust line names the missing or untrusted events and ends with the `/hooks` hint. (Task 5, Task 6)
+- **[B6] Preflight.** The Codex version check runs only when `codex` is on PATH, so a missing CLI still reports "Missing: codex". On macOS and Linux `python3` must be 3.9+ (the installer stops otherwise); on Windows a missing `python` is a warning only, and setup falls back to the installer's Python for the Jev MCP server. (Task 6, Task 7)
+- **[B7] Shared runtime copy.** During migration the `~/.claude` runtime copy is kept while another Codex home (`~/.codex` or `$CODEX_HOME`) still has a copy install that uses it; the run says to set up that home too. (Task 6)
+- **[B8] Uninstall details.** The marketplace is removed only when setup added it and it is still listed (marketplaces are per Codex home, so none is shared). An empty `[hooks.state]` header is removed only when no `[hooks.state.*]` table is left. An emptied `config.toml` is deleted only when setup created it. If `codex plugin remove` fails, the record is still deleted (rc 0) with a warning that says how to remove the plugin by hand. Trust and the config block are removed in the order that leaves no empty header behind. (Task 7)
+- **[B9] Release check.** Beyond the lines above: `Codex hooks trusted` also fails when an event the plugin ships is missing from `hooks/list`; a `Codex rules hook output` line checks that SessionStart prints the Dryas rules with the `Dryas paths:` line; the check does not run `codex plugin list` on a missing Codex home (so it never creates one). Hook lines run with `sh -c` on macOS and Linux, with `python3` from PATH and no `DRYAS_PY`, as Codex runs them; on Windows the check runs `commandWindows` in the Windows shell instead of skipping. (Task 8)
+- **[B10] `--force`** no longer does anything: neither harness copies files. It is kept so older scripts still run. (Task 8)

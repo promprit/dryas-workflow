@@ -53,6 +53,6 @@ Only once the spec is stable.
 
 - [x] Claude Code edition (this repo's `claude/`)
 - [x] Codex edition (this repo's `codex/`, partial conformance, see [harnesses.md](harnesses.md))
-- [ ] Codex plugin (next)
+- [x] Codex plugin (`dryas@dryas-workflow` from `codex/`)
 - [ ] Pi, OpenCode, Roo and Cursor editions (later), by anyone, against the spec
-- [ ] Packaged plugins per harness, generated from the manifest (Claude Code done: plugin dryas@dryas-workflow)
+- [ ] Packaged plugins per harness, generated from the manifest (Claude Code and Codex done: plugin dryas@dryas-workflow)
