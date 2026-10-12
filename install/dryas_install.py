@@ -33,9 +33,9 @@ KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUT
             "(not stored by this installer)")
 
 
-def run(argv: List[str], cwd=None) -> int:
+def run(argv: List[str], cwd=None, env: Optional[dict] = None) -> int:
     try:
-        return subprocess.call(pu.resolve_argv(argv), cwd=cwd)
+        return subprocess.call(pu.resolve_argv(argv), cwd=cwd, env=env)
     except OSError:
         return 127
 

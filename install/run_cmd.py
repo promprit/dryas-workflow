@@ -69,24 +69,27 @@ def _vtuple(v) -> Optional[tuple]:
     return tuple(int(x) for x in m.group(1).split(".")) if m else None
 
 
-def thirdparty(comps: List[str], yes: bool, home: Optional[Path] = None, table_path: Optional[Path] = None) -> int:
+def thirdparty(comps: List[str], yes: bool, claude_dir: Path, env: Optional[dict] = None,
+               table_path: Optional[Path] = None) -> int:
+    """Install third-party tools into `claude_dir` (env carries its CLAUDE_CONFIG_DIR); warn on untested versions.
+    superpowers is a plugin dependency now: no commands, only the version check."""
     import dryas_install as di
     table = json.loads(Path(table_path or HERE / "components.json").read_text(encoding="utf-8"))
     sel = [c for c in comps if c in table]
-    cmds = [argv for c in sel for argv in table[c]["commands"]]
+    cmds = [argv for c in sel if c != "superpowers" for argv in table[c]["commands"]]
     if cmds:
         print("Third-party installs:")
         for argv in cmds:
             print("  " + " ".join(argv))
         if yes or di.confirm("Run these?"):
             for argv in cmds:
-                rc = di.run(argv)
+                rc = di.run(argv, env=env)
                 if rc != 0:
                     print("failed (exit %d): %s" % (rc, " ".join(argv)))
                     return rc
         else:
             print("skipped third-party installs")
-    p = Path(home or Path.home()) / ".claude" / "plugins" / "installed_plugins.json"
+    p = Path(claude_dir) / "plugins" / "installed_plugins.json"
     try:
         plugins = json.loads(p.read_text(encoding="utf-8")).get("plugins", {})
     except (OSError, ValueError):
@@ -126,7 +129,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("preflight ok")
         return 0
     if want_claude and not a.dry_run:
-        rc = thirdparty(comps, a.yes)
+        rc = thirdparty(comps, a.yes, cd)
         if rc:
             return rc
     rc = di.install(repo, cd, comps, home=home, force=a.force, dry=a.dry_run, yes=a.yes, claude=want_claude)

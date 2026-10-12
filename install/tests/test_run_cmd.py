@@ -92,7 +92,8 @@ class ThirdpartyWarnTest(unittest.TestCase):
     def setUp(self):
         import dryas_install as di
         self.di, self.orig = di, (di.run, di.confirm)
-        di.run = lambda argv, cwd=None: 0
+        self.ran = []
+        di.run = lambda argv, cwd=None, env=None: self.ran.append((argv, env)) or 0
         di.confirm = lambda prompt: False
         self.home = Path(tempfile.mkdtemp())
         (self.home / ".claude" / "plugins").mkdir(parents=True)
@@ -109,7 +110,7 @@ class ThirdpartyWarnTest(unittest.TestCase):
         (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": plugins}))
         buf = io.StringIO()
         with redirect_stdout(buf):
-            self.assertEqual(run_cmd.thirdparty(["superpowers"], True, home=self.home), 0)
+            self.assertEqual(run_cmd.thirdparty(["superpowers"], True, claude_dir=self.home / ".claude"), 0)
         return buf.getvalue()
 
     def test_warns_only_when_older_than_tested(self):
@@ -140,7 +141,7 @@ class ThirdpartyWarnTest(unittest.TestCase):
             json.dumps({"plugins": {"ruflo-core@ruflo": [{"version": "0.2.6"}]}}))
         buf = io.StringIO()
         with redirect_stdout(buf):
-            self.assertEqual(run_cmd.thirdparty(["ruflo"], True, home=self.home), 0)
+            self.assertEqual(run_cmd.thirdparty(["ruflo"], True, claude_dir=self.home / ".claude"), 0)
         self.assertNotIn("older than tested", buf.getvalue())
 
     def test_unparseable_tested_never_warns(self):
@@ -154,11 +155,24 @@ class ThirdpartyWarnTest(unittest.TestCase):
             json.dumps({"plugins": {"superpowers@claude-plugins-official": [{"version": "1.0.0"}]}}))
         buf = io.StringIO()
         with redirect_stdout(buf):
-            self.assertEqual(run_cmd.thirdparty(["superpowers"], True, home=self.home, table_path=tp), 0)
+            self.assertEqual(run_cmd.thirdparty(["superpowers"], True, claude_dir=self.home / ".claude", table_path=tp), 0)
         self.assertNotIn("warning", buf.getvalue())
 
     def test_warns_when_not_installed(self):
         self.assertIn("superpowers@claude-plugins-official is not installed", self.out(None))
+
+    def test_skips_superpowers_commands_and_passes_env(self):
+        import io
+        from contextlib import redirect_stdout
+        (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {}}))
+        env = {"CLAUDE_CONFIG_DIR": str(self.home / ".claude")}
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(run_cmd.thirdparty(["superpowers", "design"], True, self.home / ".claude", env), 0)
+        self.assertTrue(self.ran)
+        self.assertFalse(any("superpowers@claude-plugins-official" in argv for argv, _ in self.ran))
+        self.assertTrue(all(e is env for _, e in self.ran))
+        self.assertIn("superpowers@claude-plugins-official is not installed", buf.getvalue())
 
 
 class WrapperTest(unittest.TestCase):
