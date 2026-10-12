@@ -1,21 +1,27 @@
 """Installer entry used by install.sh and install.ps1: flags, preflight, then thirdparty -> install -> verify.
 
   dryas_install.py run [--repo PATH] [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
-                       [--yes] [--force] [--dry-run] [--uninstall] [--preflight-only] [--harness claude|codex|both]
+                       [--yes] [--force] [--dry-run] [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
+                       [--claude-dir DIR] [--flowobserve] [--openrouter-key KEY]
+
+Claude Code: the dryas plugin in one config dir (--claude-dir, else $CLAUDE_CONFIG_DIR, else ~/.claude); a copy
+install found there is migrated first. Codex: a runtime-only copy in ~/.claude plus ~/.codex.
+--harness claude --uninstall touches only that config dir.
 """
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import platform_util as pu
 
 HERE = Path(__file__).resolve().parent
 OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
 HARNESSES = ("claude", "codex", "both")
-NO_SPACE_RUFLO = ("Your Python or Claude folder path contains a space and has no short form; "
+NO_SPACE_RUFLO = ("Your Python, Dryas data folder or Dryas plugin path contains a space and has no short form; "
                   "Ruflo's hook override cannot handle that. Re-run with --no-ruflo.")
 
 
@@ -28,9 +34,11 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--repo", default=str(HERE.parent))
     for c in OPTIONAL:
         ap.add_argument("--no-" + c, action="store_true")
-    for f in ("yes", "force", "dry-run", "uninstall", "preflight-only"):
+    for f in ("yes", "force", "dry-run", "uninstall", "preflight-only", "flowobserve", "purge"):
         ap.add_argument("--" + f, action="store_true")
     ap.add_argument("--harness", default="claude", choices=HARNESSES)
+    ap.add_argument("--claude-dir", default=None)
+    ap.add_argument("--openrouter-key", default=os.environ.get("OPENROUTER_API_KEY", ""))
     return ap.parse_args(argv)
 
 
@@ -38,8 +46,9 @@ def components(a: argparse.Namespace) -> List[str]:
     return ["core"] + [c for c in OPTIONAL if not getattr(a, "no_" + c.replace("-", "_"))]
 
 
-def preflight(comps: List[str], harness: str, claude_dir: Path) -> List[str]:
-    """Problems that stop the install, as messages; an empty list means go."""
+def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Sequence[Path] = ()) -> List[str]:
+    """Problems that stop the install, as messages; an empty list means go.
+    claude_dir: the Codex runtime copy (~/.claude); ruflo_paths: more paths Ruflo's hook override names (the plugin)."""
     missing = []
     if sys.version_info < (3, 9):
         missing.append("python>=3.9")
@@ -55,8 +64,10 @@ def preflight(comps: List[str], harness: str, claude_dir: Path) -> List[str]:
     if missing:
         probs.append("Missing: %s. Install them and re-run (this installer never installs system packages)."
                      % " ".join(missing))
-    if "ruflo" in comps and (pu.space_free(sys.executable) is None or pu.space_free(claude_dir) is None):
-        probs.append(NO_SPACE_RUFLO)
+    if "ruflo" in comps:
+        root = Path(os.environ.get("DRYAS_DATA_ROOT") or Path.home() / ".dryas")
+        if any(pu.space_free(p) is None for p in [sys.executable, root] + list(ruflo_paths)):
+            probs.append(NO_SPACE_RUFLO)
     if harness in ("codex", "both") and pu.IS_WINDOWS and \
             (pu.space_free(sys.executable) is None or pu.space_free(claude_dir) is None):
         probs.append(NO_SPACE_CODEX)
@@ -111,17 +122,21 @@ def thirdparty(comps: List[str], yes: bool, claude_dir: Path, env: Optional[dict
 def main(argv: Optional[List[str]] = None) -> int:
     import codex_target as ct
     import dryas_install as di
+    import migrate
+    import plugin_setup as ps
     a = parse(list(sys.argv[1:] if argv is None else argv))
     repo, home = Path(a.repo).resolve(), Path.home()
-    cd = home / ".claude"
+    cd = ps.claude_dir(a.claude_dir)
+    copy_cd = home / ".claude"  # Codex reads its runtime copy here (unchanged)
     comps = components(a)
     want_claude, want_codex = a.harness in ("claude", "both"), a.harness in ("codex", "both")
     if a.harness == "codex" and not a.uninstall and ("superpowers" in comps or "design" in comps):
         print("note: superpowers and design are Claude Code plugins; skipped for Codex.")
     if a.uninstall:
-        rc = ct.uninstall_codex(ct.codex_dir(), home, di.run)
-        return rc or di.uninstall(cd)
-    probs = preflight(comps, a.harness, cd)
+        rc = ct.uninstall_codex(ct.codex_dir(), home, di.run) if want_codex else 0
+        rc = rc or (di.uninstall(copy_cd) if want_codex else 0)
+        return rc or (ps.uninstall(cd, a.purge) if want_claude else 0)
+    probs = preflight(comps, a.harness, copy_cd, [repo / "claude", cd] if want_claude else [])
     if probs:
         print("\n".join(probs))
         return 1
@@ -129,21 +144,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("preflight ok")
         return 0
     if want_claude and not a.dry_run:
-        rc = thirdparty(comps, a.yes, cd)
+        rc = migrate.migrate(cd, ps.data_root())
         if rc:
             return rc
-    rc = di.install(repo, cd, comps, home=home, force=a.force, dry=a.dry_run, yes=a.yes, claude=want_claude)
-    if rc:
-        return rc
+    if want_claude:
+        rc = ps.setup(repo, cd, comps, yes=a.yes, key=a.openrouter_key, flowobserve=a.flowobserve, dry=a.dry_run)
+        if rc:
+            return rc
     if want_codex:
-        mapping = di.mapping_for(comps, home, cd)
+        rc = di.install(repo, copy_cd, comps, home=home, force=a.force, dry=a.dry_run, yes=a.yes, claude=False)
+        if rc:
+            return rc
+        mapping = di.mapping_for(comps, home, copy_cd)
         renv = di.ruflo_env(repo, mapping) if "ruflo" in comps else {}
         rc = ct.install_codex(repo, ct.codex_dir(), home, comps, mapping, renv, di.run, force=a.force, dry=a.dry_run)
         if rc:
             return rc
     if a.dry_run:
         return 0
-    fails = di.verify(cd, comps) if want_claude else 0
+    fails = ps.verify(cd, comps) if want_claude else 0
     if want_codex:
-        fails += ct.verify_codex(ct.codex_dir(), home, comps, di.capture, cd)
+        fails += ct.verify_codex(ct.codex_dir(), home, comps, di.capture, copy_cd)
     return 1 if fails else 0

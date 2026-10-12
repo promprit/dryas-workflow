@@ -1,6 +1,9 @@
 # Dryas Workflow installer for native Windows. Finds Python >= 3.9 and runs install\dryas_install.py.
 # Usage: .\install\install.ps1 [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks] [--yes] [--force]
-#        [--dry-run] [--uninstall] [--preflight-only] [--harness claude|codex|both]   See docs\install.md.
+#        [--dry-run] [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
+#        [--claude-dir DIR] [--flowobserve] [--openrouter-key KEY]   See docs\install.md.
+# Claude Code: run once per config dir (--claude-dir; default $env:CLAUDE_CONFIG_DIR, else ~\.claude).
+# The OpenRouter key defaults to $env:OPENROUTER_API_KEY.
 # DRYAS_PYTHON overrides the interpreter.
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent $PSScriptRoot

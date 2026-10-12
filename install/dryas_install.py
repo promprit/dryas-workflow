@@ -16,6 +16,7 @@ sys.path.insert(0, str(HERE))
 import claude_mcp  # noqa: E402
 import platform_util as pu  # noqa: E402
 import ruflo_helpers  # noqa: E402
+import ruflo_runtime  # noqa: E402
 import settings_merge as sm  # noqa: E402
 import upgrade  # noqa: E402
 from render import chain_bytes, gate_blocks, rendered as _rendered  # noqa: E402
@@ -29,6 +30,7 @@ PY = pu.python_exe()
 PYX = [PY, "-X", "utf8"]
 USER_DATA = {"jev/thresholds.json"}
 SHIM_LINK = "ruflo/mcp-shim/dist"
+RUNTIME = ("jev/", "ruflo/", "pstack/")  # what the Codex copy (claude=False) needs from claude/
 KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUTER_API_KEY=...  "
             "(not stored by this installer)")
 
@@ -82,13 +84,16 @@ def save_record(cd: Path, rec: dict) -> None:
     (cd / RECORD).write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
 
 
-def _plan_files(repo: Path, comps: List[str]):
+def _plan_files(repo: Path, comps: List[str], runtime_only: bool = False):
+    """runtime_only: the Codex copy; the workflow doc stays because Codex's AGENTS.md points at it."""
     src = repo / "claude"
     for f in sorted(p for p in src.rglob("*") if p.is_file() or p.is_symlink()):
         rel = f.relative_to(src).as_posix()
         if "__pycache__" in rel.split("/") or rel.endswith(".pyc"):
             continue
         if rel in SKIP or any(rel.startswith(d) and c not in comps for c, ds in COMPONENT_DIRS.items() for d in ds):
+            continue
+        if runtime_only and not rel.startswith(RUNTIME):
             continue
         yield rel, f
     wf = repo / "docs" / "workflow.md"
@@ -169,11 +174,11 @@ def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bo
 
 
 def copy_files(repo: Path, cd: Path, comps: List[str], rec: dict, force: bool, ts: str, dry: bool = False,
-               mapping: Optional[Dict[str, str]] = None) -> dict:
+               mapping: Optional[Dict[str, str]] = None, runtime_only: bool = False) -> dict:
     mapping = mapping if mapping is not None else _mapping(comps, Path.home(), cd)
     rep = {"new": [], "replace": [], "written": [], "skipped": []}
     text_comps = sorted(set(rec.get("components", [])) | set(comps))
-    for rel, f in _plan_files(repo, comps):
+    for rel, f in _plan_files(repo, comps, runtime_only):
         if f.is_symlink():
             _put(cd, rel, rec, force, ts, rep, dry, link=os.readlink(str(f)))
         else:
@@ -187,8 +192,9 @@ def copy_files(repo: Path, cd: Path, comps: List[str], rec: dict, force: bool, t
     return rep
 
 
-def _remove_stale_files(repo: Path, cd: Path, comps_all: List[str], rec: dict, dry: bool) -> None:
-    shipped = {rel for rel, _ in _plan_files(repo, comps_all)}
+def _remove_stale_files(repo: Path, cd: Path, comps_all: List[str], rec: dict, dry: bool,
+                        runtime_only: bool = False) -> None:
+    shipped = {rel for rel, _ in _plan_files(repo, comps_all, runtime_only)}
     if "ruflo" in comps_all:
         shipped |= {r for r in rec["files"] if r.startswith("ruflo/helpers/")} | {SHIM_LINK}
     upgrade.remove_stale_files(cd, rec, shipped, dry)
@@ -217,10 +223,11 @@ def _fragment(repo: Path, comps: List[str], mapping: Dict[str, str]) -> dict:
     return sm.render(frag, mapping)
 
 
-def _prevalidate(repo: Path, comps: List[str], mapping: Dict[str, str], cd: Optional[Path] = None) -> None:
+def _prevalidate(repo: Path, comps: List[str], mapping: Dict[str, str], cd: Optional[Path] = None,
+                 runtime_only: bool = False) -> None:
     """Render everything once so unmapped placeholders or tokens abort before any write."""
     _fragment(repo, comps, mapping)
-    for rel, f in _plan_files(repo, comps):
+    for rel, f in _plan_files(repo, comps, runtime_only):
         if not f.is_symlink() and (rel == "jev/chain.json" or rel.endswith(".md")):
             _rendered(rel, f, comps, mapping, cd)
     tpl = repo / "claude" / "CLAUDE.md.template"
@@ -333,7 +340,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
     rec = load_record(cd)
     comps_all = sorted(set(rec.get("components", [])) | set(comps))
     mapping = _mapping(comps_all, home, cd)
-    _prevalidate(repo, comps, mapping, cd)  # unmapped placeholders or tokens abort here, before any write
+    _prevalidate(repo, comps, mapping, cd, runtime_only=not claude)  # unmapped placeholders abort here, before any write
     helpers = {}
     if "ruflo" in comps:
         if dry:
@@ -354,7 +361,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
         cd.mkdir(parents=True)
         rec["claude_dir_created"] = True
     try:
-        rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping)
+        rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping, runtime_only=not claude)
         for n, (data, mode) in helpers.items():
             _put(cd, "ruflo/helpers/" + n, rec, force, ts, rep, dry, data=data, mode=mode)
         tpl = repo / "claude" / "CLAUDE.md.template"
@@ -368,7 +375,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
         elif claude and tpl.exists():
             claude_md(cd, gate_blocks(tpl.read_text(encoding="utf-8"), comps_all), rec)
         if not claude or apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes, comps_all=comps_all):
-            _remove_stale_files(repo, cd, comps_all, rec, dry)
+            _remove_stale_files(repo, cd, comps_all, rec, dry, runtime_only=not claude)
         if "ruflo" in comps:
             root = Path(mapping["DRYAS_DATA_ROOT"])
             if dry:
@@ -377,6 +384,8 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
                 root.mkdir(parents=True)
                 rec["data_root_created"] = True
                 rec["data_root"] = str(root)
+            if not claude and not dry:  # Codex's chain.json runs the helpers from the shared data root
+                ruflo_runtime.install(repo, root, helpers, mapping.get("RUFLO_CLI_DIST", ""))
         if claude and "jev" in comps:
             claude_mcp.ensure_jev(cd, PYX, rec, run, capture, dry)
         for rel in rep["skipped"]:
@@ -459,6 +468,37 @@ def uninstall(cd: Path) -> int:
 SMOKE_PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 
 
+def scope_smoke(chain_py: Path, env_extra: Dict[str, str]) -> bool:
+    """Run `chain.py pretool` on an out-of-scope Write in a temp worktree; True when it denies.
+    Logs and chain.local.json point into that temp dir, so the user's own files are never touched."""
+    wt = Path(tempfile.mkdtemp())
+    try:
+        (wt / ".orchestrate").mkdir()
+        (wt / ".orchestrate" / "PLAN.md").write_text(SMOKE_PLAN, encoding="utf-8")
+        (wt / ".orchestrate" / "active.json").write_text(json.dumps({"active": ["1"]}), encoding="utf-8")
+        event = {"tool_name": "Write", "tool_input": {"file_path": str(wt / "src/other.ts"), "content": "x"}, "cwd": str(wt)}
+        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
+        env.update(JEV_LOG_DIR=str(wt / "logs"), JEV_CHAIN_LOCAL=str(wt / "none.json"))
+        env.update(env_extra)
+        rc, out = capture(PYX + [str(chain_py), "pretool"], json.dumps(event), env)
+        try:
+            return json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        except (ValueError, KeyError, TypeError):
+            return False
+    finally:
+        shutil.rmtree(str(wt), ignore_errors=True)
+
+
+def jev_tests(tdir: Path) -> Tuple[str, str, str]:
+    """(status, name, detail) for the Jev test suite in tdir."""
+    if not tdir.is_dir():
+        return "SKIP", "Jev tests", "no jev/tests folder"
+    if run(PYX + ["-c", "import pytest"]) != 0:
+        return "SKIP", "Jev tests", "install pytest to run the Jev tests"
+    rc = run(PYX + ["-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(tdir), str(tdir)], cwd=str(tdir))
+    return "PASS" if rc == 0 else "FAIL", "Jev tests", ""
+
+
 def verify(cd: Path, comps: List[str]) -> int:
     cd, fails = Path(cd), 0
 
@@ -466,13 +506,7 @@ def verify(cd: Path, comps: List[str]) -> int:
         print("%s  %s%s" % (status, name, ("  (" + detail + ")") if detail else ""))
         return 1 if status == "FAIL" else 0
 
-    tdir = cd / "jev" / "tests"
-    if not tdir.is_dir():
-        fails += say("SKIP", "Jev tests", "no jev/tests folder")
-    elif run(PYX + ["-c", "import pytest"]) != 0:
-        fails += say("SKIP", "Jev tests", "install pytest to run the Jev tests")
-    else:
-        fails += say("PASS" if run(PYX + ["-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(tdir), str(tdir)], cwd=str(tdir)) == 0 else "FAIL", "Jev tests")
+    fails += say(*jev_tests(cd / "jev" / "tests"))
     if "jev" in comps:
         rc, out = capture(["claude", "mcp", "list"])
         fails += say("PASS" if "jev:" in out else "FAIL", "jev MCP server registered")
@@ -481,23 +515,8 @@ def verify(cd: Path, comps: List[str]) -> int:
         fails += say("FAIL" if probs else "PASS", "Ruflo helpers patched", "; ".join(probs))
     probs = hook_problems(load_record(cd).get("settings", {}).get("hooks", []))
     fails += say("FAIL" if probs else "PASS", "hook commands point at existing files", "; ".join(probs))
-    wt = Path(tempfile.mkdtemp())
-    try:
-        (wt / ".orchestrate").mkdir()
-        (wt / ".orchestrate" / "PLAN.md").write_text(SMOKE_PLAN, encoding="utf-8")
-        (wt / ".orchestrate" / "active.json").write_text(json.dumps({"active": ["1"]}), encoding="utf-8")
-        event = {"tool_name": "Write", "tool_input": {"file_path": str(wt / "src/other.ts"), "content": "x"}, "cwd": str(wt)}
-        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
-        env["HOME"] = str(cd.parent)
-        env["JEV_LOG_DIR"] = str(wt / "logs")
-        rc, out = capture(PYX + [str(cd / "jev" / "chain.py"), "pretool"], json.dumps(event), env)
-        try:
-            ok = json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
-        except (ValueError, KeyError, TypeError):
-            ok = False
-        fails += say("PASS" if ok else "FAIL", "scope lock blocks an out-of-scope write")
-    finally:
-        shutil.rmtree(str(wt), ignore_errors=True)
+    env = {"HOME": str(cd.parent)}
+    fails += say("PASS" if scope_smoke(cd / "jev" / "chain.py", env) else "FAIL", "scope lock blocks an out-of-scope write")
     print("verify: %d failed" % fails)
     return fails
 

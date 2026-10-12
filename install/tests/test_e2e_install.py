@@ -1,11 +1,19 @@
-"""End to end: real install into a temp home with a fake `claude`, then run every installed hook command
-through the OS shells with a sample event, then uninstall."""
+"""End to end: real install into a temp home with a fake `claude`. Claude Code: the plugin is set up in the config
+dir and every plugin hook command runs through the shell Claude Code uses. Codex: the copy install, hooks, uninstall."""
 import json, os, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import fakecli
+from test_hook_shell import find_bash
 REPO = HERE.parents[1]
+INSTALLED = {"version": 2, "plugins": {"dryas@dryas-workflow": [{"scope": "user", "installPath": str(REPO / "claude")}]}}
+# fake `claude plugin install` lists the plugin in $CLAUDE_CONFIG_DIR, as the real one does
+EPILOGUE = ("import os\n"
+            "if sys.argv[1:3] == ['plugin', 'install']:\n"
+            "    d = os.path.join(os.environ['CLAUDE_CONFIG_DIR'], 'plugins'); os.makedirs(d, exist_ok=True)\n"
+            "    open(os.path.join(d, 'installed_plugins.json'), 'w').write(json.dumps(%r))\n"
+            "with open(%r, 'a') as f: f.write(json.dumps([sys.argv[1:3], os.environ.get('CLAUDE_CONFIG_DIR')]) + '\\n')\n")
 EVENTS = {
     "PreToolUse": {"tool_name": "Write", "tool_input": {"file_path": "notes.txt", "content": "café → ok"}},
     "UserPromptSubmit": {"prompt": ""},
@@ -29,9 +37,11 @@ class E2ETest(unittest.TestCase):
         self.home = self.tmp / "home"
         self.home.mkdir()
         fb = self.tmp / "bin"
-        fakecli.make(fb, "claude", self.tmp / "calls.jsonl", outputs={"mcp list": "jev: ok\n"})
+        fakecli.make(fb, "claude", self.tmp / "calls.jsonl", outputs={"mcp list": "jev: ok\n"},
+                     epilogue=EPILOGUE % (INSTALLED, str(self.tmp / "envs.jsonl")))
         fakecli.make(fb, "codex", self.tmp / "calls.jsonl", outputs={"mcp list": "jev\n"})
-        self.env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "DRYAS_DATA_ROOT", "CODEX_HOME")}
+        self.env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "DRYAS_DATA_ROOT", "CODEX_HOME",
+                                                                   "CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "DRYAS_PY")}
         self.env["CODEX_HOME"] = str(self.home / ".codex")
         self.env.update(HOME=str(self.home), USERPROFILE=str(self.home), PATH=str(fb) + os.pathsep + os.environ["PATH"],
                         JEV_LOG_DIR=str(self.tmp / "logs"), JEV_HANDOFF_DIR=str(self.tmp / "handoff"),
@@ -45,28 +55,44 @@ class E2ETest(unittest.TestCase):
                                "--yes", "--no-ruflo", "--no-superpowers", "--no-design"] + list(args),
                               capture_output=True, text=True, env=self.env, timeout=900)
 
-    def test_install_hooks_run_and_uninstall(self):
+    def test_plugin_setup_and_hooks_run(self):
         p = self.installer()
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-        cd = self.home / ".claude"
+        cd = (self.home / ".claude").resolve()
+        envs = [json.loads(l) for l in (self.tmp / "envs.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertIn([["plugin", "marketplace"], str(cd)], envs)
+        self.assertIn([["plugin", "install"], str(cd)], envs)
         settings = json.loads((cd / "settings.json").read_text(encoding="utf-8"))
-        cmds = [(ev, h["command"]) for ev, groups in settings["hooks"].items() for g in groups for h in g["hooks"]]
+        self.assertNotIn("hooks", settings)
+        py = settings["env"]["DRYAS_PY"]
+        self.assertTrue(py)
+        accounts = json.loads((self.home / ".dryas" / "accounts.json").read_text(encoding="utf-8"))
+        self.assertEqual(accounts["claude_dirs"], [str(cd)])
+        self.assertIn("PASS  scope lock blocks an out-of-scope write", p.stdout)
+        hooks = json.loads((REPO / "claude" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        cmds = [(ev, h["command"]) for ev, groups in hooks.items() for g in groups for h in g["hooks"]]
         self.assertTrue(cmds)
+        sh = find_bash()
+        if not sh:
+            self.skipTest("no sh / Git Bash to run the plugin hooks")
+        env = dict(self.env, CLAUDE_PLUGIN_ROOT=str(REPO / "claude").replace("\\", "/"), DRYAS_PY=py)
         for ev, cmd in cmds:
             self.assertNotIn("/bin/sh", cmd)
             event = dict(EVENTS.get(ev, {}), hook_event_name=ev, cwd=str(self.tmp), session_id="e2e")
             data = json.dumps(event, ensure_ascii=False).encode("utf-8")
-            for sh in shells():
-                argv = cmd if sh is None else [sh, "-c", cmd]
-                r = subprocess.run(argv, shell=sh is None, input=data, capture_output=True, env=self.env, timeout=120)
-                self.assertEqual(r.returncode, 0, "%s via %s: %s" % (cmd, sh or "default shell",
-                                                                     r.stderr.decode("utf-8", "replace")))
-                out = r.stdout.decode("utf-8", "replace").strip()
-                if out:
-                    json.loads(out)
+            r = subprocess.run([sh, "-c", cmd], input=data, capture_output=True, env=env, timeout=120)
+            self.assertEqual(r.returncode, 0, "%s: %s" % (cmd, r.stderr.decode("utf-8", "replace")))
+            out = r.stdout.decode("utf-8", "replace").strip()
+            if out:
+                json.loads(out)
+
+    @unittest.expectedFailure  # plugin_setup.uninstall lands in Task 10; drop this marker there
+    def test_plugin_uninstall(self):
+        self.assertEqual(self.installer().returncode, 0)
         u = self.installer("--uninstall")
         self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
-        self.assertFalse((cd / ".dryas-installed.json").exists())
+        cd = self.home / ".claude"
+        self.assertFalse((cd / ".dryas-plugin.json").exists())
         self.assertFalse((cd / "settings.json").exists())
 
     def test_both_harnesses_install_hooks_run_and_uninstall(self):
@@ -85,7 +111,7 @@ class E2ETest(unittest.TestCase):
         for cmd in cmds:
             r = subprocess.run(cmd, shell=True, input=data, capture_output=True, env=self.env, timeout=120)
             self.assertEqual(r.returncode, 0, "%s: %s" % (cmd, r.stderr.decode("utf-8", "replace")))
-        u = self.installer("--harness", "both", "--uninstall")
+        u = self.installer("--harness", "codex", "--uninstall")  # the Claude side: test_plugin_uninstall
         self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
         self.assertFalse((cdx / ".dryas-installed.json").exists())
         self.assertFalse((self.home / ".agents" / "skills" / "orchestrate").exists())

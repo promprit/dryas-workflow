@@ -26,7 +26,8 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def norm(p) -> Path:
-    return Path(p).expanduser().resolve()
+    # abspath first: Windows Python 3.9 resolve() mishandles a relative path that does not exist yet
+    return Path(os.path.abspath(os.path.expanduser(str(p)))).resolve()
 
 
 def claude_dir(arg: Optional[str]) -> Path:
@@ -83,8 +84,9 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: bool, repo: Opt
             ev = stages[event]
             if name in ev and not isinstance(ev[name], dict):
                 del ev[name]
-            if comp == "flowobserve":
-                ev.setdefault(name, {})["enabled"] = bool(flowobserve)
+            if comp == "flowobserve":  # a migrated or user setting stands unless --flowobserve was given
+                if flowobserve or "enabled" not in ev.get(name, {}):
+                    ev.setdefault(name, {})["enabled"] = bool(flowobserve)
             elif comp in comps:
                 if name in ev:
                     ev[name].pop("enabled", None)
@@ -226,6 +228,35 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
         print(warn)
     print("Dryas set up in %s (plugin at %s, state in %s)" % (cd, plugin_root, root))
     return 0
+
+
+def verify(cd: Path, comps: List[str]) -> int:
+    """PASS/FAIL/SKIP lines for one config dir's plugin install; returns the number of failures."""
+    cd, fails = norm(cd), 0
+
+    def say(status, name, detail=""):
+        print("%s  %s%s" % (status, name, ("  (" + detail + ")") if detail else ""))
+        return 1 if status == "FAIL" else 0
+
+    listed = cd / "plugins" / "installed_plugins.json"
+    root = install_path(cd)
+    fails += say("PASS" if root else "FAIL", "%s listed in %s" % (ID, listed))
+    if not root:
+        print("verify: %d failed" % fails)
+        return fails
+    root = Path(root)
+    rc, out = di.capture(di.PYX + [str(root / "jev" / "rules_inject.py")], "{}", timeout=60)
+    try:
+        ok = bool(json.loads(out)["hookSpecificOutput"]["additionalContext"])
+    except (ValueError, KeyError, TypeError):
+        ok = False
+    fails += say("PASS" if ok else "FAIL", "rules hook prints SessionStart JSON")
+    env = {"CLAUDE_PLUGIN_ROOT": pu.fwd(root), "DRYAS_PY": pu.fwd(di.PY)}
+    fails += say("PASS" if di.scope_smoke(root / "jev" / "chain.py", env) else "FAIL",
+                 "scope lock blocks an out-of-scope write")
+    fails += say(*di.jev_tests(root / "jev" / "tests"))
+    print("verify: %d failed" % fails)
+    return fails
 
 
 def uninstall(cd: Path, purge: bool) -> int:

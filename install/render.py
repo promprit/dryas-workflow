@@ -10,6 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "claude" / "jev"))
 from gating import GATED, gate_blocks  # noqa: E402,F401  (shared with the plugin's rules hook)
 
 
+PLUGIN_ROOT = "${CLAUDE_PLUGIN_ROOT}"
+
+
 def _installed_stages(cd: Optional[Path]) -> dict:
     p = Path(cd) / "jev" / "chain.json" if cd else None
     try:
@@ -42,5 +45,8 @@ def rendered(rel: str, f: Path, comps: List[str], mapping: Dict[str, str], cd: O
     if rel == "jev/chain.json":
         return chain_bytes(f, comps, mapping, cd)
     if rel.endswith(".md"):
-        return sm.render_tokens(gate_blocks(f.read_text(encoding="utf-8"), comps), mapping).encode("utf-8")
+        text = sm.render_tokens(gate_blocks(f.read_text(encoding="utf-8"), comps), mapping)
+        if "CD" in mapping:  # a copied file lives in the copy dir, not in a plugin
+            text = text.replace(PLUGIN_ROOT, mapping["CD"])
+        return text.encode("utf-8")
     return f.read_bytes()

@@ -1,7 +1,10 @@
 #!/bin/sh
 # Dryas Workflow installer for macOS, Linux and WSL. Finds Python >= 3.9 and runs install/dryas_install.py.
 # Usage: install.sh [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks] [--yes] [--force] [--dry-run]
-#                   [--uninstall] [--preflight-only] [--harness claude|codex|both]   See docs/install.md.
+#                   [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
+#                   [--claude-dir DIR] [--flowobserve] [--openrouter-key KEY]   See docs/install.md.
+# Claude Code: run once per config dir (--claude-dir; default $CLAUDE_CONFIG_DIR, else ~/.claude).
+# The OpenRouter key defaults to $OPENROUTER_API_KEY.
 # DRYAS_PYTHON overrides the interpreter.
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)

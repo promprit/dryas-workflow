@@ -63,29 +63,130 @@ class RunCmdTest(unittest.TestCase):
     def test_codex_only_note(self):
         import io
         from contextlib import redirect_stdout
-        import codex_target as ct
-        import dryas_install as di
-        saved = (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free, di.confirm)
-        di.confirm = lambda *a, **k: False
-        di.install = lambda *a, **k: 0
-        ct.install_codex = lambda *a, **k: 0
-        ct.verify_codex = lambda *a, **k: 0
-        di.mapping_for = lambda *a, **k: {}
-        pu.which = lambda n: "/bin/" + n
-        pu.space_free = lambda p: str(p)
+        stubs = MainStubs(self)
         note = "note: superpowers and design are Claude Code plugins; skipped for Codex."
-        try:
-            for harness, want in (("codex", True), ("both", False)):
-                buf = io.StringIO()
-                with redirect_stdout(buf):
-                    run_cmd.main(["--harness", harness, "--no-ruflo"])
-                self.assertEqual(note in buf.getvalue(), want, harness)
+        for harness, want in (("codex", True), ("both", False)):
             buf = io.StringIO()
             with redirect_stdout(buf):
-                run_cmd.main(["--harness", "codex", "--no-ruflo", "--no-superpowers", "--no-design"])
-            self.assertNotIn(note, buf.getvalue())
-        finally:
-            (di.install, ct.install_codex, ct.verify_codex, di.mapping_for, di.verify, pu.which, pu.space_free, di.confirm) = saved
+                run_cmd.main(["--harness", harness, "--no-ruflo"])
+            self.assertEqual(note in buf.getvalue(), want, harness)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            run_cmd.main(["--harness", "codex", "--no-ruflo", "--no-superpowers", "--no-design"])
+        self.assertNotIn(note, buf.getvalue())
+        self.assertTrue(stubs.log)
+
+
+class MainStubs(object):
+    """Stub every step run_cmd.main drives; self.log records (step, args, kwargs)."""
+
+    def __init__(self, tc):
+        from unittest import mock
+        import codex_target as ct
+        import dryas_install as di
+        import migrate
+        import plugin_setup as ps
+        self.log = []
+
+        def rec(name, rc=0):
+            return lambda *a, **k: self.log.append((name, a, k)) or rc
+        self.tmp = Path(tempfile.mkdtemp())
+        tc.addCleanup(shutil.rmtree, str(self.tmp), True)
+        patches = [mock.patch.object(di, "install", rec("di.install")), mock.patch.object(di, "uninstall", rec("di.uninstall")),
+                   mock.patch.object(di, "mapping_for", lambda *a, **k: {}), mock.patch.object(di, "confirm", lambda *a: False),
+                   mock.patch.object(ct, "install_codex", rec("ct.install_codex")),
+                   mock.patch.object(ct, "uninstall_codex", rec("ct.uninstall_codex")),
+                   mock.patch.object(ct, "verify_codex", rec("ct.verify_codex")),
+                   mock.patch.object(ct, "codex_dir", lambda: self.tmp / ".codex"),
+                   mock.patch.object(migrate, "migrate", rec("migrate")),
+                   mock.patch.object(ps, "setup", rec("ps.setup")), mock.patch.object(ps, "verify", rec("ps.verify")),
+                   mock.patch.object(ps, "uninstall", rec("ps.uninstall")),
+                   mock.patch.object(pu, "which", lambda n: "/bin/" + n), mock.patch.object(pu, "space_free", lambda p: str(p)),
+                   mock.patch.dict(os.environ, {"HOME": str(self.tmp), "USERPROFILE": str(self.tmp),
+                                                "DRYAS_DATA_ROOT": str(self.tmp / "data"), "OPENROUTER_API_KEY": "sk-env"})]
+        for p in patches:
+            p.start()
+            tc.addCleanup(p.stop)
+        os.environ.pop("CLAUDE_CONFIG_DIR", None)  # restored by the patch.dict above
+
+    def steps(self):
+        return [n for n, a, k in self.log]
+
+    def call(self, name):
+        return [(a, k) for n, a, k in self.log if n == name][0]
+
+
+class MainTest(unittest.TestCase):
+    def main(self, *args):
+        import io
+        from contextlib import redirect_stdout
+        with redirect_stdout(io.StringIO()):
+            return run_cmd.main(list(args))
+
+    def test_claude_dir_migrate_then_setup_then_verify(self):
+        st = MainStubs(self)
+        cd = st.tmp / "acct"
+        self.assertEqual(self.main("--claude-dir", str(cd), "--no-ruflo", "--flowobserve", "--yes"), 0)
+        self.assertEqual(st.steps(), ["migrate", "ps.setup", "ps.verify"])
+        a, k = st.call("migrate")
+        self.assertEqual([Path(x) for x in a], [cd.resolve(), st.tmp / "data"])
+        a, k = st.call("ps.setup")
+        self.assertEqual(a[1], cd.resolve())
+        self.assertEqual(k, {"yes": True, "key": "sk-env", "flowobserve": True, "dry": False})
+
+    def test_key_flag_and_default_dir(self):
+        st = MainStubs(self)
+        self.main("--openrouter-key", "sk-flag", "--no-ruflo")
+        a, k = st.call("ps.setup")
+        self.assertEqual(a[1], (st.tmp / ".claude").resolve())
+        self.assertEqual(k["key"], "sk-flag")
+        self.assertFalse(k["flowobserve"])
+
+    def test_dry_run_skips_migration_and_verify(self):
+        st = MainStubs(self)
+        self.assertEqual(self.main("--dry-run", "--no-ruflo"), 0)
+        self.assertEqual(st.steps(), ["ps.setup"])
+        self.assertTrue(st.call("ps.setup")[1]["dry"])
+
+    def test_codex_keeps_runtime_copy_in_home_claude(self):
+        st = MainStubs(self)
+        self.assertEqual(self.main("--harness", "codex", "--no-ruflo", "--claude-dir", str(st.tmp / "acct")), 0)
+        self.assertEqual(st.steps(), ["di.install", "ct.install_codex", "ct.verify_codex"])
+        a, k = st.call("di.install")
+        self.assertEqual(a[1], st.tmp / ".claude")
+        self.assertIs(k["claude"], False)
+
+    def test_claude_uninstall_touches_only_that_dir(self):
+        st = MainStubs(self)
+        cd = st.tmp / "acct"
+        self.assertEqual(self.main("--uninstall", "--purge", "--claude-dir", str(cd)), 0)
+        self.assertEqual(st.steps(), ["ps.uninstall"])
+        self.assertEqual(st.call("ps.uninstall")[0], (cd.resolve(), True))
+
+    def test_both_uninstall(self):
+        st = MainStubs(self)
+        self.main("--uninstall", "--harness", "both")
+        self.assertEqual(st.steps(), ["ct.uninstall_codex", "di.uninstall", "ps.uninstall"])
+        self.assertEqual(st.call("di.uninstall")[0], (st.tmp / ".claude",))
+
+    def test_setup_failure_stops(self):
+        st = MainStubs(self)
+        import plugin_setup as ps
+        from unittest import mock
+        with mock.patch.object(ps, "setup", lambda *a, **k: 3):
+            self.assertEqual(self.main("--no-ruflo", "--harness", "both"), 3)
+        self.assertNotIn("di.install", st.steps())
+
+    def test_ruflo_space_checks_data_root_and_plugin(self):
+        from unittest import mock
+        seen = []
+        with mock.patch.object(pu, "which", lambda n: "/bin/" + n), \
+                mock.patch.object(pu, "space_free", lambda p: seen.append(str(p)) or str(p)), \
+                mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": "/d/root"}):
+            self.assertEqual(run_cmd.preflight(["core", "ruflo"], "claude", Path("/x/.claude"), [Path("/r/claude")]), [])
+        self.assertIn(str(Path("/d/root")), seen)
+        self.assertIn(str(Path("/r/claude")), seen)
+        self.assertNotIn(str(Path("/x/.claude")), seen)  # the Codex copy dir matters only to the Codex check
 
 
 class ThirdpartyWarnTest(unittest.TestCase):

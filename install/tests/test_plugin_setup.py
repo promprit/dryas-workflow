@@ -240,6 +240,19 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(loc["stages"]["pretool"]["jev-gate"], {"enabled": False})
         self.assertEqual(loc["stages"]["prompt"]["jev-route"], {"enabled": False})
 
+    def test_chain_local_flowobserve_kept_unless_flag(self):
+        """A migrated flowobserve setting survives setup; --flowobserve turns it on; no entry -> written off."""
+        t = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(t), True)
+        ps.write_chain_local(t, ["core"], False, REPO)
+        self.assertIs(json.loads((t / "chain.local.json").read_text())["stages"]["pretool"]["flowobserve"]["enabled"], False)
+        (t / "chain.local.json").write_text(json.dumps({"stages": {"pretool": {"flowobserve": {"enabled": True}}}}))
+        ps.write_chain_local(t, ["core"], False, REPO)
+        self.assertIs(json.loads((t / "chain.local.json").read_text())["stages"]["pretool"]["flowobserve"]["enabled"], True)
+        (t / "chain.local.json").write_text(json.dumps({"stages": {"pretool": {"flowobserve": {"enabled": False}}}}))
+        ps.write_chain_local(t, ["core"], True, REPO)
+        self.assertIs(json.loads((t / "chain.local.json").read_text())["stages"]["pretool"]["flowobserve"]["enabled"], True)
+
     def test_missing_workflow_doc_warns(self):
         t = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, str(t), True)
@@ -253,6 +266,42 @@ class SetupTest(unittest.TestCase):
         ps.add_account(t, Path("/b"))
         self.assertEqual(ps.remove_account(t, Path("/a")), [str(Path("/b").resolve())])
         self.assertEqual(json.loads((t / "accounts.json").read_text())["claude_dirs"], [str(Path("/b").resolve())])
+
+
+class VerifyTest(unittest.TestCase):
+    def setUp(self):
+        self.e = Env(self)
+        self.ran = []
+        p = mock.patch.object(ps.di, "run", lambda argv, cwd=None, env=None: self.ran.append(argv) or 0)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def verify(self, cd):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            fails = ps.verify(cd, COMPS)
+        return fails, buf.getvalue()
+
+    def test_passes_with_plugin_installed(self):
+        rec = json.loads(json.dumps(INSTALLED))
+        rec["plugins"]["dryas@dryas-workflow"][0]["installPath"] = str(REPO / "claude")
+        (self.e.a / "plugins").mkdir(parents=True)
+        (self.e.a / "plugins" / "installed_plugins.json").write_text(json.dumps(rec))
+        fails, out = self.verify(self.e.a)
+        self.assertEqual(fails, 0, out)
+        for name in ("dryas@dryas-workflow listed in", "rules hook prints SessionStart JSON",
+                     "scope lock blocks an out-of-scope write"):
+            self.assertIn("PASS  " + name, out)
+        tests = str(REPO / "claude" / "jev" / "tests")
+        self.assertTrue(any(tests in a for argv in self.ran for a in argv), self.ran)  # Jev tests of the plugin
+
+    def test_fails_without_plugin(self):
+        self.e.a.mkdir()
+        fails, out = self.verify(self.e.a)
+        self.assertGreater(fails, 0)
+        self.assertIn("FAIL  dryas@dryas-workflow listed in", out)
 
 
 if __name__ == "__main__":
