@@ -155,7 +155,9 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
         "haiku_climb_reasons": dict(Counter(str(r.get("reason")) for r in last_climb.values())),
         "review_rounds_median": float(statistics.median(rounds.values())) if rounds else None,
         "merges": len(merge),
-        "merges_without_review": sum(1 for r in merge if str(r["task"]) not in reviewed),
+        # /wreview logs the branch name; a merge's task may be a free-text label, so match either.
+        "merges_without_review": sum(1 for r in merge
+                                     if str(r["task"]) not in reviewed and str(r.get("branch")) not in reviewed),
         "cost_per_task": round(sum(c for c, _ in costed) / merged_tasks, 4) if merged_tasks else None,
         "merges_without_cost": sum(1 for r in merge if _num(r.get("cost_usd")) is None),
     }
@@ -263,7 +265,7 @@ def proposals(rep: Dict[str, Any], th: Dict[str, Dict[str, Any]]) -> List[Dict[s
         if candidates:
             new = cur_list + [h for h in candidates if h not in cur_list]
             out.append({"key": "gate.allowlist", "old": cur_list, "new": new,
-                        "why": "Jev judged %.0f%% of tool calls (target ~20%%); these heads were judged often and never denied or asked. Review each one: it is allowlisted for plain (metachar-free) use only."
+                        "why": "Jev judged %.0f%% of tool calls (target ~60%%); these heads were judged often and never denied or asked. Review each one: it is allowlisted for plain (metachar-free) use only."
                                % (rep["judged_share"] * 100)})
     if rep.get("swarm_vs_plain") and rep.get("compare_count", 0) >= 3 and rep["swarm_vs_plain"] > 3.0:
         cur = th["route"].get("swarm_min", 0.7)
@@ -302,7 +304,7 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
         "- Cost per merged task: %s (%d of %d merges had no cost)" % (na(d["cost_per_task"], "$%.2f"), d["merges_without_cost"], d["merges"]),
     ]
     lines = ["# Jev calibration", "",
-             "- Tool calls: %d; Jev judged %d (%.0f%%, target ~20%%)" % (rep["tool_calls"], rep["gate_judged"], rep["judged_share"] * 100),
+             "- Tool calls: %d; Jev judged %d (%.0f%%, target ~60%%)" % (rep["tool_calls"], rep["gate_judged"], rep["judged_share"] * 100),
              "- Judge latency median (healthy < 500 ms): %s" % ("n/a" if rep["judge_latency_ms_median"] is None else "%d ms" % rep["judge_latency_ms_median"]),
              "- Gate decisions: %s" % json.dumps(rep["gate_decisions"]),
              "- gate skips: allowlist %(allowlist)d, compound %(compound)d, prescreen %(prescreen)d, legacy %(legacy)d" % rep["gate_skips_by_via"],

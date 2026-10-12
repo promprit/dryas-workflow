@@ -73,6 +73,23 @@ def _ok(mid: Any, result: Dict[str, Any]) -> Dict[str, Any]:
     return {"jsonrpc": "2.0", "id": mid, "result": result}
 
 
+def _reviewed(branch: str) -> bool:
+    """True if review.jsonl has a round for branch. Unreadable log -> True (never warn on doubt)."""
+    try:
+        with open(os.path.join(jevlog.log_dir(), "review.jsonl"), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    if str(json.loads(line).get("task")) == branch:
+                        return True
+                except (ValueError, AttributeError):
+                    continue
+        return False
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return True
+
+
 def _text(mid: Any, obj: Any, is_error: bool = False) -> Dict[str, Any]:
     text = obj if isinstance(obj, str) else json.dumps(obj)
     return _ok(mid, {"content": [{"type": "text", "text": text}], "isError": is_error})
@@ -323,6 +340,8 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
                     if cost is not None and cost >= 0:
                         rec["cost_usd"] = cost
                 jevlog.append(file, rec)
+                if name == "log_merge" and not (_reviewed(rec["branch"]) or _reviewed(rec["task"])):
+                    return _text(mid, "logged; warning: no review recorded for branch %s" % rec["branch"])
                 return _text(mid, "logged")
             name_str = str(name)[:64] if name else "unknown"
             return _text(mid, "unknown tool %r" % name_str, True)
