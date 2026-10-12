@@ -39,7 +39,7 @@ Skills side by side also give you no view of the whole loop. [FlowObserve](https
 
 ## What Dryas is not
 
-- **Not a plugin.** The Claude Code edition ships as a plugin, but Dryas itself is a specification with one binding per harness. This repo ships two bindings (Claude Code and Codex). Others can be written against the [specification](../spec/dryas-spec-v1.md).
+- **Not only a plugin.** The Claude Code edition ships as a plugin (`dryas@dryas-workflow`), but Dryas itself is a specification with one binding per harness. This repo ships two bindings (Claude Code and Codex); Pi, OpenCode, Roo and Cursor are planned. Others can be written against the [specification](../spec/dryas-spec-v1.md).
 - **Not a prompt pack.** The rules are enforced where they can be (hooks, scope lock, gates), not only asked for.
 - **Not autonomous.** Dryas puts a human at the two points that matter most, design approval and the final say on anything outward-facing, and keeps agents fast everywhere else.
 - **Not an organisation-wide AI policy.** The scope is software delivery.

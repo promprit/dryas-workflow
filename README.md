@@ -7,7 +7,7 @@
 The method is the asset; the tools are replaceable. This repo holds both:
 
 - **The framework:** why it exists, five layers, one loop, and a draft specification any harness can implement.
-- **A reference implementation** for Claude Code and Codex, built on Superpowers, Ruflo, Jev and a few design skills.
+- **A reference implementation**: a Claude Code plugin (`dryas@dryas-workflow`) and a Codex install, built on Superpowers, Ruflo, Jev and a few design skills.
 
 This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
 
@@ -69,17 +69,42 @@ Brainstorm → Plan → Judge → Build → Escalate → Review → Ship
 
 ## Install
 
+Dryas is a Claude Code plugin, `dryas@dryas-workflow`, served from its own marketplace: this repo. It is a community plugin, not an Anthropic-official one and not in `claude-plugins-official`.
+
 ```
 git clone https://github.com/promprit/dryas-workflow
 cd dryas-workflow
 install/install.sh                              # macOS, Linux, WSL
+install\install.ps1                             # Windows (PowerShell)
 install/install.sh --claude-dir ~/.claude-team  # once more for each other Claude account
-.\install\install.ps1                            # Windows (PowerShell)
 ```
 
-For Claude Code, Dryas installs as a plugin (`dryas@dryas-workflow`) into one config dir per run; all accounts share one state folder, `~/.dryas`. `--uninstall` removes Dryas from one config dir and keeps `~/.dryas`; adding `--purge` on the last account also deletes the logs, `/tune` thresholds and handoffs there, but keeps your notes in `~/.dryas/docs/dryas-local.md`. Works on macOS, Linux, WSL and Windows, with Claude Code and Codex (`--harness codex|both`).
+Run it once per Claude config dir (`--claude-dir`). It adds the marketplace, installs the plugin and its Superpowers dependency, and merges model, env and permission rules into that dir's `settings.json`. All accounts share one state folder, `~/.dryas`.
 
-Details, flags and troubleshooting: [docs/install.md](docs/install.md). Other agent harnesses: [docs/harnesses.md](docs/harnesses.md).
+Manual route, inside Claude Code:
+
+```
+/plugin marketplace add promprit/dryas-workflow
+/plugin install dryas@dryas-workflow
+```
+
+(Shell form: `claude plugin install dryas --marketplace promprit/dryas-workflow`.) This gives you the plugin only. Superpowers must also be installed from `claude-plugins-official`, and you still need setup for the settings, permissions and shared state in `~/.dryas`.
+
+`--uninstall` removes Dryas from one config dir and keeps `~/.dryas`; adding `--purge` on the last account also deletes the logs, `/tune` thresholds and handoffs there, but keeps your notes in `~/.dryas/docs/dryas-local.md`.
+
+Details, flags and troubleshooting: [docs/install.md](docs/install.md).
+
+## Works with
+
+| Harness | Status |
+| --- | --- |
+| Claude Code | Plugin `dryas@dryas-workflow` |
+| Codex | `install/install.sh --harness codex` (or `both`); a Codex plugin is next |
+| Pi, OpenCode, Roo, Cursor | Later |
+
+Several accounts side by side (for example in T3 Code) share one `~/.dryas`. Details: [docs/harnesses.md](docs/harnesses.md).
+
+Platforms: macOS, Linux, WSL and Windows.
 
 ## Use it for yourself
 
@@ -109,7 +134,7 @@ Optional, installed separately: [FlowObserve](https://github.com/promprit/flowob
 ## Requirements
 
 - A Claude subscription with Claude Code, or the Codex CLI.
-- An OpenRouter API key for Jev. Without it Jev makes no decisions and everything else still works.
+- An OpenRouter API key for Jev. Jev is bring-your-own-key: set `OPENROUTER_API_KEY` in your shell, or pass `--openrouter-key` to setup (stored in Claude Code's secure storage). Without a key, Jev checks are skipped and the workflow still runs.
 - macOS, Linux, WSL or Windows.
 - Python 3.9+, Node and npm (for Ruflo), git.
 
