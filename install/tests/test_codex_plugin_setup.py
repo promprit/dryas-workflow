@@ -10,6 +10,8 @@ import codex_plugin_setup as cps
 
 REPO = HERE.parents[1]
 COMPS = ["core", "jev"]
+FOREIGN = ('\n[mcp_servers.x]\ncommand = "echo"\nargs = ["hi"]\n\n[hooks.state]\n\n'
+           '[hooks.state."dryas@dryas-workflow:hooks/hooks.json:session_start:0:0"]\ntrusted_hash = "sha256:ab"\n')
 
 
 class Env:
@@ -109,7 +111,10 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(quiet(cps.setup, REPO, e.a, ["core"], yes=True)[0], 1)
         self.assertNotIn(cps.TOML_START, e.toml(e.a))
         self.assertFalse((e.root / "accounts.json").exists())
-        self.assertFalse((e.a / cps.RECORD).exists())
+        rec = json.loads((e.a / cps.RECORD).read_text(encoding="utf-8"))  # kept so uninstall can undo the marketplace
+        self.assertTrue(rec["marketplace_added"] and rec["dir_created"])
+        self.assertEqual(rec["components"], [])
+        self.assertNotIn("plugin_root", rec)
 
     def test_old_codex_stops(self):
         e = Env(self)
@@ -132,7 +137,7 @@ class SetupTest(unittest.TestCase):
         quiet(cps.setup, REPO, e.a, COMPS, yes=True)
         t = e.toml(e.a)
         self.assertIn("[mcp_servers.jev]", t)
-        self.assertIn(json.dumps(cps.pu.fwd(cps.di.PY)), t)
+        self.assertIn("command = %s" % cps.ct._q(cps.pu.fwd(cps.di.PY)), t)
         self.assertIn("/jev/jev_mcp.py", t)
         self.assertIn('env_vars = ["OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "DRYAS_DATA_ROOT"]', t)
 
@@ -148,6 +153,103 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("codex plugin add dryas@dryas-workflow", out)
         self.assertFalse(e.a.exists() and any(e.a.iterdir()))
+
+    def test_codex_tables_inside_block_are_kept(self):
+        # real 0.162.1: `codex mcp add` and hook trust writes land after our last table, before the end marker
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core"], yes=True)
+        cfg = e.a / "config.toml"
+        cfg.write_text(e.toml(e.a).replace(cps.TOML_END, FOREIGN.strip("\n") + "\n" + cps.TOML_END), encoding="utf-8")
+        self.assertEqual(quiet(cps.setup, REPO, e.a, ["core"], yes=True)[0], 0)
+        t = e.toml(e.a)
+        inner = t.split(cps.TOML_START)[1].split(cps.TOML_END)[0]
+        self.assertEqual(inner, '\n[plugins."dryas@dryas-workflow".mcp_servers.jev]\nenabled = false\n')
+        self.assertEqual(t.count(FOREIGN.strip("\n")), 1)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)  # block removed, Codex's tables stay
+        self.assertNotIn(cps.TOML_START, e.toml(e.a))
+        self.assertNotIn("mcp_servers.jev", e.toml(e.a))
+        self.assertEqual(e.toml(e.a).count(FOREIGN.strip("\n")), 1)
+
+    def test_lost_record_no_duplicate_block(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core"], yes=True)
+        (e.a / cps.RECORD).unlink()
+        cfg = e.a / "config.toml"
+        cfg.write_text(e.toml(e.a).replace(cps.TOML_END, FOREIGN.strip("\n") + "\n" + cps.TOML_END), encoding="utf-8")
+        quiet(cps.setup, REPO, e.a, ["core"], yes=True)
+        t = e.toml(e.a)
+        self.assertEqual((t.count(cps.TOML_START), t.count(cps.TOML_END), t.count("mcp_servers.jev]")), (1, 1, 1))
+        self.assertEqual(t.count("[mcp_servers.x]"), 1)
+        (e.a / cps.RECORD).unlink()
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)  # lost record and Jev back on: the block still goes
+        self.assertNotIn(cps.TOML_START, e.toml(e.a))
+        self.assertIn("[mcp_servers.x]", e.toml(e.a))
+
+    def test_marker_dropped_by_codex(self):
+        # real 0.162.1: `codex mcp add y` after our [mcp_servers.jev] drops the start marker (comment before that table)
+        e = Env(self, py3=False)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        cfg = e.a / "config.toml"
+        t = e.toml(e.a).replace(cps.TOML_START + "\n", "").replace(
+            cps.TOML_END, '\n[mcp_servers.y]\ncommand = "echo"\n' + cps.TOML_END)
+        cfg.write_text(t, encoding="utf-8")
+        self.assertEqual(quiet(cps.setup, REPO, e.a, COMPS, yes=True)[0], 0)
+        t = e.toml(e.a)
+        self.assertEqual((t.count(cps.TOML_START), t.count(cps.TOML_END), t.count("[mcp_servers.jev]")), (1, 1, 1))
+        self.assertIn('[mcp_servers.y]\ncommand = "echo"', t.split(cps.TOML_START)[0])
+        (e.a / cps.RECORD).unlink()  # lost record too, and only the start marker left
+        cfg.write_text(e.toml(e.a).replace(cps.TOML_END + "\n", ""), encoding="utf-8")  # lone start marker
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(e.toml(e.a).count("[mcp_servers.jev]"), 1)
+
+    def test_foreign_table_with_our_name_not_overwritten(self):
+        e = Env(self, py3=False)
+        e.a.mkdir()
+        (e.a / "config.toml").write_text('[mcp_servers.jev]\ncommand = "mine"\n', encoding="utf-8")
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("warning", out)
+        self.assertEqual(e.toml(e.a).count("[mcp_servers.jev]"), 1)
+        self.assertIn('command = "mine"', e.toml(e.a))
+        self.assertNotIn(cps.TOML_START, e.toml(e.a))
+
+    def test_ruflo_branch(self):
+        e = Env(self)
+        dist = e.t / "npm" / "ruflo" / "node_modules" / "@claude-flow" / "cli" / "dist"
+        dist.mkdir(parents=True)
+        det = {"RUFLO_BIN": "", "RUFLO_JS": str(e.t / "npm" / "ruflo" / "bin" / "ruflo.js"), "RUFLO_NODE_FALLBACK": "",
+               "RUFLO_NODE_MODULES": str(e.t / "npm" / "ruflo" / "node_modules"), "RUFLO_CLI_DIST": str(dist)}
+        with mock.patch.object(cps.di, "detect", lambda: dict(det)):
+            self.assertEqual(quiet(cps.setup, REPO, e.a, COMPS + ["ruflo"], yes=True)[0], 0)
+        t = e.toml(e.a)
+        self.assertIn("[mcp_servers.ruflo]", t)
+        self.assertIn("RUFLO_JS = %s" % cps.ct._q(det["RUFLO_JS"]), t)
+        self.assertTrue((e.root / "ruflo" / "mcp-shim" / "bin" / "cli.js").is_file())
+        self.assertIsNotNone(cps.pu.read_dir_link(str(e.root / "ruflo" / "mcp-shim" / "dist")))
+        shutil.rmtree(str(dist))
+        with mock.patch.object(cps.di, "detect", lambda: dict(det)):
+            rc, out = quiet(cps.setup, REPO, e.b, COMPS + ["ruflo"], yes=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("warning", out)
+        self.assertNotIn("mcp_servers.ruflo", e.toml(e.b))
+
+    def test_owned_tables_and_rewrite_pure(self):
+        ov = '[plugins."dryas@dryas-workflow".mcp_servers.jev]'
+        body = ov + "\nenabled = false"
+        x = '[mcp_servers.x]\ncommand = "echo"\n'
+        text = "a = 1\n\n" + cps.TOML_START + "\n" + body + "\n\n" + x + cps.TOML_END + "\n"
+        self.assertEqual(cps.owned_tables(text, body), {ov})
+        self.assertEqual(cps.owned_tables(text, None), {ov})  # lost record: our headers inside the markers
+        self.assertEqual(cps.owned_tables(text.replace(cps.TOML_START + "\n", ""), None), set())  # x precedes the end
+        self.assertEqual(cps.owned_tables("[mcp_servers.jev]\nc = 1\n" + cps.TOML_END + "\n", None), {"[mcp_servers.jev]"})
+        self.assertEqual(cps.owned_tables("[mcp_servers.jev]\nc = 1\n", None), set())
+        new = cps.rewrite_config(text, "[mcp_servers.ruflo]\ncommand = \"node\"", {ov})
+        self.assertEqual(new, "a = 1\n\n" + x + "\n" + cps.TOML_START + '\n[mcp_servers.ruflo]\ncommand = "node"\n' +
+                         cps.TOML_END + "\n")
+        self.assertEqual(cps.rewrite_config(text, "", {ov}), "a = 1\n\n" + x)
+        self.assertEqual(cps.rewrite_config(cps.TOML_START + "\n" + body + "\n" + cps.TOML_END + "\n", "", {ov}), "")
+        sub = "[mcp_servers.ruflo]\ncommand = 1\n\n# keep\n[mcp_servers.ruflo.env]\nA = 1\n\n[z]\n"
+        self.assertEqual(cps.rewrite_config(sub, "", {"[mcp_servers.ruflo]"}), "# keep\n[z]\n")
 
     def test_toml_block_pure(self):
         self.assertEqual(cps.toml_block(["core", "jev"], "/p", "/d", {}, ""), "")

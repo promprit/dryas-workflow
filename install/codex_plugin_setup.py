@@ -17,7 +17,6 @@ import dryas_install as di  # noqa: E402
 import platform_util as pu  # noqa: E402
 import plugin_setup as ps  # noqa: E402
 import ruflo_runtime  # noqa: E402
-from claude_md_block import insert_block, remove_block  # noqa: E402
 
 PLUGIN, MARKET = "dryas", "dryas-workflow"
 ID = PLUGIN + "@" + MARKET
@@ -42,7 +41,10 @@ def codex_version(text: str) -> Optional[Tuple[int, ...]]:
 
 def python3_ok() -> bool:
     """Plugin MCP and hooks run `python3` (no shell for MCP): it must be on PATH and 3.9+."""
-    return bool(pu.which("python3")) and di.run(["python3", "-c", "import sys; sys.exit(sys.version_info < (3, 9))"]) == 0
+    if not pu.which("python3"):
+        return False
+    rc, _ = di.capture(["python3", "-c", "import sys; sys.exit(sys.version_info < (3, 9))"], timeout=30)
+    return rc == 0
 
 
 def _json(argv: List[str], cdx: Path):
@@ -95,6 +97,99 @@ def toml_block(comps: List[str], plugin_root, data_root, ruflo_env: Dict[str, st
     return "\n".join(lines).strip()
 
 
+OUR_TABLES = ('[plugins."%s".mcp_servers.jev]' % ID, "[mcp_servers.jev]", "[mcp_servers.ruflo]")
+
+
+def _headers(text: str) -> List[str]:
+    return [ln.strip() for ln in (text or "").splitlines() if ln.strip().startswith("[")]
+
+
+def _is_owned(header: str, owned) -> bool:
+    return header in owned or any(header.startswith(o[:-1] + ".") for o in owned)  # sub-tables: [x.env]
+
+
+def owned_tables(text: str, recorded: Optional[str]) -> set:
+    """Table headers in config.toml that setup wrote: those in the recorded body, plus our known headers that the
+    markers still enclose. Codex drops a marker comment in front of an [mcp_servers.*] table whenever it rewrites that
+    group (`codex mcp add/remove`, 0.162.1), so a lone start marker counts to the end of the file and a lone end marker
+    counts back over the directly preceding tables of ours."""
+    owned = set(_headers(recorded or ""))
+    lines = [ln.strip() for ln in text.splitlines()]
+    has_start, inside = TOML_START in lines, False
+    for i, s in enumerate(lines):
+        if s == TOML_START:
+            inside = True
+        elif s == TOML_END:
+            if not has_start:
+                for prev in reversed(lines[:i]):
+                    if prev.startswith("["):
+                        if prev not in OUR_TABLES:
+                            break
+                        owned.add(prev)
+            inside = False
+        elif inside and s in OUR_TABLES:
+            owned.add(s)
+    return owned
+
+
+def rewrite_config(text: str, body: str, owned) -> str:
+    """Pure: config.toml text without the marker lines and the tables in `owned` (each with its keys and blank lines;
+    comments are kept, they head the next table), then our block appended at the end when `body` is set."""
+    out, skip = [], False
+    for line in text.splitlines(True):
+        s = line.strip()
+        if s in (TOML_START, TOML_END):
+            continue
+        if s.startswith("["):
+            skip = _is_owned(s, owned)
+            if skip:
+                continue
+        if skip and not s.startswith("#"):
+            continue
+        out.append(line)
+    new = "".join(out).rstrip("\r\n")
+    if body:
+        new += ("\n\n" if new.strip() else "") + TOML_START + "\n" + body.strip() + "\n" + TOML_END
+    return new + "\n" if new.strip() else ""
+
+
+def write_config_block(cfg: Path, body: str, rec: dict) -> bool:
+    """Write, rewrite or remove our tables in config.toml. Only tables setup wrote are touched; tables Codex adds
+    (often right after ours, inside the markers) stay. False = not written: a table we would write is already there
+    and is not ours (warned)."""
+    try:
+        with open(cfg, encoding="utf-8", newline="") as fh:
+            text = fh.read()
+    except OSError:
+        text = None
+    cur = text or ""
+    owned = owned_tables(cur, rec.get("toml_body"))
+    new = rewrite_config(cur, body, owned)
+    clash = sorted(set(_headers(body)) & set(h for h in _headers(cur) if not _is_owned(h, owned)))
+    if clash:
+        print("warning: %s already has %s, not written by Dryas setup; Dryas config entries not changed. "
+              "Remove those tables and re-run setup" % (cfg, ", ".join(clash)))
+        return False
+    if text is None and body:
+        rec["toml_created"] = True
+    if new != cur and (text is not None or body):
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        with open(cfg, "w", encoding="utf-8", newline="") as fh:
+            fh.write(new)
+    rec["toml"] = bool(body)
+    if body:
+        rec["toml_body"] = body.strip()
+    else:
+        rec.pop("toml_body", None)
+    return True
+
+
+def _keep_record(path: Path, rec: dict) -> None:
+    """On a failed run, keep what uninstall must undo (a created CODEX_HOME, an added marketplace)."""
+    if rec.get("dir_created") or rec.get("marketplace_added"):
+        ps._save_json(path, rec)
+
+
 def _say_run(argv: List[str], cdx: Path, dry: bool) -> int:
     print("CODEX_HOME=%s %s" % (cdx, " ".join(argv)))
     return 0 if dry else di.run(argv, env=child_env(cdx))
@@ -126,6 +221,7 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
         rc = _say_run(["codex", "plugin", "marketplace", "add", str(repo)], cdx, dry)
         if rc:
             print("error: `codex plugin marketplace add` failed (exit %d); %s not changed" % (rc, cdx))
+            _keep_record(rec_path, rec)
             return rc
         rec["marketplace_added"] = True
     print("CODEX_HOME=%s codex plugin add %s --json" % (cdx, ID))
@@ -137,26 +233,28 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     except ValueError:
         added = {}
     entry = plugin_entry(cdx)
-    if not added or not entry or not entry.get("enabled") or entry.get("version") != want:
+    if not isinstance(added, dict) or not added or not entry or not entry.get("enabled") or entry.get("version") != want:
         print("error: %s is not installed and enabled at version %s in %s (plugin add exit %d); config not changed"
               % (ID, want, cdx, rc))
+        _keep_record(rec_path, rec)
         return 1
     plugin_root = added.get("installedPath") or str(cache_root(cdx, want))
     # Task 6: migrate_legacy(cdx) goes here (before the config block: legacy `codex mcp remove jev` must not hit ours)
     fallback = di.PY if "jev" in comps and not python3_ok() else ""
     renv: Dict[str, str] = {}
+    block_comps = list(comps)
     if "ruflo" in comps:
         mapping = ps._mapping(plugin_root, comps)
-        renv = di.ruflo_env(repo, mapping)
-        rec["data_files"] = sorted(set(rec.get("data_files", [])) |
-                                   set(ruflo_runtime.install(repo, root, {}, mapping.get("RUFLO_CLI_DIST", ""))))
-    cfg = cdx / "config.toml"
-    body = toml_block(comps, plugin_root, root, renv, fallback)
-    if body:
-        insert_block(cfg, body, rec, "toml", TOML_START, TOML_END)
-    elif rec.get("toml"):
-        remove_block(cfg, rec, "toml", TOML_START, TOML_END)
-        rec["toml"] = False
+        dist = mapping.get("RUFLO_CLI_DIST", "")
+        if dist and os.path.isdir(dist):
+            renv = di.ruflo_env(repo, mapping)
+            rec["data_files"] = sorted(set(rec.get("data_files", [])) |
+                                       set(ruflo_runtime.install(repo, root, {}, dist)))
+        else:
+            block_comps.remove("ruflo")
+            print("warning: Ruflo is not installed (no %s); [mcp_servers.ruflo] not written. Install it with "
+                  "`npm install -g ruflo` and re-run setup" % (dist or "ruflo under `npm root -g`"))
+    write_config_block(cdx / "config.toml", toml_block(block_comps, plugin_root, root, renv, fallback), rec)
     if fallback:
         print("note: python3 3.9+ is not on PATH; Jev MCP runs with %s (re-run setup after each update)" % fallback)
     # Task 5: trust_hooks(cdx, rec, yes) goes here
