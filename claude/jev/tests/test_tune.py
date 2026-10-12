@@ -322,6 +322,34 @@ class TuneTest(unittest.TestCase):
                                       {"task": "w:1", "reason": "a", "from_model": "haiku", "to_model": "sonnet"}])
         self.assertAlmostEqual(tune.build()["delivery"]["haiku_climb_rate"], 0.5)
 
+    def test_start_tier_follows_coder_not_haiku_tester(self):
+        # A Haiku tester logged before a skip-up Sonnet coder must not make the task Haiku-started.
+        write(self.d, "dispatch", [{"task": "w:1", "tier": "haiku", "role": "tester", "attempt": 1},
+                                   {"task": "w:1", "tier": "sonnet", "role": "coder", "attempt": 1},
+                                   {"task": "w:2", "tier": "haiku", "role": "tester", "attempt": 1},
+                                   {"task": "w:2", "tier": "haiku", "role": "coder", "attempt": 1}])
+        write(self.d, "escalations", [{"task": "w:1", "reason": "skip-up: x", "from_model": "haiku", "to_model": "sonnet"}])
+        d = tune.build()["delivery"]
+        self.assertEqual(d["haiku_tasks"], 1)
+        self.assertAlmostEqual(d["haiku_climb_rate"], 0.0)
+
+    def test_start_tier_uses_coder_logged_as_attempt_two(self):
+        # Attempts are numbered per task, so a coder dispatched after a Haiku tester can be attempt 2.
+        write(self.d, "dispatch", [{"task": "w:1", "tier": "haiku", "role": "tester", "attempt": 1},
+                                   {"task": "w:1", "tier": "sonnet", "role": "coder", "attempt": 2},
+                                   {"task": "w:2", "tier": "haiku", "role": "coder", "attempt": 1},
+                                   {"task": "w:2", "tier": "sonnet", "role": "coder", "attempt": 2}])
+        write(self.d, "escalations", [{"task": "w:1", "reason": "skip-up: x", "from_model": "haiku", "to_model": "sonnet"},
+                                      {"task": "w:2", "reason": "missed edge case", "from_model": "haiku", "to_model": "sonnet"}])
+        d = tune.build()["delivery"]
+        self.assertEqual(d["haiku_tasks"], 1)
+        self.assertAlmostEqual(d["haiku_climb_rate"], 1.0)
+        self.assertEqual(d["haiku_climb_reasons"], {"missed edge case": 1})
+
+    def test_start_tier_falls_back_without_coder_record(self):
+        write(self.d, "dispatch", [{"task": "w:1", "tier": "haiku", "attempt": 1}])
+        self.assertEqual(tune.build()["delivery"]["haiku_tasks"], 1)
+
     def test_haiku_metrics_na_without_haiku(self):
         write(self.d, "dispatch", [{"task": "s:1", "tier": "sonnet", "role": "coder", "attempt": 1}])
         rep = tune.build()
