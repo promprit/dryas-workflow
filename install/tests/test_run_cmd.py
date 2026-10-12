@@ -171,10 +171,31 @@ class MainTest(unittest.TestCase):
         st.copy = True
         self._codex_record(st, ["core", "jev"])
         self.assertEqual(self.main("--no-ruflo"), 0)
-        self.assertEqual(st.steps(), ["migrate", "ps.setup", "di.install", "ct.install_codex", "ps.verify"])
+        self.assertEqual(st.steps(), ["migrate", "ps.setup", "di.install", "ct.install_codex", "ps.verify",
+                                      "ct.verify_codex"])
+        self.assertEqual(st.call("ct.verify_codex")[0][2], ["core", "jev"])
         a, k = st.call("di.install")
         self.assertEqual((a[1], a[2], k["claude"]), (st.tmp / ".claude", ["core", "jev"], False))
         self.assertIn("Codex keeps working", self.out)
+
+    def test_kept_codex_ruflo_is_preflighted(self):
+        st = MainStubs(self)
+        st.copy = True
+        self._codex_record(st, ["core", "ruflo"])
+        from unittest import mock
+        seen = []
+        with mock.patch.object(run_cmd, "preflight", lambda *a: seen.append(a) or ["stop"]):
+            self.assertEqual(self.main("--no-ruflo"), 1)
+        self.assertIn("ruflo", seen[0][0])
+        self.assertIn(st.tmp / ".claude", seen[0][3])
+
+    def test_unreadable_record_stops(self):
+        st = MainStubs(self)
+        (st.tmp / ".claude").mkdir()
+        (st.tmp / ".claude" / ".dryas-installed.json").write_text("{broken")
+        self.assertEqual(self.main("--no-ruflo"), 1)
+        self.assertEqual(st.steps(), [])
+        self.assertIn("cannot be read", self.out)
 
     def test_claude_only_other_dir_leaves_codex_alone(self):
         st = MainStubs(self)

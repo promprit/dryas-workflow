@@ -154,6 +154,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     cd = ps.claude_dir(a.claude_dir)
     copy_cd = home / ".claude"  # Codex reads its runtime copy here (unchanged)
     comps = components(a)
+    codex_cmp = ps.norm(copy_cd)  # cd is resolved; compare like with like (symlinked or 8.3 homes)
     want_claude, want_codex = a.harness in ("claude", "both"), a.harness in ("codex", "both")
     if a.harness == "codex" and not a.uninstall and ("superpowers" in comps or "design" in comps):
         print("note: superpowers and design are Claude Code plugins; skipped for Codex.")
@@ -161,19 +162,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         rc = ct.uninstall_codex(ct.codex_dir(), home, di.run) if want_codex else 0
         rc = rc or (di.uninstall(copy_cd) if want_codex else 0)
         return rc or (ps.uninstall(cd, a.purge) if want_claude else 0)
-    ruflo_paths = ([repo / "claude", cd] if want_claude else []) + ([copy_cd] if want_codex else [])
-    probs = preflight(comps, a.harness, copy_cd, ruflo_paths)
+    if want_claude and (cd / di.RECORD).exists():
+        try:
+            di.load_record(cd)
+        except (OSError, ValueError) as e:
+            print("error: %s cannot be read (%s); fix or remove it and re-run (nothing changed)" % (cd / di.RECORD, e))
+            return 1
+    copy_install = want_claude and migrate.is_copy_install(cd)
+    # migrating ~/.claude removes the runtime files an existing Codex install uses: put them back afterwards
+    keep_codex = None
+    if copy_install and not want_codex and pu.same_path(cd, codex_cmp):
+        keep_codex = _codex_record_comps(ct.codex_dir())
+    ruflo_paths = ([repo / "claude", cd] if want_claude else []) + \
+        ([copy_cd] if want_codex or keep_codex is not None else [])
+    probs = preflight(sorted(set(comps) | set(keep_codex or [])), a.harness, copy_cd, ruflo_paths)
     if probs:
         print("\n".join(probs))
         return 1
     if a.preflight_only:
         print("preflight ok")
         return 0
-    copy_install = want_claude and migrate.is_copy_install(cd)
-    # migrating ~/.claude removes the runtime files an existing Codex install uses: put them back afterwards
-    keep_codex = None
-    if copy_install and not want_codex and pu.same_path(cd, copy_cd):
-        keep_codex = _codex_record_comps(ct.codex_dir())
     if copy_install and a.dry_run:
         print("would migrate the copy install in %s" % cd)
     elif copy_install:
@@ -201,6 +209,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     if a.dry_run:
         return 0
     fails = ps.verify(cd, comps) if want_claude else 0
-    if want_codex:
-        fails += ct.verify_codex(ct.codex_dir(), home, comps, di.capture, copy_cd)
+    if want_codex or keep_codex is not None:
+        fails += ct.verify_codex(ct.codex_dir(), home, comps if want_codex else keep_codex, di.capture, copy_cd)
     return 1 if fails else 0
