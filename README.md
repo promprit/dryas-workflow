@@ -36,6 +36,7 @@ Review       nothing merges unverified; a human ships
 | [Examples](examples/README.md) | A feature walked through the loop, a plan file, manifests |
 | [Adoption guide](docs/adoption-guide.md) | Use it, fork it, or write an edition for another harness |
 | [Roadmap](docs/roadmap.md) | Framework, then spec and manifest, then editions |
+| [Plans](docs/plans/) · [Specs](docs/specs/) · [Superpowers specs and plans](docs/superpowers/) | Design history: the dated specs and plans each change was built from. Kept as a record, not as current docs |
 
 ## The loop
 

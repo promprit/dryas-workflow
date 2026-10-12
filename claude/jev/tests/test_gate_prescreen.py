@@ -229,14 +229,24 @@ class TestPrescreen(unittest.TestCase):
         cmd = "git" + " --no-pager" * 40 + " log && ls"
         start = time.monotonic()
         prescreen.risky(cmd)
-        self.assertLess(time.monotonic() - start, 0.05)
+        # Backtracking here would be exponential (seconds), so a loose bound is safe.
+        self.assertLess(time.monotonic() - start, 0.5)
 
     def test_repeated_tool_words_stay_linear(self):
+        # Compare 8x the input against the base size: linear is ~8x, quadratic ~64x.
+        # A ratio holds on slow CI runners where a fixed wall-clock bound flakes.
+        def best(cmd):
+            times = []
+            for _ in range(3):
+                start = time.perf_counter()
+                prescreen.risky(cmd)
+                times.append(time.perf_counter() - start)
+            return min(times)
+
         for word in ("sort ", "find ", "awk ", "base64 ", "xxd ", "git branch "):
             with self.subTest(word=word):
-                start = time.monotonic()
-                prescreen.risky(word * 8000)
-                self.assertLess(time.monotonic() - start, 0.1)
+                small, large = best(word * 1000), best(word * 8000)
+                self.assertLess(large, 16 * small + 0.005)
 
 
 if __name__ == "__main__":
