@@ -3,6 +3,7 @@
   setup(repo, cdx, comps, yes)   one CODEX_HOME; run once per Codex account (install.sh --harness codex --codex-dir DIR)
   verify(cdx, comps)             PASS/FAIL/SKIP lines; returns the number of FAILs
   uninstall(cdx)                 that CODEX_HOME only (Task 7)
+  migrate_legacy(cdx, home)      today's Codex copy install in cdx, and its runtime copy in home/.claude, removed
 """
 import json
 import os
@@ -15,9 +16,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_appserver as ca  # noqa: E402
 import codex_target as ct  # noqa: E402
 import dryas_install as di  # noqa: E402
+import migrate  # noqa: E402
 import platform_util as pu  # noqa: E402
 import plugin_setup as ps  # noqa: E402
 import ruflo_runtime  # noqa: E402
+import settings_merge as sm  # noqa: E402
+
+HERE = Path(__file__).resolve().parent
 
 PLUGIN, MARKET = "dryas", "dryas-workflow"
 ID = PLUGIN + "@" + MARKET
@@ -346,6 +351,94 @@ def trust_hooks(cdx: Path, rec: dict, yes: bool) -> bool:
     return True
 
 
+def legacy_components(cdx: Path) -> Optional[List[str]]:
+    """Components of today's Codex copy install in cdx (None when there is none)."""
+    p = Path(cdx) / ct.RECORD
+    if not p.exists():
+        return None
+    try:
+        comps = json.loads(p.read_text(encoding="utf-8")).get("components", [])
+    except (OSError, ValueError, AttributeError):
+        comps = []
+    return sorted(set(["core"] + [str(c) for c in comps if isinstance(c, str)]))
+
+
+class LegacyError(Exception):
+    pass
+
+
+def _runtime_users(cdx: Path, home: Path) -> List[Path]:
+    """Other CODEX_HOMEs whose copy install still runs the ~/.claude runtime copy (it was always the default one)."""
+    out = []
+    for d in (ps.norm(Path(home) / ".codex"), codex_home(None)):
+        if not pu.same_path(d, ps.norm(cdx)) and (d / ct.RECORD).exists() and d not in out:
+            out.append(d)
+    return out
+
+
+def legacy_problem(cdx: Path, home: Path) -> str:
+    """Why the legacy Codex copy install (or its ~/.claude runtime copy) cannot be removed safely; "" = it can.
+    Checked before setup changes anything."""
+    cdx, cd = Path(cdx), Path(home) / ".claude"
+    p = cdx / ct.RECORD
+    if p.exists():
+        try:
+            rec = json.loads(p.read_text(encoding="utf-8"))
+            if not isinstance(rec, dict):
+                raise ValueError("not a JSON object")
+            for k, t in (("skills", list), ("skill_backups", dict), ("hooks", dict), ("mcp", dict)):
+                if not isinstance(rec.get(k, t()), t):
+                    raise ValueError('"%s" is not a %s' % (k, t.__name__))
+        except (OSError, ValueError) as e:
+            return "%s cannot be read (%s)" % (p, e)
+        try:
+            sm.load_settings(cdx / "hooks.json")
+        except SystemExit:
+            return "%s is not valid JSON" % (cdx / "hooks.json")
+    if (cd / di.RECORD).exists() and not migrate.is_copy_install(cd):
+        err = migrate.check(cd)
+        if err:
+            return "the Codex runtime copy in %s: %s" % (cd, err)
+    return ""
+
+
+def migrate_legacy(cdx: Path, home: Path, dry: bool = False) -> List[str]:
+    """Today's Codex copy install -> nothing (the plugin replaces it): uninstall it from cdx, then drop the Codex-only
+    runtime copy in home/.claude after moving any state it still holds to the data root (as the Claude migration does;
+    a re-run does not merge twice). A live Claude copy install there is left for the Claude migration. Raises
+    LegacyError when a step fails; re-running setup resumes (the legacy record goes last)."""
+    cdx, home = Path(cdx), Path(home)
+    msgs = []  # type: List[str]
+    if (cdx / ct.RECORD).exists():
+        if dry:
+            msgs.append("would remove the Codex copy install in %s (the plugin replaces it)" % cdx)
+        else:
+            print("Removing the Codex copy install in %s (the plugin replaces it)" % cdx)
+            try:
+                ct.uninstall_codex(cdx, home, lambda argv: di.run(argv, env=child_env(cdx)))
+            except (OSError, ValueError, SystemExit) as e:
+                raise LegacyError("removing the Codex copy install in %s failed: %s" % (cdx, e))
+            msgs.append("removed the Codex copy install in %s" % cdx)
+    cd = home / ".claude"
+    if (cd / di.RECORD).exists():
+        users = _runtime_users(cdx, home)
+        if migrate.is_copy_install(cd):
+            msgs.append("Claude Code still uses the copy install in %s; kept (install.sh --harness claude or both "
+                        "moves it to the plugin)" % cd)
+        elif users:
+            msgs.append("kept the Codex runtime copy in %s: the Codex copy install in %s still uses it; run setup "
+                        "for that CODEX_HOME too" % (cd, ", ".join(map(str, users))))
+        elif dry:
+            msgs.append("would remove the Codex runtime copy in %s (no longer needed)" % cd)
+        else:
+            if migrate.migrate(cd, ps.data_root(), runtime_copy=True):
+                raise LegacyError("removing the Codex runtime copy in %s failed" % cd)
+            msgs.append("removed the Codex runtime copy in %s (no longer needed; state is in %s)" % (cd, ps.data_root()))
+    for m in msgs:
+        print(m)
+    return msgs
+
+
 def _keep_record(path: Path, rec: dict) -> None:
     """On a failed run, keep what uninstall must undo (a created CODEX_HOME, an added marketplace)."""
     if rec.get("dir_created") or rec.get("marketplace_added"):
@@ -364,6 +457,10 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     if ver is None or ver < MIN_CODEX:
         print("error: Dryas needs Codex CLI %s or newer (found: %s); nothing changed"
               % (".".join(map(str, MIN_CODEX)), out.strip() or "no codex --version"))
+        return 1
+    problem = legacy_problem(cdx, Path.home())
+    if problem:
+        print("error: %s; fix or remove it and re-run (nothing changed)" % problem)
         return 1
     want = manifest_version(repo)
     mk = marketplaces(cdx) if cdx.exists() else {}  # Codex refuses a CODEX_HOME that does not exist: nothing registered
@@ -388,6 +485,7 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
         rec["marketplace_added"] = True
     print("CODEX_HOME=%s codex plugin add %s --json" % (cdx, ID))
     if dry:
+        migrate_legacy(cdx, Path.home(), dry=True)
         return 0
     rc, out = di.capture(["codex", "plugin", "add", ID, "--json"], env=child_env(cdx), timeout=300)
     try:
@@ -401,7 +499,13 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
         _keep_record(rec_path, rec)
         return 1
     plugin_root = added.get("installedPath") or str(cache_root(cdx, want))
-    # Task 6: migrate_legacy(cdx) goes here (before the config block: legacy `codex mcp remove jev` must not hit ours)
+    try:  # before the config block: the legacy `codex mcp remove jev` must not hit a [mcp_servers.jev] of ours
+        migrate_legacy(cdx, Path.home())
+    except LegacyError as e:
+        _keep_record(rec_path, rec)
+        print("error: %s. The plugin is installed but not set up; fix the error above and re-run setup "
+              "(it resumes)" % e)
+        return 1
     fallback = di.PY if "jev" in comps and not python3_ok() else ""
     renv: Dict[str, str] = {}
     block_comps = list(comps)
@@ -424,6 +528,7 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     if fallback:
         print("note: python3 3.9+ is not on PATH; Jev MCP runs with %s (re-run setup after each update)" % fallback)
     trust_hooks(cdx, rec, yes)
+    ps._save_json(rec_path, rec)  # trust is written: uninstall must be able to remove it even if a later step fails
     ps.write_workflow_doc(repo, root)
     ps.write_chain_local(root, comps, None, repo, None)
     ps.add_account(root, cdx, "codex_dirs")
@@ -435,6 +540,16 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
         print("note: Jev reads OPENROUTER_API_KEY from the shell Codex runs in; set it in your shell profile.")
     print("Dryas set up in %s (plugin at %s, state in %s)" % (cdx, plugin_root, root))
     return 0
+
+
+def _ev(name: str) -> str:
+    return re.sub(r"[_\s]", "", str(name)).lower()  # PreToolUse, preToolUse and pre_tool_use are one event
+
+
+def expected_hook_events(repo: Path = HERE.parent) -> List[str]:
+    """Hook events the plugin ships (codex/hooks/hooks.json), as Codex's hooks/list names them (camelCase)."""
+    data = json.loads((Path(repo) / "codex" / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    return sorted(ev[:1].lower() + ev[1:] for ev in data.get("hooks", {}))
 
 
 def verify(cdx: Path, comps: List[str]) -> int:
@@ -463,9 +578,11 @@ def verify(cdx: Path, comps: List[str]) -> int:
     try:
         mine = [e for e in ca.list_hooks(env, str(Path.home())) if e.get("pluginId") == ID]
         bad = ["%s (%s)" % (_event(e), e.get("trustStatus")) for e in mine if e.get("trustStatus") != "trusted"]
-        fails += say("PASS" if mine and not bad else "FAIL", "Dryas hooks trusted",
-                     ("not trusted: " + ", ".join(bad) + ". " + TRUST_HINT) if bad else
-                     ("" if mine else "Codex lists no Dryas hooks"))
+        seen = {_ev(_event(e)) for e in mine}
+        missing = [ev for ev in expected_hook_events() if _ev(ev) not in seen]
+        detail = (["not trusted: %s. %s" % (", ".join(bad), TRUST_HINT)] if bad else []) + \
+            (["missing: %s (Codex does not list them; re-run setup)" % ", ".join(missing)] if missing else [])
+        fails += say("FAIL" if detail else "PASS", "Dryas hooks trusted", " ".join(detail))
     except ca.AppServerError as e:
         fails += say("FAIL", "Dryas hooks trusted", "%s. %s" % (e, TRUST_HINT))
     rc, out = di.capture(["codex", "debug", "prompt-input", "hi"], env=env, timeout=120)

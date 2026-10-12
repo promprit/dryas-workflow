@@ -397,30 +397,16 @@ class InstallTest(unittest.TestCase):
         self.assertIn("warning: installing with a virtual-environment Python", buf.getvalue())
 
 
-class RuntimeOnlyTest(unittest.TestCase):
-    """claude=False (the Codex copy): only jev/, ruflo/, pstack/ and the workflow doc; Ruflo runtime also in the data root."""
+class PluginRootRenderTest(unittest.TestCase):
+    """Copied markdown has ${CLAUDE_PLUGIN_ROOT} rendered to the copy dir. The Codex runtime-only copy (claude=False)
+    is gone: codex_plugin_setup.migrate_legacy removes it (test_codex_plugin_setup.MigrationTest)."""
 
     def setUp(self):
         InstallTest.setUp(self)
-        shim = self.repo / "claude/ruflo/mcp-shim/bin/cli.js"
-        shim.parent.mkdir(parents=True)
-        shim.write_text("// shim\n")
         (self.repo / "claude/jev/notes.md").write_text("see ${CLAUDE_PLUGIN_ROOT}/jev/x.py\n")
 
-    def install(self, comps, claude=False):
-        return di.install(self.repo, self.cd, comps, home=self.home, yes=True, claude=claude)
-
-    def test_runtime_files_only(self):
-        self.assertEqual(self.install(["core", "jev", "ruflo"]), 0)
-        self.assertTrue((self.cd / "jev/x.py").exists())
-        self.assertTrue((self.cd / "ruflo/run.sh").exists())
-        self.assertTrue((self.cd / "docs/dryas-workflow.md").exists())  # Codex AGENTS.md points at it
-        for gone in ("agents", "commands", "skills", "CLAUDE.md", "settings.json"):
-            self.assertFalse((self.cd / gone).exists(), gone)
-        self.assertEqual(self.calls, [])  # no claude mcp add
-
     def test_markdown_plugin_root_rendered_to_copy_dir(self):
-        self.install(["core", "jev"])
+        self.assertEqual(di.install(self.repo, self.cd, ["core", "jev"], home=self.home, yes=True), 0)
         self.assertEqual((self.cd / "jev/notes.md").read_text(), "see %s/jev/x.py\n" % di.pu.fwd(self.cd))
 
     def test_render_substitutes_plugin_root(self):
@@ -428,40 +414,10 @@ class RuntimeOnlyTest(unittest.TestCase):
         self.assertEqual(di._rendered("jev/notes.md", f, ["core"], {"CD": "C:/Users/a/.claude"}),
                          b"see C:/Users/a/.claude/jev/x.py\n")
 
-    def test_ruflo_runtime_in_data_root(self):
-        self.install(["core", "jev", "ruflo"])
-        root = self.home / ".dryas" / "ruflo"
-        self.assertTrue((root / "mcp-shim/bin/cli.js").is_file())
-        for n in rh.HELPERS:
-            self.assertTrue((root / "helpers" / n).is_file(), n)
-        chain = json.loads((self.cd / "jev/chain.json").read_text())
-        rb = [x for x in chain["pretool"] if x["name"] == "ruflo-pre-bash"][0]
-        self.assertNotIn("enabled", rb)
-
-    def test_dry_run_writes_no_data_root(self):
-        di.install(self.repo, self.cd, ["core", "jev", "ruflo"], home=self.home, dry=True, yes=True, claude=False)
-        self.assertFalse((self.home / ".dryas").exists())
-
-    def test_codex_run_removes_extras_left_after_claude_moved_to_plugin(self):
-        self.install(["core", "jev"], claude=True)
-        rec = json.loads((self.cd / ".dryas-installed.json").read_text())
-        rec.update(claude_md=False, mcp=[], settings={"env": {}, "allow": [], "deny": [], "hooks": [], "top": {}})
-        (self.cd / ".dryas-installed.json").write_text(json.dumps(rec))  # Claude parts gone: not a Claude install
-        self.install(["core", "jev"])
-        self.assertFalse((self.cd / "agents/executor.md").exists())
-        rec = json.loads((self.cd / ".dryas-installed.json").read_text())
-        self.assertNotIn("agents/executor.md", rec["files"])
-        self.assertIn("jev/x.py", rec["files"])
-
-    def test_codex_run_keeps_live_claude_copy_install(self):
-        import io, contextlib
-        self.install(["core", "jev"], claude=True)
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            self.install(["core", "jev"])
-        self.assertTrue((self.cd / "agents/executor.md").exists())
-        self.assertIn("agents/executor.md", json.loads((self.cd / ".dryas-installed.json").read_text())["files"])
-        self.assertIn("Claude Code still uses the copy install in %s" % self.cd, buf.getvalue())
+    def test_runtime_only_path_removed(self):
+        import inspect
+        self.assertNotIn("claude", inspect.signature(di.install).parameters)
+        self.assertFalse(hasattr(di, "RUNTIME"))
 
 
 class FallbackTest(unittest.TestCase):

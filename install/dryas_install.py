@@ -16,7 +16,6 @@ sys.path.insert(0, str(HERE))
 import claude_mcp  # noqa: E402
 import platform_util as pu  # noqa: E402
 import ruflo_helpers  # noqa: E402
-import ruflo_runtime  # noqa: E402
 import settings_merge as sm  # noqa: E402
 import upgrade  # noqa: E402
 from render import chain_bytes, gate_blocks, rendered as _rendered  # noqa: E402
@@ -30,7 +29,6 @@ PY = pu.python_exe()
 PYX = [PY, "-X", "utf8"]
 USER_DATA = {"jev/thresholds.json"}
 SHIM_LINK = "ruflo/mcp-shim/dist"
-RUNTIME = ("jev/", "ruflo/", "pstack/")  # what the Codex copy (claude=False) needs from claude/
 KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUTER_API_KEY=...  "
             "(not stored by this installer)")
 
@@ -84,16 +82,13 @@ def save_record(cd: Path, rec: dict) -> None:
     (cd / RECORD).write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
 
 
-def _plan_files(repo: Path, comps: List[str], runtime_only: bool = False):
-    """runtime_only: the Codex copy; the workflow doc stays because Codex's AGENTS.md points at it."""
+def _plan_files(repo: Path, comps: List[str]):
     src = repo / "claude"
     for f in sorted(p for p in src.rglob("*") if p.is_file() or p.is_symlink()):
         rel = f.relative_to(src).as_posix()
         if "__pycache__" in rel.split("/") or rel.endswith(".pyc"):
             continue
         if rel in SKIP or any(rel.startswith(d) and c not in comps for c, ds in COMPONENT_DIRS.items() for d in ds):
-            continue
-        if runtime_only and not rel.startswith(RUNTIME):
             continue
         yield rel, f
     wf = repo / "docs" / "workflow.md"
@@ -174,11 +169,11 @@ def _put(cd: Path, rel: str, rec: dict, force: bool, ts: str, rep: dict, dry: bo
 
 
 def copy_files(repo: Path, cd: Path, comps: List[str], rec: dict, force: bool, ts: str, dry: bool = False,
-               mapping: Optional[Dict[str, str]] = None, runtime_only: bool = False) -> dict:
+               mapping: Optional[Dict[str, str]] = None) -> dict:
     mapping = mapping if mapping is not None else _mapping(comps, Path.home(), cd)
     rep = {"new": [], "replace": [], "written": [], "skipped": []}
     text_comps = sorted(set(rec.get("components", [])) | set(comps))
-    for rel, f in _plan_files(repo, comps, runtime_only):
+    for rel, f in _plan_files(repo, comps):
         if f.is_symlink():
             _put(cd, rel, rec, force, ts, rep, dry, link=os.readlink(str(f)))
         else:
@@ -192,9 +187,8 @@ def copy_files(repo: Path, cd: Path, comps: List[str], rec: dict, force: bool, t
     return rep
 
 
-def _remove_stale_files(repo: Path, cd: Path, comps_all: List[str], rec: dict, dry: bool,
-                        runtime_only: bool = False) -> None:
-    shipped = {rel for rel, _ in _plan_files(repo, comps_all, runtime_only)}
+def _remove_stale_files(repo: Path, cd: Path, comps_all: List[str], rec: dict, dry: bool) -> None:
+    shipped = {rel for rel, _ in _plan_files(repo, comps_all)}
     if "ruflo" in comps_all:
         shipped |= {r for r in rec["files"] if r.startswith("ruflo/helpers/")} | {SHIM_LINK}
     upgrade.remove_stale_files(cd, rec, shipped, dry)
@@ -224,11 +218,10 @@ def _fragment(repo: Path, comps: List[str], mapping: Dict[str, str]) -> dict:
     return sm.render(frag, mapping)
 
 
-def _prevalidate(repo: Path, comps: List[str], mapping: Dict[str, str], cd: Optional[Path] = None,
-                 runtime_only: bool = False) -> None:
+def _prevalidate(repo: Path, comps: List[str], mapping: Dict[str, str], cd: Optional[Path] = None) -> None:
     """Render everything once so unmapped placeholders or tokens abort before any write."""
     _fragment(repo, comps, mapping)
-    for rel, f in _plan_files(repo, comps, runtime_only):
+    for rel, f in _plan_files(repo, comps):
         if not f.is_symlink() and (rel == "jev/chain.json" or rel.endswith(".md")):
             _rendered(rel, f, comps, mapping, cd)
     tpl = repo / "claude" / "CLAUDE.md.template"
@@ -334,7 +327,7 @@ def _ruflo_fallback(err: "ruflo_helpers.PatchError", mapping: Dict[str, str], ye
 
 
 def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = False, dry: bool = False,
-            yes: bool = False, claude: bool = True) -> int:
+            yes: bool = False) -> int:
     repo, cd, home, ts = Path(repo), Path(cd), Path(home), _ts()
     if sys.prefix != sys.base_prefix:
         print("warning: installing with a virtual-environment Python (%s); hooks will break if that environment is "
@@ -343,11 +336,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
     rec = load_record(cd)
     comps_all = sorted(set(rec.get("components", [])) | set(comps))
     mapping = _mapping(comps_all, home, cd)
-    claude_copy = False
-    if not claude:
-        import migrate  # lazy: migrate imports this module
-        claude_copy = migrate.is_copy_install(cd)
-    _prevalidate(repo, comps, mapping, cd, runtime_only=not claude)  # unmapped placeholders abort here, before any write
+    _prevalidate(repo, comps, mapping, cd)  # unmapped placeholders abort here, before any write
     helpers = {}
     if "ruflo" in comps:
         if dry:
@@ -368,7 +357,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
         cd.mkdir(parents=True)
         rec["claude_dir_created"] = True
     try:
-        rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping, runtime_only=not claude)
+        rep = copy_files(repo, cd, comps, rec, force, ts, dry, mapping)
         for n, (data, mode) in helpers.items():
             _put(cd, "ruflo/helpers/" + n, rec, force, ts, rep, dry, data=data, mode=mode)
         tpl = repo / "claude" / "CLAUDE.md.template"
@@ -377,16 +366,12 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
                 print("would add: %s" % rel)
             for rel in rep["replace"]:
                 print("would replace: %s" % rel)
-            if claude and tpl.exists():
+            if tpl.exists():
                 print("would add or update the Dryas block in CLAUDE.md")
-        elif claude and tpl.exists():
+        elif tpl.exists():
             claude_md(cd, gate_blocks(tpl.read_text(encoding="utf-8"), comps_all), rec)
-        if not claude or apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes, comps_all=comps_all):
-            # a live Claude copy install still uses its agents/commands/skills: only drop what is no longer shipped
-            _remove_stale_files(repo, cd, comps_all, rec, dry, runtime_only=not claude and not claude_copy)
-            if claude_copy:
-                print("Claude Code still uses the copy install in %s; run with --harness claude or both to move it "
-                      "to the plugin" % cd)
+        if apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes, comps_all=comps_all):
+            _remove_stale_files(repo, cd, comps_all, rec, dry)
         if "ruflo" in comps:
             root = Path(mapping["DRYAS_DATA_ROOT"])
             if dry:
@@ -395,9 +380,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
                 root.mkdir(parents=True)
                 rec["data_root_created"] = True
                 rec["data_root"] = str(root)
-            if not claude and not dry:  # Codex's chain.json runs the helpers from the shared data root
-                ruflo_runtime.install(repo, root, helpers, mapping.get("RUFLO_CLI_DIST", ""))
-        if claude and "jev" in comps:
+        if "jev" in comps:
             claude_mcp.ensure_jev(cd, PYX, rec, run, capture, dry)
         for rel in rep["skipped"]:
             print("kept your file: %s (use --force to replace, original is backed up)" % rel)

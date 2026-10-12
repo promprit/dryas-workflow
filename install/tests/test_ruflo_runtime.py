@@ -92,7 +92,7 @@ class FragmentTest(unittest.TestCase):
 
 class CodexDataRootTest(unittest.TestCase):
     def test_custom_root_reaches_codex_server_env(self):
-        import codex_target, dryas_install
+        import codex_plugin_setup as cps, dryas_install
         home = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, str(home), True)
         old = os.environ.get("DRYAS_DATA_ROOT")
@@ -100,9 +100,10 @@ class CodexDataRootTest(unittest.TestCase):
         self.addCleanup(lambda: os.environ.__setitem__("DRYAS_DATA_ROOT", old) if old else os.environ.pop("DRYAS_DATA_ROOT", None))
         m = dryas_install._mapping(["core", "ruflo"], home, home / ".claude")
         env = dryas_install.ruflo_env(REPO, m)
-        srv = codex_target.servers(["ruflo"], m, env)["ruflo"]
-        self.assertEqual(srv[2]["DRYAS_DATA_ROOT"], m["DRYAS_DATA_ROOT"])
-        self.assertIn("custom", srv[2]["DRYAS_DATA_ROOT"])
+        block = cps.toml_block(["core", "jev", "ruflo"], "/p", m["DRYAS_DATA_ROOT"], env, "")  # the plugin's server
+        self.assertIn("DRYAS_DATA_ROOT = %s" % cps.ct._q(m["DRYAS_DATA_ROOT"]), block)
+        self.assertIn("custom", m["DRYAS_DATA_ROOT"])
+        self.assertIn(cps.ct._q(m["DRYAS_DATA_ROOT"] + "/ruflo/mcp-shim/bin/cli.js"), block)
         self.assertTrue(m["DATA_RULE"].startswith("//"))
 
     def test_default_root_rule(self):

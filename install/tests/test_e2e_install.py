@@ -1,10 +1,12 @@
 """End to end: real install into a temp home with a fake `claude`. Claude Code: the plugin is set up in the config
-dir and every plugin hook command runs through the shell Claude Code uses. Codex: the copy install, hooks, uninstall."""
+dir and every plugin hook command runs through the shell Claude Code uses. Codex (fake CLI): the plugin is set up in
+CODEX_HOME, its hooks are trusted and run through sh; a Codex copy install from before is migrated."""
 import json, os, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import fakecli
+import legacy_codex
 from test_hook_shell import find_bash
 REPO = HERE.parents[1]
 INSTALLED = {"version": 2, "plugins": {"dryas@dryas-workflow": [{"scope": "user", "installPath": str(REPO / "claude")}]}}
@@ -30,7 +32,7 @@ class E2ETest(unittest.TestCase):
         fb = self.tmp / "bin"
         fakecli.make(fb, "claude", self.tmp / "calls.jsonl", outputs={"mcp list": "jev: ok\n"},
                      epilogue=EPILOGUE % (INSTALLED, str(self.tmp / "envs.jsonl")), plugin_list=True)
-        fakecli.make(fb, "codex", self.tmp / "calls.jsonl", outputs={"mcp list": "jev\n"})
+        fakecli.make_codex(fb, self.tmp / "codex-calls.jsonl")
         self.env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "DRYAS_DATA_ROOT", "CODEX_HOME",
                                                                    "CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "DRYAS_PY")}
         self.env["CODEX_HOME"] = str(self.home / ".codex")
@@ -85,27 +87,57 @@ class E2ETest(unittest.TestCase):
         self.assertFalse((cd / ".dryas-plugin.json").exists())
         self.assertFalse((cd / "settings.json").exists())
 
+    def codex_hooks_run(self, cdx):
+        rec = json.loads((cdx / ".dryas-codex-plugin.json").read_text(encoding="utf-8"))
+        root = rec["plugin_root"]
+        hooks = json.loads((Path(root) / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        cmds = [(ev, h["command"]) for ev, groups in hooks.items() for g in groups for h in g["hooks"]]
+        self.assertEqual(sorted(ev for ev, _ in cmds), ["PreToolUse", "SessionStart", "UserPromptSubmit"])
+        sh = find_bash()
+        if not sh:
+            self.skipTest("no sh / Git Bash to run the plugin hooks")
+        patch = "*** Begin Patch\n*** Add File: notes.txt\n+x\n*** End Patch\n"
+        env = dict(self.env, PLUGIN_ROOT=root.replace("\\", "/"))
+        for ev, cmd in cmds:
+            event = {"hook_event_name": ev, "tool_name": "apply_patch", "tool_input": {"command": patch},
+                     "cwd": str(self.tmp), "session_id": "e2e", "source": "startup", "prompt": ""}
+            r = subprocess.run([sh, "-c", cmd], input=json.dumps(event).encode("utf-8"), capture_output=True, env=env,
+                               timeout=120)
+            self.assertEqual(r.returncode, 0, "%s: %s" % (cmd, r.stderr.decode("utf-8", "replace")))
+            out = r.stdout.decode("utf-8", "replace").strip()
+            if out:
+                json.loads(out)
+
     def test_both_harnesses_install_hooks_run_and_uninstall(self):
         p = self.installer("--harness", "both")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         cdx = self.home / ".codex"
-        self.assertTrue((cdx / "AGENTS.md").exists())
-        self.assertTrue((self.home / ".agents" / "skills" / "orchestrate" / "SKILL.md").exists())
-        hooks = json.loads((cdx / "hooks.json").read_text(encoding="utf-8"))
-        cmds = [h["command"] for groups in hooks["hooks"].values() for g in groups for h in g["hooks"]]
-        self.assertTrue(cmds)
-        patch = "*** Begin Patch\n*** Add File: notes.txt\n+x\n*** End Patch\n"
-        event = {"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "tool_input": {"command": patch},
-                 "cwd": str(self.tmp), "session_id": "e2e"}
-        data = json.dumps(event).encode("utf-8")
-        for cmd in cmds:
-            r = subprocess.run(cmd, shell=True, input=data, capture_output=True, env=self.env, timeout=120)
-            self.assertEqual(r.returncode, 0, "%s: %s" % (cmd, r.stderr.decode("utf-8", "replace")))
-        u = self.installer("--harness", "codex", "--uninstall")  # the Claude side: test_plugin_uninstall
+        state = json.loads((cdx / "fake_codex.json").read_text(encoding="utf-8"))
+        self.assertIn("dryas@dryas-workflow", state["plugins"])
+        self.assertIn("PASS  Dryas hooks trusted", p.stdout)
+        self.assertIn("PASS  scope lock blocks an out-of-scope apply_patch", p.stdout)
+        self.assertFalse((cdx / "AGENTS.md").exists())  # rules come from the plugin's SessionStart hook now
+        self.assertFalse((self.home / ".agents" / "skills" / "orchestrate").exists())
+        self.codex_hooks_run(cdx)
+        u = self.installer("--harness", "codex", "--uninstall")  # plugin uninstall per CODEX_HOME: Task 7
         self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
         self.assertFalse((cdx / ".dryas-installed.json").exists())
         self.assertFalse((self.home / ".agents" / "skills" / "orchestrate").exists())
 
+    def test_codex_copy_install_migrated(self):
+        cdx = self.home / ".codex"
+        cd = legacy_codex.legacy(self.home, cdx)
+        p = self.installer("--harness", "codex")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertFalse((cdx / ".dryas-installed.json").exists())
+        self.assertEqual((cdx / "AGENTS.md").read_text(encoding="utf-8"), "mine\n")
+        self.assertFalse((cdx / "hooks.json").exists())
+        self.assertFalse((self.home / ".agents").exists())
+        self.assertFalse((cd / ".dryas-installed.json").exists())
+        calls = fakecli.calls(self.tmp / "codex-calls.jsonl")
+        self.assertIn(["codex", "mcp", "remove", "jev"], calls)
+        self.assertIn("PASS  no legacy Codex copy install", p.stdout)
+        self.codex_hooks_run(cdx)
 
 if __name__ == "__main__":
     unittest.main()

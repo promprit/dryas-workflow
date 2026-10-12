@@ -2,8 +2,9 @@
 # Dryas Workflow installer for macOS, Linux and WSL. Finds Python >= 3.9 and runs install/dryas_install.py.
 # Usage: install.sh [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks] [--yes] [--force] [--dry-run]
 #                   [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
-#                   [--claude-dir DIR] [--flowobserve|--no-flowobserve] [--openrouter-key KEY]   See docs/install.md.
+#                   [--claude-dir DIR] [--codex-dir DIR] [--flowobserve|--no-flowobserve] [--openrouter-key KEY]   See docs/install.md.
 # Claude Code: run once per config dir (--claude-dir; default $CLAUDE_CONFIG_DIR, else ~/.claude).
+# Codex: run once per CODEX_HOME (--codex-dir; default $CODEX_HOME, else ~/.codex).
 # Jev reads $OPENROUTER_API_KEY from the shell; --openrouter-key also stores a key as the plugin option.
 # DRYAS_PYTHON overrides the interpreter.
 set -eu

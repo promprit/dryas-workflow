@@ -125,19 +125,29 @@ def _mark_merged(root: Path, cd: Path) -> None:
     p.write_text(json.dumps({"merged": done}, indent=2) + "\n", encoding="utf-8")
 
 
-def migrate(cd: Path, root: Path) -> int:
-    """Steps 1-3: move state, carry stage settings into chain.local.json, uninstall the copy. Setup (step 4) is the caller's.
-    Everything that can stop the old uninstall is checked first; a re-run after a failed uninstall does not merge twice."""
-    cd, root = Path(os.path.abspath(str(cd))), Path(root)
-    if not is_copy_install(cd):
-        return 0
+def check(cd: Path) -> str:
+    """Why the copy in cd cannot be uninstalled safely ("" = it can): checked before anything is moved."""
     try:
-        di.load_record(cd)
-        sm.load_settings(cd / "settings.json")
+        if not isinstance(di.load_record(Path(cd)), dict):
+            raise ValueError("%s is not a JSON object" % (Path(cd) / di.RECORD))
+        sm.load_settings(Path(cd) / "settings.json")
     except (OSError, ValueError, SystemExit) as e:
-        print("error: cannot migrate the copy install in %s: %s. Nothing was copied." % (cd, e))
+        return str(e)
+    return ""
+
+
+def migrate(cd: Path, root: Path, runtime_copy: bool = False) -> int:
+    """Steps 1-3: move state, carry stage settings into chain.local.json, uninstall the copy. Setup (step 4) is the caller's.
+    Everything that can stop the old uninstall is checked first; a re-run after a failed uninstall does not merge twice.
+    runtime_copy: cd holds the Codex-only runtime copy (a record, not a Claude copy install); same steps."""
+    cd, root = Path(os.path.abspath(str(cd))), Path(root)
+    if not (is_copy_install(cd) or (runtime_copy and (cd / di.RECORD).exists())):
+        return 0
+    err = check(cd)
+    if err:
+        print("error: cannot migrate the copy install in %s: %s. Nothing was copied." % (cd, err))
         return 1
-    print("Migrating the copy install in %s to the plugin" % cd)
+    print("Migrating the %s in %s to the plugin" % ("Codex runtime copy" if runtime_copy else "copy install", cd))
     if any(pu.same_path(d, str(cd)) for d in _merged(root)):
         print("  state from %s was already moved to %s" % (cd, root))
     else:

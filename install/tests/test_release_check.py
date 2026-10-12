@@ -1,5 +1,5 @@
 """release_check.py against the plugin in this repo (a config dir whose installed_plugins.json points at <repo>/claude)
-and a real Codex install into a temp home, with fake `claude` and `codex`."""
+and a hand-built Codex copy install in a temp home, with fake `claude` and `codex`."""
 import contextlib, io, json, os, shutil, subprocess, sys, tempfile, unittest
 from unittest import mock
 from pathlib import Path
@@ -26,12 +26,26 @@ class ReleaseCheckTest(unittest.TestCase):
                         CODEX_HOME=str(self.home / ".codex"), DRYAS_DATA_ROOT=str(self.tmp / "data"),
                         JEV_LOG_DIR=str(self.tmp / "logs"), JEV_HANDOFF_DIR=str(self.tmp / "handoff"),
                         JEV_COMPACT_DIR=str(self.tmp / "compact"))
-        p = subprocess.run([sys.executable, str(REPO / "install" / "dryas_install.py"), "run", "--repo", str(REPO), "--yes",
-                            "--no-ruflo", "--no-superpowers", "--no-design", "--harness", "codex"],
-                           capture_output=True, text=True, env=self.env, timeout=900)
-        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.codex_copy_install(self.home / ".codex")
         self.cd = self.tmp / "claude-a"
         self.plugin(self.cd, REPO / "claude")
+
+    def codex_copy_install(self, cdx):
+        """A Codex copy install as release_check reads it (install_codex is gone; Task 8 moves the check to the
+        plugin): hooks.json entries recorded in .dryas-installed.json, running this repo's chain.py."""
+        py, chain = sys.executable.replace("\\", "/"), (REPO / "claude" / "jev" / "chain.py").as_posix()
+        hooks = [["PreToolUse", "Bash|apply_patch|Edit|Write", '"%s" -X utf8 "%s" pretool --harness codex' % (py, chain)],
+                 ["UserPromptSubmit", None, '"%s" -X utf8 "%s" prompt --harness codex' % (py, chain)]]
+        cdx.mkdir(parents=True)
+        data = {"hooks": {}}
+        for ev, matcher, cmd in hooks:
+            g = {"hooks": [{"type": "command", "command": cmd, "timeout": 20}]}
+            if matcher:
+                g["matcher"] = matcher
+            data["hooks"][ev] = [g]
+        (cdx / "hooks.json").write_text(json.dumps(data), encoding="utf-8")
+        (cdx / ".dryas-installed.json").write_text(json.dumps({"components": ["core", "jev"], "skills": [],
+                                                               "hooks": {"hooks": hooks}, "mcp": {}}), encoding="utf-8")
 
     def plugin(self, cd, root):
         (cd / "plugins").mkdir(parents=True)

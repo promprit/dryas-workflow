@@ -6,8 +6,11 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 import fakecli
+import legacy_codex
 import codex_plugin_setup as cps
 import codex_appserver as ca
+import codex_target as ct
+import dryas_install as di
 
 REPO = HERE.parents[1]
 COMPS = ["core", "jev"]
@@ -386,8 +389,15 @@ class TrustTest(unittest.TestCase):
         other = dict(st["plugins"][cps.ID])
         st["plugins"]["other@x"] = other  # same hooks under another plugin id
         (e.a / "fake_codex.json").write_text(json.dumps(st), encoding="utf-8")
+        others = [h for h in ca.list_hooks(dict(os.environ, CODEX_HOME=str(e.a)), str(Path.home()))
+                  if h["pluginId"] == "other@x"]
+        self.assertEqual(len(others), len(self.hooks(e.a)))
+        self.assertEqual({h["trustStatus"] for h in others}, {"untrusted"})  # listed, and not trusted
         quiet(cps.setup, REPO, e.a, COMPS, yes=True)
         self.assertNotIn("other@x", e.toml(e.a))
+        others = [h for h in ca.list_hooks(dict(os.environ, CODEX_HOME=str(e.a)), str(Path.home()))
+                  if h["pluginId"] == "other@x"]
+        self.assertEqual({h["trustStatus"] for h in others}, {"untrusted"})
 
 
 class VerifyTest(unittest.TestCase):
@@ -424,12 +434,165 @@ class VerifyTest(unittest.TestCase):
         self.assertEqual(fails, 1, out)
         self.assertIn("FAIL  Dryas hooks trusted", out)
 
+    def test_missing_hook_event_fails(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        hp = Path(json.loads((e.a / cps.RECORD).read_text(encoding="utf-8"))["plugin_root"]) / "hooks" / "hooks.json"
+        data = json.loads(hp.read_text(encoding="utf-8"))
+        del data["hooks"]["SessionStart"]  # Codex now lists only the other two, both trusted
+        hp.write_text(json.dumps(data), encoding="utf-8")
+        fails, out = quiet(cps.verify, e.a, COMPS)
+        self.assertEqual(fails, 1, out)
+        self.assertIn("FAIL  Dryas hooks trusted", out)
+        self.assertIn("missing: sessionStart", out)
+
+    def test_expected_events_from_plugin_hooks(self):
+        self.assertEqual(cps.expected_hook_events(REPO), ["preToolUse", "sessionStart", "userPromptSubmit"])
+
     def test_jev_off_skips_mcp_line(self):
         e = Env(self)
         quiet(cps.setup, REPO, e.a, ["core"], yes=True)
         fails, out = quiet(cps.verify, e.a, ["core"])
         self.assertEqual(fails, 0, out)
         self.assertNotIn("Jev MCP", out)
+
+
+class MigrationTest(unittest.TestCase):
+    def legacy(self, e, cdx, claude_copy=False):
+        return legacy_codex.legacy(e.home, cdx, claude_copy)
+
+    def test_legacy_removed_and_runtime_copy_dropped(self):
+        e = Env(self)
+        cd = self.legacy(e, e.a)
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((e.a / ct.RECORD).exists())
+        self.assertEqual((e.a / "AGENTS.md").read_text(encoding="utf-8"), "mine\n")
+        self.assertFalse((ct.skills_dir(e.home) / "orchestrate").exists())
+        self.assertFalse((e.a / "hooks.json").exists())
+        self.assertIn(["codex", "mcp", "remove", "jev"], e.calls())
+        self.assertFalse((cd / di.RECORD).exists())
+        self.assertFalse((cd / "jev" / "chain.py").exists())
+        mcp_remove = e.calls().index(["codex", "mcp", "remove", "jev"])
+        self.assertLess(max(i for i, c in enumerate(e.calls()) if c[1:3] == ["plugin", "add"]), mcp_remove)
+        self.assertFalse((e.home / ".codex").exists())  # `codex mcp remove` ran with CODEX_HOME=<cdx>
+        self.assertIn(cps.ID, e.state(e.a)["plugins"])
+        fails, vout = quiet(cps.verify, e.a, COMPS)
+        self.assertEqual(fails, 0, vout)
+        self.assertIn("PASS  no legacy Codex copy install", vout)
+
+    def test_live_claude_copy_install_is_kept(self):
+        e = Env(self)
+        with mock.patch.object(cps.migrate, "is_copy_install", lambda cd: True):
+            cd = self.legacy(e, e.a, claude_copy=True)
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0)
+        self.assertTrue((cd / di.RECORD).exists())
+        self.assertIn("Claude Code still uses", out)
+
+    def test_runtime_copy_kept_while_another_codex_home_uses_it(self):
+        e = Env(self)
+        cd = self.legacy(e, e.a)
+        (e.home / ".codex").mkdir()
+        (e.home / ".codex" / ct.RECORD).write_text(json.dumps({"components": ["core"]}), encoding="utf-8")
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((e.a / ct.RECORD).exists())
+        self.assertTrue((cd / "jev" / "chain.py").exists())
+        self.assertIn("kept the Codex runtime copy in %s" % cd, out)
+
+    def test_legacy_components(self):
+        e = Env(self)
+        self.legacy(e, e.a)
+        self.assertEqual(cps.legacy_components(e.a), ["core", "jev"])
+        self.assertIsNone(cps.legacy_components(e.b))
+
+    def test_runtime_copy_state_moved_before_removal(self):
+        # an older runtime copy kept Jev state in ~/.claude/jev: it reaches the data root before the copy goes
+        e = Env(self)
+        cd = self.legacy(e, e.a)
+        (cd / "jev" / "logs").mkdir()
+        (cd / "jev" / "logs" / "jev.jsonl").write_text('{"a": 1}\n', encoding="utf-8")
+        shipped = json.loads((REPO / "claude" / "jev" / "thresholds.json").read_text(encoding="utf-8"))
+        sec = next(k for k, v in shipped.items() if isinstance(v, dict) and v)
+        key = next(iter(shipped[sec]))
+        tuned = dict(shipped, **{sec: dict(shipped[sec], **{key: "tuned"})})
+        (cd / "jev" / "thresholds.json").write_text(json.dumps(tuned), encoding="utf-8")
+        rec = json.loads((cd / di.RECORD).read_text(encoding="utf-8"))
+        rec["files"]["jev/thresholds.json"] = {}
+        (cd / di.RECORD).write_text(json.dumps(rec), encoding="utf-8")
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((cd / "jev" / "thresholds.json").exists())
+        self.assertEqual(json.loads((e.root / "jev" / "thresholds.json").read_text(encoding="utf-8")),
+                         {sec: {key: "tuned"}})
+        self.assertEqual((e.root / "jev" / "logs" / "jev.jsonl").read_text(encoding="utf-8"), '{"a": 1}\n')
+
+    def test_existing_data_root_state_kept(self):
+        e = Env(self)
+        self.legacy(e, e.a)
+        (e.root / "jev" / "logs").mkdir(parents=True)
+        (e.root / "jev" / "logs" / "jev.jsonl").write_text('{"keep": 1}\n', encoding="utf-8")
+        (e.root / "chain.local.json").write_text(json.dumps({"stages": {"pretool": {"mine": {"x": 1}}}}),
+                                                 encoding="utf-8")
+        self.assertEqual(quiet(cps.setup, REPO, e.a, COMPS, yes=True)[0], 0)
+        self.assertEqual((e.root / "jev" / "logs" / "jev.jsonl").read_text(encoding="utf-8"), '{"keep": 1}\n')
+        loc = json.loads((e.root / "chain.local.json").read_text(encoding="utf-8"))
+        self.assertEqual(loc["stages"]["pretool"]["mine"], {"x": 1})
+
+    def test_unreadable_legacy_stops_before_any_change(self):
+        for where in ("codex", "hooks", "claude"):
+            e = Env(self)
+            cd = self.legacy(e, e.a)
+            bad = {"codex": e.a / ct.RECORD, "hooks": e.a / "hooks.json", "claude": cd / di.RECORD}[where]
+            bad.write_text("[]" if where != "hooks" else "{broken", encoding="utf-8")
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+            self.assertEqual(rc, 1, where)
+            self.assertIn("nothing changed", out, where)
+            self.assertFalse([c for c in e.calls() if c[1:2] in (["plugin"], ["mcp"])], where)
+            self.assertEqual((e.a / "AGENTS.md").read_text(encoding="utf-8"), legacy_codex.AGENTS, where)
+            self.assertTrue((cd / "jev" / "chain.py").exists(), where)
+
+    def test_rerun_after_migration_is_a_no_op(self):
+        e = Env(self)
+        self.legacy(e, e.a)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        n = len(e.calls())
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0)
+        self.assertNotIn(["codex", "mcp", "remove", "jev"], e.calls()[n:])
+        self.assertNotIn("Removing the Codex copy install", out)
+
+    def test_resumes_after_a_failed_legacy_uninstall(self):
+        e = Env(self)
+        cd = self.legacy(e, e.a)
+        real = ct.uninstall_codex
+
+        def boom(*a, **k):
+            raise OSError("disk went away")
+        with mock.patch.object(ct, "uninstall_codex", boom):
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("disk went away", out)
+        self.assertNotIn(cps.TOML_START, e.toml(e.a))  # config block not written
+        self.assertFalse((e.root / "accounts.json").exists())
+        self.assertTrue((cd / di.RECORD).exists())  # nothing after the failed step ran
+        with mock.patch.object(ct, "uninstall_codex", real):
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0, out)
+        self.assertFalse((e.a / ct.RECORD).exists())
+        self.assertFalse((cd / di.RECORD).exists())
+
+    def test_dry_run_reports_and_changes_nothing(self):
+        e = Env(self)
+        cd = self.legacy(e, e.a)
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True, dry=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("would remove the Codex copy install in", out)
+        self.assertIn("would remove the Codex runtime copy in", out)
+        self.assertTrue((e.a / ct.RECORD).exists())
+        self.assertTrue((cd / di.RECORD).exists())
+        self.assertNotIn(["codex", "mcp", "remove", "jev"], e.calls())
 
 
 if __name__ == "__main__":

@@ -50,16 +50,40 @@ class RunCmdTest(unittest.TestCase):
         self.assertIn("codex", run_cmd.preflight(["core"], "codex", Path("/x/.claude"))[0])
         self.assertNotIn("claude(", run_cmd.preflight(["core"], "codex", Path("/x/.claude"))[0])
 
-    def test_preflight_codex_hooks_space_refused_on_windows(self):
-        pu.which = lambda n: "/bin/" + n
-        pu.space_free = lambda p: None
+    def test_preflight_codex_python3(self):
+        pu.which = lambda n: "" if n == "python3" else "/bin/" + n
         orig = pu.IS_WINDOWS
-        pu.IS_WINDOWS = True
+        pu.IS_WINDOWS = False
         try:
-            probs = run_cmd.preflight(["core"], "codex", Path("/x/Ana Silva/.claude"))
+            probs = run_cmd.preflight(["core"], "codex", Path("/x/.claude"))
         finally:
             pu.IS_WINDOWS = orig
-        self.assertTrue(any("--harness claude" in p for p in probs), probs)
+        self.assertTrue(any("python3" in p for p in probs), probs)
+
+    def test_preflight_codex_version(self):
+        from unittest import mock
+        pu.which = lambda n: "/bin/" + n
+        pu.space_free = lambda p: str(p)
+        with mock.patch.object(run_cmd, "codex_version", lambda: (0, 150, 0)):
+            probs = run_cmd.preflight(["core"], "codex", Path("/x/.claude"))
+            self.assertTrue(any("0.162.1" in p and "0.150.0" in p for p in probs), probs)
+            self.assertEqual(run_cmd.preflight(["core"], "claude", Path("/x/.claude")), [])
+        with mock.patch.object(run_cmd, "codex_version", lambda: None):
+            self.assertTrue(run_cmd.preflight(["core"], "both", Path("/x/.claude")))
+        with mock.patch.object(run_cmd, "codex_version", lambda: (0, 162, 1)):
+            self.assertEqual(run_cmd.preflight(["core", "ruflo"], "codex", Path("/x/.claude")), [])
+
+    def test_preflight_codex_ruflo_needs_node_npm(self):
+        from unittest import mock
+        pu.which = lambda n: "" if n in ("node", "npm") else "/bin/" + n
+        with mock.patch.object(run_cmd, "codex_version", lambda: (0, 162, 1)):
+            probs = run_cmd.preflight(["core", "ruflo"], "codex", Path("/x/.claude"))
+            self.assertIn("node npm", probs[0])
+            self.assertEqual(run_cmd.preflight(["core"], "codex", Path("/x/.claude")), [])
+
+    def test_codex_dir_parsed(self):
+        self.assertEqual(run_cmd.parse(["--codex-dir", "/c"]).codex_dir, "/c")
+        self.assertIsNone(run_cmd.parse([]).codex_dir)
 
     def test_codex_only_note(self):
         import io
@@ -83,6 +107,7 @@ class MainStubs(object):
 
     def __init__(self, tc):
         from unittest import mock
+        import codex_plugin_setup as cps
         import codex_target as ct
         import dryas_install as di
         import migrate
@@ -94,11 +119,13 @@ class MainStubs(object):
             return lambda *a, **k: self.log.append((name, a, k)) or rc
         self.tmp = Path(tempfile.mkdtemp())
         tc.addCleanup(shutil.rmtree, str(self.tmp), True)
-        patches = [mock.patch.object(di, "install", rec("di.install")), mock.patch.object(di, "uninstall", rec("di.uninstall")),
-                   mock.patch.object(di, "mapping_for", lambda *a, **k: {}), mock.patch.object(di, "confirm", lambda *a: False),
-                   mock.patch.object(ct, "install_codex", rec("ct.install_codex")),
+        patches = [mock.patch.object(di, "uninstall", rec("di.uninstall")),
+                   mock.patch.object(di, "confirm", lambda *a: False),
+                   mock.patch.object(cps, "setup", rec("cps.setup")), mock.patch.object(cps, "verify", rec("cps.verify")),
+                   mock.patch.object(cps, "uninstall", rec("cps.uninstall"), create=True),
+                   mock.patch.object(cps, "codex_home", lambda arg: Path(arg) if arg else self.tmp / ".codex"),
+                   mock.patch.object(run_cmd, "codex_version", lambda: cps.MIN_CODEX),
                    mock.patch.object(ct, "uninstall_codex", rec("ct.uninstall_codex")),
-                   mock.patch.object(ct, "verify_codex", rec("ct.verify_codex")),
                    mock.patch.object(ct, "codex_dir", lambda: self.tmp / ".codex"),
                    mock.patch.object(migrate, "migrate", rec("migrate")),
                    mock.patch.object(migrate, "is_copy_install", lambda cd: self.copy),
@@ -177,29 +204,6 @@ class MainTest(unittest.TestCase):
         (st.tmp / ".codex").mkdir()
         (st.tmp / ".codex" / ".dryas-installed.json").write_text(json.dumps({"components": comps}))
 
-    def test_claude_only_migration_keeps_existing_codex(self):
-        st = MainStubs(self)
-        st.copy = True
-        self._codex_record(st, ["core", "jev"])
-        self.assertEqual(self.main("--no-ruflo"), 0)
-        self.assertEqual(st.steps(), ["migrate", "ps.setup", "di.install", "ct.install_codex", "ps.verify",
-                                      "ct.verify_codex"])
-        self.assertEqual(st.call("ct.verify_codex")[0][2], ["core", "jev"])
-        a, k = st.call("di.install")
-        self.assertEqual((a[1], a[2], k["claude"]), (st.tmp / ".claude", ["core", "jev"], False))
-        self.assertIn("Codex keeps working", self.out)
-
-    def test_kept_codex_ruflo_is_preflighted(self):
-        st = MainStubs(self)
-        st.copy = True
-        self._codex_record(st, ["core", "ruflo"])
-        from unittest import mock
-        seen = []
-        with mock.patch.object(run_cmd, "preflight", lambda *a: seen.append(a) or ["stop"]):
-            self.assertEqual(self.main("--no-ruflo"), 1)
-        self.assertIn("ruflo", seen[0][0])
-        self.assertIn(st.tmp / ".claude", seen[0][3])
-
     def test_unreadable_record_stops(self):
         st = MainStubs(self)
         (st.tmp / ".claude").mkdir()
@@ -222,52 +226,6 @@ class MainTest(unittest.TestCase):
         self.main("--no-ruflo")
         self.assertEqual(st.call("ps.setup")[1]["key"], "")
 
-    def test_kept_codex_preflight_checks_codex(self):
-        st = MainStubs(self)
-        st.copy = True
-        self._codex_record(st, ["core", "jev"])
-        from unittest import mock
-        seen = []
-        with mock.patch.object(run_cmd, "preflight", lambda *a: seen.append(a) or ["stop"]):
-            self.assertEqual(self.main("--no-ruflo"), 1)
-        self.assertEqual(seen[0][1], "both")
-
-    def test_claude_only_other_dir_leaves_codex_alone(self):
-        st = MainStubs(self)
-        st.copy = True
-        self._codex_record(st, ["core", "jev"])
-        self.main("--no-ruflo", "--claude-dir", str(st.tmp / "acct"))
-        self.assertNotIn("di.install", st.steps())
-
-    def test_setup_failure_after_migration_still_installs_codex(self):
-        st = MainStubs(self)
-        st.copy = True
-        import plugin_setup as ps
-        from unittest import mock
-        with mock.patch.object(ps, "setup", lambda *a, **k: 3):
-            self.assertEqual(self.main("--no-ruflo", "--harness", "both"), 3)
-        self.assertEqual(st.steps(), ["migrate", "di.install", "ct.install_codex"])
-        self.assertIn("Your copy install was migrated", self.out)
-        self.assertIn("plugin setup failed", self.out)
-
-    def test_codex_ruflo_paths_include_copy_dir(self):
-        st = MainStubs(self)
-        from unittest import mock
-        seen = []
-        with mock.patch.object(run_cmd, "preflight", lambda *a: seen.append(a) or []):
-            self.main("--harness", "both", "--no-ruflo")
-        self.assertEqual(seen[0][2], st.tmp / ".claude")
-        self.assertIn(st.tmp / ".claude", seen[0][3])
-        self.assertIn(REPO_ROOT / "claude", seen[0][3])
-
-    def test_codex_keeps_runtime_copy_in_home_claude(self):
-        st = MainStubs(self)
-        self.assertEqual(self.main("--harness", "codex", "--no-ruflo", "--claude-dir", str(st.tmp / "acct")), 0)
-        self.assertEqual(st.steps(), ["di.install", "ct.install_codex", "ct.verify_codex"])
-        a, k = st.call("di.install")
-        self.assertEqual(a[1], st.tmp / ".claude")
-        self.assertIs(k["claude"], False)
-
     def test_claude_uninstall_touches_only_that_dir(self):
         st = MainStubs(self)
         cd = st.tmp / "acct"
@@ -283,11 +241,79 @@ class MainTest(unittest.TestCase):
 
     def test_setup_failure_stops(self):
         st = MainStubs(self)
+        st.copy = True
         import plugin_setup as ps
         from unittest import mock
         with mock.patch.object(ps, "setup", lambda *a, **k: 3):
             self.assertEqual(self.main("--no-ruflo", "--harness", "both"), 3)
-        self.assertNotIn("di.install", st.steps())
+        self.assertEqual(st.steps(), ["cps.setup", "migrate"])  # no verify; Codex no longer needs ~/.claude
+        self.assertIn("Your copy install was migrated", self.out)
+        self.assertIn("plugin setup failed", self.out)
+
+    def test_codex_harness_is_the_plugin(self):
+        st = MainStubs(self)
+        self.assertEqual(self.main("--harness", "codex", "--no-ruflo"), 0)
+        self.assertEqual(st.steps(), ["cps.setup", "cps.verify"])
+        a, k = st.call("cps.setup")
+        self.assertEqual(a[1], st.tmp / ".codex")
+
+    def test_codex_dir_flag(self):
+        st = MainStubs(self)
+        self.main("--harness", "codex", "--codex-dir", str(st.tmp / "cx2"))
+        self.assertEqual(st.call("cps.setup")[0][1], st.tmp / "cx2")
+        self.assertEqual(st.call("cps.verify")[0][0], st.tmp / "cx2")
+
+    def test_both_runs_codex_first(self):
+        st = MainStubs(self)
+        st.copy = True
+        self.assertEqual(self.main("--harness", "both", "--no-ruflo"), 0)
+        self.assertEqual(st.steps(), ["cps.setup", "migrate", "ps.setup", "ps.verify", "cps.verify"])
+
+    def test_codex_dry_run(self):
+        st = MainStubs(self)
+        self.assertEqual(self.main("--harness", "codex", "--dry-run"), 0)
+        self.assertEqual(st.steps(), ["cps.setup"])
+        self.assertTrue(st.call("cps.setup")[1]["dry"])
+
+    def test_codex_failure_stops_before_claude(self):
+        st = MainStubs(self)
+        import codex_plugin_setup as cps
+        from unittest import mock
+        with mock.patch.object(cps, "setup", lambda *a, **k: 4):
+            self.assertEqual(self.main("--harness", "both"), 4)
+        self.assertNotIn("ps.setup", st.steps())
+        self.assertNotIn("migrate", st.steps())
+
+    def test_claude_only_with_legacy_codex_refuses(self):
+        st = MainStubs(self)
+        st.copy = True
+        self._codex_record(st, ["core", "jev"])
+        self.assertEqual(self.main("--claude-dir", str(st.tmp / ".claude")), 1)
+        self.assertEqual(st.steps(), [])
+        self.assertIn("--harness both", self.out)
+
+    def test_claude_only_other_dir_ignores_legacy_codex(self):
+        st = MainStubs(self)
+        st.copy = True
+        self._codex_record(st, ["core", "jev"])
+        self.assertEqual(self.main("--claude-dir", str(st.tmp / "acct")), 0)
+        self.assertEqual(st.steps(), ["migrate", "ps.setup", "ps.verify"])
+
+    def test_legacy_components_used_without_flags(self):
+        st = MainStubs(self)
+        self._codex_record(st, ["core", "jev"])
+        self.main("--harness", "codex")
+        self.assertEqual(st.call("cps.setup")[0][2], ["core", "jev"])
+        self.main("--harness", "codex", "--no-ruflo")
+        last = [a for n, a, k in st.log if n == "cps.setup"][-1]
+        self.assertNotIn("ruflo", last[2])
+        self.assertIn("pstack-picks", last[2])
+
+    def test_openrouter_key_ignored_for_codex(self):
+        st = MainStubs(self)
+        self.main("--harness", "codex", "--openrouter-key", "sk-x")
+        self.assertIn("--openrouter-key is not used for Codex", self.out)
+        self.assertNotIn("sk-x", json.dumps([list(map(str, a)) + [str(k)] for n, a, k in st.log]))
 
     def test_ruflo_space_checks_data_root_and_plugin(self):
         from unittest import mock
