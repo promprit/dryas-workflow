@@ -147,7 +147,18 @@ class MainTest(unittest.TestCase):
         a, k = st.call("ps.setup")
         self.assertEqual(a[1], (st.tmp / ".claude").resolve())
         self.assertEqual(k["key"], "sk-flag")
-        self.assertFalse(k["flowobserve"])
+        self.assertIsNone(k["flowobserve"])
+
+    def test_no_flowobserve_flag(self):
+        st = MainStubs(self)
+        self.main("--no-ruflo", "--no-flowobserve")
+        a, k = st.call("ps.setup")
+        self.assertIs(k["flowobserve"], False)
+
+    def test_flowobserve_flags_exclusive(self):
+        MainStubs(self)
+        with self.assertRaises(SystemExit):
+            run_cmd.parse(["--flowobserve", "--no-flowobserve"])
 
     def test_no_copy_install_no_migration(self):
         st = MainStubs(self)

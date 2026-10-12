@@ -384,18 +384,35 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(loc["stages"]["pretool"]["jev-gate"], {"enabled": False})
         self.assertEqual(loc["stages"]["prompt"]["jev-route"], {"enabled": False})
 
-    def test_chain_local_flowobserve_kept_unless_flag(self):
-        """A migrated flowobserve setting survives setup; --flowobserve turns it on; no entry -> written off."""
+    def _fo(self, t):
+        st = json.loads((t / "chain.local.json").read_text())["stages"]
+        return [st[e]["flowobserve"]["enabled"] for e in ("pretool", "prompt") if "flowobserve" in st.get(e, {})]
+
+    def test_chain_local_flowobserve_tristate(self):
+        """None keeps a migrated setting (no entry -> off); True turns it on; False turns both stages off."""
         t = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, str(t), True)
-        ps.write_chain_local(t, ["core"], False, REPO)
-        self.assertIs(json.loads((t / "chain.local.json").read_text())["stages"]["pretool"]["flowobserve"]["enabled"], False)
+        ps.write_chain_local(t, ["core"], None, REPO)
+        self.assertEqual(self._fo(t), [False, False])
         (t / "chain.local.json").write_text(json.dumps({"stages": {"pretool": {"flowobserve": {"enabled": True}}}}))
-        ps.write_chain_local(t, ["core"], False, REPO)
-        self.assertIs(json.loads((t / "chain.local.json").read_text())["stages"]["pretool"]["flowobserve"]["enabled"], True)
+        ps.write_chain_local(t, ["core"], None, REPO)
+        self.assertIs(self._fo(t)[0], True)
         (t / "chain.local.json").write_text(json.dumps({"stages": {"pretool": {"flowobserve": {"enabled": False}}}}))
         ps.write_chain_local(t, ["core"], True, REPO)
-        self.assertIs(json.loads((t / "chain.local.json").read_text())["stages"]["pretool"]["flowobserve"]["enabled"], True)
+        self.assertEqual(self._fo(t), [True, True])
+        ps.write_chain_local(t, ["core"], None, REPO)
+        self.assertEqual(self._fo(t), [True, True])
+        ps.write_chain_local(t, ["core"], False, REPO)
+        self.assertEqual(self._fo(t), [False, False])
+
+    def test_setup_flowobserve_off_overrides_on(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=True)
+        self.assertEqual(self._fo(e.root), [True, True])
+        ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="")
+        self.assertEqual(self._fo(e.root), [True, True])
+        ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=False)
+        self.assertEqual(self._fo(e.root), [False, False])
 
     def test_missing_workflow_doc_warns(self):
         t = Path(tempfile.mkdtemp())

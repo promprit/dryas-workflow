@@ -103,7 +103,7 @@ def _save_json(p: Path, v) -> None:
     p.write_text(json.dumps(v, indent=2) + "\n", encoding="utf-8")
 
 
-def write_chain_local(root: Path, comps: List[str], flowobserve: bool, repo: Optional[Path] = None,
+def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool], repo: Optional[Path] = None,
                       cd: Optional[Path] = None) -> None:
     """Unselected components: disabled stages and listed in "off". Core stages are never touched.
     Keeps the user's own stage entries; malformed shapes are replaced. Shared by all accounts and Codex:
@@ -126,8 +126,8 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: bool, repo: Opt
             ev = stages[event]
             if name in ev and not isinstance(ev[name], dict):
                 del ev[name]
-            if comp == "flowobserve":  # a migrated or user setting stands unless --flowobserve was given
-                if flowobserve or "enabled" not in ev.get(name, {}):
+            if comp == "flowobserve":  # None keeps a migrated or user setting; --flowobserve / --no-flowobserve set it
+                if flowobserve is not None or "enabled" not in ev.get(name, {}):
                     ev.setdefault(name, {})["enabled"] = bool(flowobserve)
             elif comp in comps:
                 if name in ev:
@@ -238,7 +238,7 @@ def _ruflo_files(repo: Path, root: Path, mapping: Dict[str, str], yes: bool) -> 
     return ruflo_runtime.install(repo, root, helpers, mapping.get("RUFLO_CLI_DIST", ""))
 
 
-def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: bool, dry: bool = False) -> int:
+def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: Optional[bool] = None, dry: bool = False) -> int:
     repo, cd, root = Path(repo).resolve(), norm(cd), data_root()
     try:
         sm.load_settings(cd / "settings.json")  # malformed settings.json stops here, before any command runs

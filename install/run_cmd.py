@@ -2,7 +2,7 @@
 
   dryas_install.py run [--repo PATH] [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
                        [--yes] [--force] [--dry-run] [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
-                       [--claude-dir DIR] [--flowobserve] [--openrouter-key KEY]
+                       [--claude-dir DIR] [--flowobserve|--no-flowobserve] [--openrouter-key KEY]
 
 Claude Code: the dryas plugin in one config dir (--claude-dir, else $CLAUDE_CONFIG_DIR, else ~/.claude); a copy
 install found there is migrated first. Codex: a runtime-only copy in ~/.claude plus ~/.codex.
@@ -34,8 +34,11 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--repo", default=str(HERE.parent))
     for c in OPTIONAL:
         ap.add_argument("--no-" + c, action="store_true")
-    for f in ("yes", "force", "dry-run", "uninstall", "preflight-only", "flowobserve", "purge"):
+    for f in ("yes", "force", "dry-run", "uninstall", "preflight-only", "purge"):
         ap.add_argument("--" + f, action="store_true")
+    fo = ap.add_mutually_exclusive_group()  # tri-state: None keeps the setting, True on, False off
+    fo.add_argument("--flowobserve", dest="flowobserve", action="store_const", const=True, default=None)
+    fo.add_argument("--no-flowobserve", dest="flowobserve", action="store_const", const=False)
     ap.add_argument("--harness", default="claude", choices=HARNESSES)
     ap.add_argument("--claude-dir", default=None)
     ap.add_argument("--openrouter-key", default="")  # explicit only: it reaches the `claude plugin install` argv

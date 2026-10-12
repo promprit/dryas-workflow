@@ -38,7 +38,7 @@ Component choices are shared: the `--no-` flags write `~/.dryas/chain.local.json
 
 ### FlowObserve
 
-`--flowobserve` turns on the FlowObserve stage of the Jev chain (it runs `~/.flowobserve/bin/fo_hook.py`, observe-only). Without the flag, a setting you already have is kept; new installs leave it off.
+`--flowobserve` turns on the FlowObserve stage of the Jev chain (it runs `~/.flowobserve/bin/fo_hook.py`, observe-only). `--no-flowobserve` turns both FlowObserve stages off (the two flags exclude each other). With neither flag, a setting you already have is kept; new installs leave it off. Codex does not read this setting.
 
 ### The OpenRouter key
 
@@ -109,6 +109,7 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 | `--harness claude\|codex\|both` | Choose what to install for. Claude Code is the default |
 | `--claude-dir DIR` | The Claude config dir to set up (default `$CLAUDE_CONFIG_DIR`, else `~/.claude`) |
 | `--flowobserve` | Turn on the FlowObserve stage |
+| `--no-flowobserve` | Turn the FlowObserve stage off (not with `--flowobserve`) |
 | `--openrouter-key KEY` | Also store the key as the plugin option (explicit only; see [the key](#the-openrouter-key)) |
 
 `--yes` does not skip the settings merge confirmation. The installer always asks before it edits a config dir's `settings.json`.
