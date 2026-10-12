@@ -77,7 +77,7 @@ install/install.sh --claude-dir ~/.claude-team  # once more for each other Claud
 .\install\install.ps1                            # Windows (PowerShell)
 ```
 
-For Claude Code, Dryas installs as a plugin (`dryas@dryas-workflow`) into one config dir per run; all accounts share one state folder, `~/.dryas`. Works on macOS, Linux, WSL and Windows, with Claude Code and Codex (`--harness codex|both`).
+For Claude Code, Dryas installs as a plugin (`dryas@dryas-workflow`) into one config dir per run; all accounts share one state folder, `~/.dryas`. `--uninstall` removes Dryas from one config dir and keeps `~/.dryas`; adding `--purge` on the last account also deletes the logs, `/tune` thresholds and handoffs there, but keeps your notes in `~/.dryas/docs/dryas-local.md`. Works on macOS, Linux, WSL and Windows, with Claude Code and Codex (`--harness codex|both`).
 
 Details, flags and troubleshooting: [docs/install.md](docs/install.md). Other agent harnesses: [docs/harnesses.md](docs/harnesses.md).
 

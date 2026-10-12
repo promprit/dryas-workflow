@@ -52,6 +52,9 @@ class MigrateTest(unittest.TestCase):
         rec.update(claude_md=False, settings={"env": {}, "allow": [], "deny": [], "hooks": [], "top": {}})
         (self.a / ".dryas-installed.json").write_text(json.dumps(rec))
         self.assertFalse(migrate.is_copy_install(self.a))
+        for bad in ("[]", '"x"', '{"settings": []}'):
+            (self.a / ".dryas-installed.json").write_text(bad)
+            self.assertFalse(migrate.is_copy_install(self.a), bad)
 
     def test_moves_state_and_keeps_only_real_overrides(self):
         old_install(self.a, '{"x":1}', 0.8, True)

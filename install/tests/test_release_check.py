@@ -1,6 +1,7 @@
 """release_check.py against the plugin in this repo (a config dir whose installed_plugins.json points at <repo>/claude)
 and a real Codex install into a temp home, with fake `claude` and `codex`."""
 import contextlib, io, json, os, shutil, subprocess, sys, tempfile, unittest
+from unittest import mock
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -19,8 +20,8 @@ class ReleaseCheckTest(unittest.TestCase):
         self.fb = fb
         fakecli.make(fb, "claude", self.tmp / "calls.jsonl", outputs={"mcp list": "jev: ok\n"})
         fakecli.make(fb, "codex", self.tmp / "calls.jsonl", outputs={"mcp list": "jev\n"})
-        self.env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "DRYAS_DATA_ROOT", "CODEX_HOME",
-                                                                   "CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "DRYAS_PY")}
+        self.env = {k: v for k, v in os.environ.items() if k not in release_check.KEY_VARS + (
+            "DRYAS_DATA_ROOT", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "DRYAS_PY", "JEV_CHAIN_LOCAL")}
         self.env.update(HOME=str(self.home), USERPROFILE=str(self.home), PATH=str(fb) + os.pathsep + os.environ["PATH"],
                         CODEX_HOME=str(self.home / ".codex"), DRYAS_DATA_ROOT=str(self.tmp / "data"),
                         JEV_LOG_DIR=str(self.tmp / "logs"), JEV_HANDOFF_DIR=str(self.tmp / "handoff"),
@@ -65,6 +66,25 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertIn("Manual checks (needs the app open):", out)
         self.assertIn("5. In each account's Claude Code, run /plugin", out)
         self.assertIn("6. Run /tune and /handoff once in each account", out)
+
+    def test_hooks_leave_no_state_behind(self):
+        def files():
+            return sorted(str(p) for d in ("logs", "data", "handoff", "compact") for p in (self.tmp / d).rglob("*"))
+        before = files()
+        rc, out = self.run_check()
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(files(), before)
+
+    def test_api_key_matches_jev_client(self):
+        sys.path.insert(0, str(REPO / "claude" / "jev"))
+        import jev_client
+        cases = [{}, {"OPENROUTER_API_KEY": "a"}, {"OPENROUTER_API_KEY": " ", "DRYAS_OPENROUTER_KEY": "d"},
+                 {"DRYAS_OPENROUTER_KEY": "${user_config.openrouter_key}", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY": "p"},
+                 {"CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY": "${x}"}, {"OPENROUTER_API_KEY": "a", "DRYAS_OPENROUTER_KEY": "d"},
+                 {"DRYAS_OPENROUTER_KEY": " d ", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY": "p"}]
+        for env in cases:
+            with mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(release_check.api_key(env), jev_client.api_key(), env)
 
     def test_missing_plugin_fails_per_dir(self):
         empty = self.tmp / "claude-b"

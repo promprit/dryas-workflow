@@ -139,7 +139,7 @@ class MainTest(unittest.TestCase):
         self.assertEqual([Path(x) for x in a], [cd.resolve(), st.tmp / "data"])
         a, k = st.call("ps.setup")
         self.assertEqual(a[1], cd.resolve())
-        self.assertEqual(k, {"yes": True, "key": "sk-env", "flowobserve": True, "dry": False})
+        self.assertEqual(k, {"yes": True, "key": "", "flowobserve": True, "dry": False})
 
     def test_key_flag_and_default_dir(self):
         st = MainStubs(self)
@@ -196,6 +196,30 @@ class MainTest(unittest.TestCase):
         self.assertEqual(self.main("--no-ruflo"), 1)
         self.assertEqual(st.steps(), [])
         self.assertIn("cannot be read", self.out)
+
+    def test_non_dict_record_stops(self):
+        for bad in ("[]", '"x"'):
+            st = MainStubs(self)
+            (st.tmp / ".claude").mkdir()
+            (st.tmp / ".claude" / ".dryas-installed.json").write_text(bad)
+            self.assertEqual(self.main("--no-ruflo"), 1, bad)
+            self.assertEqual(st.steps(), [])
+            self.assertIn("cannot be read", self.out)
+
+    def test_key_not_taken_from_env(self):
+        st = MainStubs(self)  # OPENROUTER_API_KEY=sk-env is set: it must not reach the plugin install argv
+        self.main("--no-ruflo")
+        self.assertEqual(st.call("ps.setup")[1]["key"], "")
+
+    def test_kept_codex_preflight_checks_codex(self):
+        st = MainStubs(self)
+        st.copy = True
+        self._codex_record(st, ["core", "jev"])
+        from unittest import mock
+        seen = []
+        with mock.patch.object(run_cmd, "preflight", lambda *a: seen.append(a) or ["stop"]):
+            self.assertEqual(self.main("--no-ruflo"), 1)
+        self.assertEqual(seen[0][1], "both")
 
     def test_claude_only_other_dir_leaves_codex_alone(self):
         st = MainStubs(self)

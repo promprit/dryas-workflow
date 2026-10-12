@@ -3,7 +3,7 @@
 #        [--dry-run] [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
 #        [--claude-dir DIR] [--flowobserve] [--openrouter-key KEY]   See docs\install.md.
 # Claude Code: run once per config dir (--claude-dir; default $env:CLAUDE_CONFIG_DIR, else ~\.claude).
-# The OpenRouter key defaults to $env:OPENROUTER_API_KEY.
+# Jev reads $env:OPENROUTER_API_KEY from the shell; --openrouter-key also stores a key as the plugin option.
 # DRYAS_PYTHON overrides the interpreter.
 $ErrorActionPreference = 'Continue'
 $repo = Split-Path -Parent $PSScriptRoot

@@ -38,7 +38,7 @@ def parse(argv: List[str]) -> argparse.Namespace:
         ap.add_argument("--" + f, action="store_true")
     ap.add_argument("--harness", default="claude", choices=HARNESSES)
     ap.add_argument("--claude-dir", default=None)
-    ap.add_argument("--openrouter-key", default=os.environ.get("OPENROUTER_API_KEY", ""))
+    ap.add_argument("--openrouter-key", default="")  # explicit only: it reaches the `claude plugin install` argv
     return ap.parse_args(argv)
 
 
@@ -164,7 +164,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return rc or (ps.uninstall(cd, a.purge) if want_claude else 0)
     if want_claude and (cd / di.RECORD).exists():
         try:
-            di.load_record(cd)
+            if not isinstance(di.load_record(cd), dict):
+                raise ValueError("not a JSON object")
         except (OSError, ValueError) as e:
             print("error: %s cannot be read (%s); fix or remove it and re-run (nothing changed)" % (cd / di.RECORD, e))
             return 1
@@ -175,7 +176,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         keep_codex = _codex_record_comps(ct.codex_dir())
     ruflo_paths = ([repo / "claude", cd] if want_claude else []) + \
         ([copy_cd] if want_codex or keep_codex is not None else [])
-    probs = preflight(sorted(set(comps) | set(keep_codex or [])), a.harness, copy_cd, ruflo_paths)
+    # a kept Codex is reinstalled too: run its checks (codex CLI, Windows path spaces)
+    probs = preflight(sorted(set(comps) | set(keep_codex or [])), "both" if keep_codex is not None else a.harness,
+                      copy_cd, ruflo_paths)
     if probs:
         print("\n".join(probs))
         return 1

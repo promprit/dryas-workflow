@@ -2,7 +2,8 @@
 """Post-install check for a real machine. Prints PASS/FAIL/SKIP per check; exit 1 if any FAIL.
 
 Claude Code: the dryas plugin per --claude-dir (repeatable, one per account). Codex: its copy install.
-Never writes to the Claude or Codex folders, only to temp dirs (hooks it runs may append to the Jev logs).
+Never writes to the Claude or Codex folders or to ~/.dryas: hooks run with their logs, state, data root and
+chain.local.json in a temp dir and without an OpenRouter key. Only the Jev route check calls OpenRouter (when a key is set).
 """
 import argparse
 import json
@@ -118,6 +119,17 @@ def check_hooks(rep, label, hooks, env):
         rep.say("WARN" if warn else ("PASS" if ok else "FAIL"), "%s hook %s" % (label, ev), why or cmd[:60])
 
 
+def sandbox(env, tmp):
+    """env for hook runs: no OpenRouter key; logs, handoffs, compaction notes, data root and chain.local.json in tmp."""
+    e = {k: v for k, v in env.items() if k not in KEY_VARS}
+    local = Path(tmp) / "chain.local.json"  # {}: optional local stages (FlowObserve) stay off
+    if not local.exists():
+        local.write_text("{}", encoding="utf-8")
+    e.update(JEV_LOG_DIR=str(Path(tmp) / "logs"), JEV_HANDOFF_DIR=str(Path(tmp) / "handoff"),
+             JEV_COMPACT_DIR=str(Path(tmp) / "compact"), JEV_CHAIN_LOCAL=str(local), DRYAS_DATA_ROOT=str(Path(tmp) / "data"))
+    return e
+
+
 def plugin_hooks(rep, root, cd, bash, env):
     """Run each hooks.json command of the installed plugin the way Claude Code does: bash -c with the plugin env."""
     try:
@@ -199,8 +211,7 @@ def scope_lock(rep, chain, harness, env):
         else:
             event = {"tool_name": "Write", "tool_input": {"file_path": "src/other.ts", "content": "x"}, "cwd": str(wt)}
             extra = []
-        e = {k: v for k, v in env.items() if k not in KEY_VARS}
-        e["JEV_LOG_DIR"] = str(wt / "logs")
+        e = sandbox(env, wt)
         r = subprocess.run([sys.executable, "-X", "utf8", str(chain), "pretool"] + extra, input=json.dumps(event),
                            capture_output=True, universal_newlines=True, encoding="utf-8", env=e, timeout=120)
         try:
@@ -217,7 +228,9 @@ def scope_lock(rep, chain, harness, env):
 def jev_route(rep, chain, env):
     if not api_key(env):
         return rep.say("SKIP", "Jev route", "no OpenRouter key in this shell (a plugin option key is seen only inside Claude Code: manual step 1)")
+    tmp = tempfile.mkdtemp()
     try:
+        env = dict(env, JEV_LOG_DIR=str(Path(tmp) / "logs"))  # the one networked check; its logs stay out of ~/.dryas
         r = subprocess.run([sys.executable, "-X", "utf8", str(chain), "prompt"],
                            input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "fix a typo in the readme",
                                              "cwd": tempfile.gettempdir(), "session_id": "release-check"}),
@@ -225,10 +238,13 @@ def jev_route(rep, chain, env):
         out = r.stdout
     except (OSError, subprocess.TimeoutExpired) as ex:
         out = ""
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
     rep.say("PASS" if "Jev " in out else "WARN", "Jev route", "" if "Jev " in out else "no 'Jev ' line in output")
 
 
-def ruflo(rep, cd, root_dir, env):
+def ruflo(rep, cd, root_dir, env, run_env):
+    """env names the real data root (checked, never written); the helper runs with run_env (temp data root)."""
     try:
         comps = json.loads((cd / RECORD).read_text(encoding="utf-8")).get("components", [])
     except (OSError, ValueError, AttributeError):
@@ -243,7 +259,7 @@ def ruflo(rep, cd, root_dir, env):
     rep.say("PASS" if hh.is_file() else "FAIL", "Ruflo helpers in data root", str(hh))
     try:
         r = subprocess.run([sys.executable, "-X", "utf8", str(run), "helper", "node", str(Path(tempfile.gettempdir()) / "dryas-nonexistent-xyz")],
-                           input="", capture_output=True, universal_newlines=True, encoding="utf-8", env=env, timeout=120)
+                           input="", capture_output=True, universal_newlines=True, encoding="utf-8", env=run_env, timeout=120)
         ok = r.returncode == 0 and not r.stdout.strip()
         why = "" if ok else "exit %s %s" % (r.returncode, r.stdout.strip()[:80])
     except (OSError, subprocess.TimeoutExpired) as ex:
@@ -270,6 +286,15 @@ def main(argv=None):
     rep.say("PASS" if api_key(env) else "SKIP", "OpenRouter key", "set" if api_key(env) else "not set in this shell")
     manifests(rep, shutil.which("claude"))
     bash = find_bash()
+    tmp = tempfile.mkdtemp(prefix="dryas-release-check-")
+    try:
+        return _checks(rep, cds, cdx, env, bash, tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _checks(rep, cds, cdx, env, bash, tmp):
+    hook_env = sandbox(env, tmp)
     for cd in cds:
         print()
         print("Claude Code: %s" % cd)
@@ -278,18 +303,18 @@ def main(argv=None):
             rep.say("FAIL", "dryas plugin installed", "no %s in %s" % (PLUGIN_ID, cd / "plugins" / "installed_plugins.json"))
             continue
         rep.say("PASS", "dryas plugin installed", root)
-        plugin_hooks(rep, root, cd, bash, env)
+        plugin_hooks(rep, root, cd, bash, hook_env)
         penv = dict(env, CLAUDE_PLUGIN_ROOT=fwd(root), DRYAS_PY=fwd(sys.executable), CLAUDE_CONFIG_DIR=str(cd))
         chain = Path(root) / "jev" / "chain.py"
         scope_lock(rep, chain, "claude", penv)
         jev_route(rep, chain, penv)
-        ruflo(rep, cd, root, penv)
+        ruflo(rep, cd, root, penv, dict(hook_env, CLAUDE_PLUGIN_ROOT=fwd(root)))
     print()
     crec = load(cdx)
     if crec is None:
         rep.say("SKIP", "Codex install", "no .dryas-installed.json in %s" % cdx)
     else:
-        check_hooks(rep, "Codex", codex_hooks(cdx, crec), env)
+        check_hooks(rep, "Codex", codex_hooks(cdx, crec), hook_env)
         scope_lock(rep, codex_chain(crec), "codex", env)
     print()
     print(MANUAL)

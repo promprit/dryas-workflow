@@ -272,8 +272,12 @@ def _within(a: Path, b: Path) -> bool:
 def _purge_refusal(root: Path, cd: Path) -> Optional[str]:
     if root.parent == root:
         return "a filesystem root"
-    for name, p in (("your home folder", Path.home()), ("the current folder", Path.cwd()), ("the config dir", cd)):
-        if _within(root, norm(p)):
+    try:
+        cwd = Path.cwd()
+    except OSError:  # the current folder was deleted
+        cwd = None
+    for name, p in (("your home folder", Path.home()), ("the current folder", cwd), ("the config dir", cd)):
+        if p is not None and _within(root, norm(p)):
             return "it contains " + name
     return None
 
@@ -292,17 +296,29 @@ def _rm_owned(p: Path) -> None:
         p.unlink()
     elif p.is_dir():
         link = p / "mcp-shim" / "dist"  # dir link (junction on Windows) to the Ruflo CLI: unlink it, never follow
-        if os.path.lexists(str(link)):
-            pu.remove_path(str(link))
+        if os.path.islink(str(link)) or pu.read_dir_link(str(link)) is not None:
+            pu.remove_path(str(link))  # a real dist directory is removed with the rest by rmtree
         shutil.rmtree(str(p), onerror=_rm_error)
     if not os.path.lexists(str(p)):
         print("removed %s" % p)
 
 
+KEEP = "docs/dryas-local.md"  # the user's own notes: --purge never deletes them
+
+
 def _purge(root: Path) -> None:
     for name in OWNED:
         p = root / name
-        if os.path.lexists(str(p)):
+        if name == "docs" and p.is_dir() and not p.is_symlink():
+            for child in sorted(p.iterdir()):
+                if child.name != Path(KEEP).name:
+                    _rm_owned(child)
+            try:
+                p.rmdir()
+                print("removed %s" % p)
+            except OSError:
+                print("kept %s (your notes)" % (root / KEEP))
+        elif os.path.lexists(str(p)):
             _rm_owned(p)
     try:
         root.rmdir()
@@ -333,7 +349,7 @@ def uninstall(cd: Path, purge: bool) -> int:
     rc = di.run(argv, env=child_env(cd))
     if rc != 0:  # settings cleanup still runs
         print("warning: `claude plugin uninstall` failed (exit %d); remove %s by hand with /plugin" % (rc, ID))
-    added = rec.get("settings")
+    added = rec.get("settings") if isinstance(rec, dict) else None
     if not isinstance(added, dict):
         print("warning: %s is unreadable or has no settings entry; %s left untouched and the record kept" % (rec_path, spath))
     else:
@@ -358,7 +374,9 @@ def uninstall(cd: Path, purge: bool) -> int:
         print("warning: %s is unreadable; left as it is" % acc_path)
     if purge:
         why = None
-        if left is None:
+        if not isinstance(added, dict):
+            why = "%s is unreadable, so this dir may still use it" % rec_path
+        elif left is None:
             why = "the list of accounts using it is missing or unreadable"
         elif left:
             why = "still used by " + ", ".join(left)

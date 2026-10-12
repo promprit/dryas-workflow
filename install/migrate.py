@@ -22,7 +22,10 @@ def is_copy_install(cd: Path) -> bool:
         rec = di.load_record(Path(cd))
     except (OSError, ValueError):
         return False
-    hooks = rec.get("settings", {}).get("hooks", [])
+    if not isinstance(rec, dict):
+        return False
+    st = rec.get("settings")
+    hooks = st.get("hooks", []) if isinstance(st, dict) else []
     return bool(rec.get("claude_md")) or "jev" in rec.get("mcp", []) or \
         any("/jev/chain.py" in str(h[-1]).replace("\\", "/") for h in hooks if h)
 

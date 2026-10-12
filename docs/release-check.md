@@ -1,6 +1,6 @@
 # Release check
 
-Run this after installing Dryas Workflow on a new machine (Windows, WSL, macOS or Linux). It checks that the plugin is installed in each Claude config dir, that its hooks run and that the scope lock blocks out-of-scope edits. It never changes your Claude or Codex folders; it writes to temporary folders, and the hooks it runs may append to the Jev logs in `~/.dryas`.
+Run this after installing Dryas Workflow on a new machine (Windows, WSL, macOS or Linux). It checks that the plugin is installed in each Claude config dir, that its hooks run and that the scope lock blocks out-of-scope edits. It never changes your Claude or Codex folders or `~/.dryas`: the hooks it runs get a temporary folder for their logs, handoffs, compaction notes, data root and `chain.local.json` (empty, so optional local stages such as FlowObserve stay off), and no OpenRouter key. Only the Jev route check calls OpenRouter, when a key is set, and its logs also go to a temporary folder.
 
 ## Run it
 
@@ -22,7 +22,7 @@ Then, for each `--claude-dir`, under a `Claude Code: <dir>` heading:
 - `plugin hooks run (<event>)`, one line each for PreToolUse, UserPromptSubmit, SessionStart and PreCompact: every command of that event in the installed plugin's `hooks/hooks.json` is run the way Claude Code runs it (`bash -c`, with `CLAUDE_PLUGIN_ROOT`, `DRYAS_PY` and `CLAUDE_CONFIG_DIR` set) with a sample event. It passes when each exits 0 and prints nothing or JSON. On Windows it needs Git Bash; without it the lines are SKIP.
 - `Scope lock (claude)`: in a temporary worktree whose plan allows only `src/feature/**`, a write to `src/other.ts` must be denied by the plugin's `jev/chain.py`.
 - `Jev route`: with an OpenRouter key in this shell (`OPENROUTER_API_KEY`, `DRYAS_OPENROUTER_KEY` or `CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY`), a sample prompt must produce a `Jev ` line. Skipped without one. A key stored only as the plugin option is visible only inside Claude Code; manual step 1 covers it.
-- Ruflo (when setup installed it for that dir): the data folder (`DRYAS_DATA_ROOT` or `~/.dryas`) exists and is writable, `ruflo/helpers/hook-handler.cjs` is in it, and the plugin's Ruflo helper runner exits quietly. Skipped otherwise.
+- Ruflo (when setup installed it for that dir): the data folder (`DRYAS_DATA_ROOT` or `~/.dryas`) exists and is writable, `ruflo/helpers/hook-handler.cjs` is in it, and the plugin's Ruflo helper runner exits quietly (run against a temporary data folder). Skipped otherwise.
 
 Codex, last:
 

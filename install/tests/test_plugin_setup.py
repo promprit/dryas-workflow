@@ -368,6 +368,42 @@ class UninstallTest(unittest.TestCase):
         for n in ps.OWNED:
             self.assertFalse((e.root / n).exists(), n)
 
+    def test_purge_keeps_local_notes(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        (e.root / "docs" / "dryas-local.md").write_text("mine", encoding="utf-8")
+        (e.root / "jev" / "logs").mkdir(parents=True, exist_ok=True)
+        (e.root / "jev" / "logs" / "calls.jsonl").write_text("{}\n")
+        (e.root / "jev" / "thresholds.json").write_text("{}")
+        ps.uninstall(e.a, purge=True)
+        self.assertEqual((e.root / "docs" / "dryas-local.md").read_text(encoding="utf-8"), "mine")
+        self.assertFalse((e.root / "docs" / "dryas-workflow.md").exists())
+        self.assertFalse((e.root / "jev").exists())  # logs and /tune thresholds go with --purge
+        self.assertFalse((e.root / "chain.local.json").exists())
+
+    def test_purge_removes_real_dist_dir(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        d = e.root / "ruflo" / "mcp-shim" / "dist"
+        d.mkdir(parents=True)
+        (d / "x.js").write_text("x")
+        self.assertEqual(ps.uninstall(e.a, purge=True), 0)
+        self.assertFalse((e.root / "ruflo").exists())
+
+    def test_purge_skipped_when_record_corrupt(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        (e.a / ps.RECORD).write_text("[1]")
+        with mock.patch("sys.stdout", new_callable=__import__("io").StringIO) as out:
+            self.assertEqual(ps.uninstall(e.a, purge=True), 0)
+        self.assertTrue((e.root / "chain.local.json").exists())
+        self.assertIn("unreadable", out.getvalue())
+
+    def test_purge_refusal_without_cwd(self):
+        e = Env(self)
+        with mock.patch.object(ps.Path, "cwd", side_effect=FileNotFoundError):
+            self.assertIsNone(ps._purge_refusal(e.root, e.a))
+
     def test_purge_refused_when_accounts_missing_or_corrupt(self):
         for corrupt in (False, True):
             e = Env(self)

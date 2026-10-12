@@ -1,6 +1,7 @@
 # install/tests/test_ruflo_runtime.py
 import json, os, shutil, sys, tempfile, unittest
 from pathlib import Path
+from unittest import mock
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import ruflo_runtime
@@ -53,6 +54,7 @@ class RufloRuntimeTest(unittest.TestCase):
         (d / "x").write_text("keep")
         ruflo_runtime.install(REPO, self.root, self.helpers, str(self.dist))
         self.assertEqual((d / "x").read_text(), "keep")
+        self.assertFalse(os.path.islink(str(d)))
 
     @unittest.skipIf(os.name == "nt", "exec bit")
     def test_exec_bit_repaired(self):
@@ -107,8 +109,9 @@ class CodexDataRootTest(unittest.TestCase):
         import dryas_install
         home = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, str(home), True)
-        os.environ.pop("DRYAS_DATA_ROOT", None)
-        self.assertEqual(dryas_install._mapping(["core"], home, home / ".claude")["DATA_RULE"], "~/.dryas")
+        env = {k: v for k, v in os.environ.items() if k != "DRYAS_DATA_ROOT"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(dryas_install._mapping(["core"], home, home / ".claude")["DATA_RULE"], "~/.dryas")
 
 
 if __name__ == "__main__":

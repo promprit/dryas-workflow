@@ -40,9 +40,9 @@ Re-run setup for each dir after you move the clone or pull a new version of the 
 
 ### The OpenRouter key
 
-Jev calls OpenRouter. It reads `OPENROUTER_API_KEY` from your shell first. `--openrouter-key KEY` (default: `$OPENROUTER_API_KEY`) also stores the key as the plugin option `openrouter_key`, which Claude Code keeps in its secure storage and hands to the hooks and the Jev MCP server. That helps when Claude Code is started from the GUI, which does not read your shell profile.
+Jev calls OpenRouter. The recommended way to give it the key is your shell profile (`export OPENROUTER_API_KEY=...`): the hooks and the Jev MCP server read `OPENROUTER_API_KEY` first, and setup does nothing with it.
 
-The installer passes that key to `claude plugin install` on its command line, so other processes on this machine can see it while that command runs. To keep it off the command line, put `export OPENROUTER_API_KEY=...` in your shell profile and run setup with `--openrouter-key ""`.
+Only if you pass `--openrouter-key KEY` does setup also store the key as the plugin option `openrouter_key`, which Claude Code keeps in its secure storage and hands to the hooks and the Jev MCP server. That helps when Claude Code is started from the GUI, which does not read your shell profile. The flag puts the key on the `claude plugin install` command line, so other processes on this machine can see it briefly while that command runs.
 
 ### Migration from a copy install
 
@@ -66,7 +66,7 @@ If Codex also uses that dir's runtime files, a plain `--harness claude` run puts
 
 `--uninstall` works on one config dir: it runs `claude plugin uninstall dryas@dryas-workflow` there, removes only the settings entries setup added, and drops that dir from `~/.dryas/accounts.json`. It leaves the shared `~/.dryas` state (logs, thresholds, handoffs, the Ruflo runtime) in place by design, since other accounts or Codex may use it.
 
-`--purge` also removes the entries Dryas owns in `~/.dryas` (`accounts.json`, `chain.local.json`, `docs`, `jev`, `ruflo`), and only when no other account is listed in `accounts.json`. It refuses when `accounts.json` is missing or unreadable, and it never removes files Dryas did not create.
+`--purge` also removes the entries Dryas owns in `~/.dryas` (`accounts.json`, `chain.local.json`, `docs`, `jev`, `ruflo`), and only when no other account is listed in `accounts.json`. That deletes your Jev logs, your `/tune` thresholds, saved handoffs and Ruflo memory. It keeps your notes in `~/.dryas/docs/dryas-local.md`. It refuses when `accounts.json` is missing or unreadable or the dir's record cannot be read, and it never removes files Dryas did not create.
 
 With `--harness codex` or `both`, `--uninstall` also removes the Codex install.
 
@@ -99,15 +99,15 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 | `--no-design` | Do not install Impeccable or UI UX Pro Max |
 | `--no-pstack-picks` | Do not install the pstack picks |
 | `--yes` | Run the third-party install commands without asking |
-| `--force` | Replace your existing files (originals are backed up first) |
+| `--force` | Replace the Codex copy's files (originals are backed up first) |
 | `--dry-run` | Print the plan and the settings diff, change nothing (skips third-party installs and verify) |
 | `--uninstall` | Remove Dryas from one Claude config dir (and the Codex install with `--harness codex\|both`) |
-| `--purge` | With `--uninstall`: also remove Dryas's entries in `~/.dryas` when no other account uses it |
+| `--purge` | With `--uninstall`: also remove Dryas's entries in `~/.dryas` (logs, `/tune` thresholds, handoffs; keeps `dryas-local.md`) when no other account uses it |
 | `--preflight-only` | Run the prerequisite checks and stop |
 | `--harness claude\|codex\|both` | Choose what to install for. Claude Code is the default |
 | `--claude-dir DIR` | The Claude config dir to set up (default `$CLAUDE_CONFIG_DIR`, else `~/.claude`) |
 | `--flowobserve` | Turn on the FlowObserve stage |
-| `--openrouter-key KEY` | Store the key as the plugin option (default `$OPENROUTER_API_KEY`; see [the key](#the-openrouter-key)) |
+| `--openrouter-key KEY` | Also store the key as the plugin option (explicit only; see [the key](#the-openrouter-key)) |
 
 `--yes` does not skip the settings merge confirmation. The installer always asks before it edits a config dir's `settings.json`.
 
@@ -115,7 +115,7 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 
 Prerequisites: Python 3.9 or newer (python.org installer or `winget install Python.Python.3.12`), Git for Windows, Node.js 20+ (for Ruflo), and the Claude Code and/or Codex CLI.
 
-Claude Code runs plugin hooks with Git Bash, so Git for Windows must be installed. The Jev MCP server starts with `python3`: make sure `python3` resolves on your PATH (enable the `python3` app alias or add Python to PATH). Setup warns when it does not.
+Claude Code runs plugin hooks with Git Bash, so Git for Windows must be installed. The Jev MCP server starts with `python3`: make sure `python3` resolves on your PATH (enable the `python3` app alias or add Python to PATH). Setup warns when it does not (when Jev is selected).
 
 ```powershell
 git clone https://github.com/promprit/dryas-workflow.git
