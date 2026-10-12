@@ -2,85 +2,28 @@
   "core": {
     "model": "opus",
     "env": {
-      "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75"
+      "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75",
+      "DRYAS_PY": "$PY",
+      "DRYAS_DATA_ROOT": "$DRYAS_DATA_ROOT"
     },
     "permissions": {
       "allow": [
-        "Read(~/.claude/jev/**)",
-        "Bash(\"$PY\" -X utf8 \"$CD/jev/planfile.py\":*)",
-        "Bash(\"$PY\" -X utf8 \"$CD/jev/handoff.py\" save:*)",
-        "Bash(\"$PY\" -X utf8 \"$CD/jev/tune.py\" report)"
-      ]
-    },
-    "hooks": {
-      "PreToolUse": [
-        {
-          "matcher": "*",
-          "hooks": [
-            {
-              "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/jev/chain.py\" pretool",
-              "timeout": 20
-            }
-          ]
-        }
-      ],
-      "UserPromptSubmit": [
-        {
-          "hooks": [
-            {
-              "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/jev/chain.py\" prompt",
-              "timeout": 15
-            }
-          ]
-        }
-      ],
-      "SessionStart": [
-        {
-          "matcher": "compact",
-          "hooks": [
-            {
-              "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/jev/compact_restore.py\"",
-              "timeout": 5
-            }
-          ]
-        },
-        {
-          "matcher": "clear",
-          "hooks": [
-            {
-              "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/jev/handoff_restore.py\"",
-              "timeout": 5
-            }
-          ]
-        }
-      ],
-      "PreCompact": [
-        {
-          "hooks": [
-            {
-              "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/jev/compact_keep.py\"",
-              "timeout": 30
-            }
-          ]
-        }
+        "Read($DATA_RULE/**)",
+        "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/planfile.py\":*)",
+        "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/handoff.py\" save:*)",
+        "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/tune.py\" report)"
       ]
     }
   },
   "jev": {
     "permissions": {
       "allow": [
-        "mcp__jev"
+        "mcp__plugin_dryas_jev"
       ]
     }
   },
   "ruflo": {
     "env": {
-      "DRYAS_DATA_ROOT": "$DRYAS_DATA_ROOT",
       "RUFLO_HOOK_SKIP_NPX": "1",
       "RUFLO_MCP_SKIP_NPX": "1",
       "RUFLO_NO_AUTO_ENABLE": "1",
@@ -91,7 +34,7 @@
       "RUFLO_STATE_DIR": "$DRYAS_DATA_ROOT/ruflo/state",
       "CLAUDE_FLOW_CWD": "$DRYAS_DATA_ROOT/ruflo/mcp",
       "RUFLO_HOOK_CLI_OVERRIDE": "$PY_SAFE -X utf8 $CD_SAFE/ruflo/run.py cli",
-      "RUFLO_MCP_CLI_OVERRIDE": "$CD/ruflo/mcp-shim/bin/cli.js",
+      "RUFLO_MCP_CLI_OVERRIDE": "$DRYAS_DATA_ROOT/ruflo/mcp-shim/bin/cli.js",
       "RUFLO_BIN": "$RUFLO_BIN",
       "RUFLO_JS": "$RUFLO_JS",
       "RUFLO_NODE_FALLBACK": "$RUFLO_NODE_FALLBACK",
@@ -111,7 +54,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$CD/ruflo/helpers/hook-handler.cjs\" post-edit",
+              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs\" post-edit",
               "timeout": 10
             }
           ]
@@ -122,7 +65,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$CD/ruflo/helpers/hook-handler.cjs\" post-task",
+              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs\" post-task",
               "timeout": 10
             }
           ]
@@ -133,12 +76,12 @@
           "hooks": [
             {
               "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$CD/ruflo/helpers/hook-handler.cjs\" session-restore",
+              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs\" session-restore",
               "timeout": 10
             },
             {
               "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$CD/ruflo/helpers/auto-memory-hook.mjs\" import",
+              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$DRYAS_DATA_ROOT/ruflo/helpers/auto-memory-hook.mjs\" import",
               "timeout": 10
             }
           ]
@@ -149,7 +92,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$CD/ruflo/helpers/hook-handler.cjs\" session-end",
+              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs\" session-end",
               "timeout": 10
             }
           ]
@@ -161,7 +104,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$CD/ruflo/helpers/hook-handler.cjs\" session-end manual",
+              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs\" session-end manual",
               "timeout": 10
             }
           ]
@@ -171,7 +114,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$CD/ruflo/helpers/hook-handler.cjs\" session-end auto",
+              "command": "\"$PY\" -X utf8 \"$CD/ruflo/run.py\" helper node \"$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs\" session-end auto",
               "timeout": 10
             }
           ]

@@ -41,7 +41,7 @@ class ShippedFilesTest(unittest.TestCase):
     def test_ruflo_overrides(self):
         env = self.frag["ruflo"]["env"]
         self.assertEqual(env["RUFLO_HOOK_CLI_OVERRIDE"], "$PY_SAFE -X utf8 $CD_SAFE/ruflo/run.py cli")
-        self.assertEqual(env["RUFLO_MCP_CLI_OVERRIDE"], "$CD/ruflo/mcp-shim/bin/cli.js")
+        self.assertEqual(env["RUFLO_MCP_CLI_OVERRIDE"], "$DRYAS_DATA_ROOT/ruflo/mcp-shim/bin/cli.js")
 
     def test_md_files_use_tokens(self):
         for p in list((CLAUDE / "commands").glob("*.md")) + list((CLAUDE / "skills").rglob("*.md")):

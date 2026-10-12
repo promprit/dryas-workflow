@@ -19,6 +19,7 @@ MODEL_POLICY_OWNERS = {"claude/skills/orchestrate/SKILL.md"}
 def plugin_form(t):
     """The pre-pstack fixtures are old releases: apply the plugin rewrite (no install tokens) to compare."""
     for a, b in (('"{{PY}}" -X utf8 "{{CD}}/', '"%s/bin/dryas-py" "%s/' % (ROOT, ROOT)), ("{{CD}}", ROOT),
+                 ("mcp__jev__", "mcp__plugin_dryas_jev__"),
                  ("~/.claude/jev/thresholds.json", "~/.dryas/jev/thresholds.json"),
                  ("~/.claude/jev/thresholds.py", ROOT + "/jev/thresholds.py"),
                  ("~/.claude/skills/orchestrate/", ROOT + "/skills/orchestrate/"),

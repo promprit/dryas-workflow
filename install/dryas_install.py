@@ -198,6 +198,8 @@ def _mapping(comps: List[str], home: Path, cd: Path) -> Dict[str, str]:
     m = {"HOME": pu.fwd(home), "DRYAS_DATA_ROOT": pu.fwd(os.environ.get("DRYAS_DATA_ROOT", str(Path(home) / ".dryas"))),
          "PY": PY, "CD": pu.fwd(cd),
          "PY_SAFE": pu.fwd(pu.space_free(sys.executable) or ""), "CD_SAFE": pu.fwd(pu.space_free(cd) or "")}
+    root, default = m["DRYAS_DATA_ROOT"], pu.fwd(Path(home) / ".dryas")
+    m["DATA_RULE"] = "~/.dryas" if root == default else "//" + root.lstrip("/")  # Read() rule: ~ or //abs
     if "ruflo" in comps:
         m.update(detect())
     return m
