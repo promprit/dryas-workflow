@@ -67,6 +67,24 @@ class McpTest(unittest.TestCase):
         self.assertEqual(a["cost_usd"], 4.2)
         self.assertNotIn("cost_usd", b)
 
+    def test_log_merge_warns_without_review(self):
+        call("log_review", {"task": "feat-x", "round": 1, "critical": 0, "important": 0, "minor": 0})
+        ok = call("log_merge", {"task": "x label", "branch": "feat-x", "tasks_merged": 1})
+        miss = call("log_merge", {"task": "feat-y", "branch": "feat-y", "tasks_merged": 1})
+        self.assertEqual(len(self.read("merge")), 2)
+        self.assertNotIn("warning", json.dumps(ok))
+        self.assertIn("warning: no review recorded for branch feat-y", json.dumps(miss))
+
+    def test_log_merge_warns_when_review_log_missing(self):
+        r = call("log_merge", {"task": "t", "branch": "feat-z", "tasks_merged": 1})
+        self.assertIn("warning: no review recorded for branch feat-z", json.dumps(r))
+
+    def test_log_merge_never_warns_on_unreadable_review_log(self):
+        os.mkdir(os.path.join(self.tmp, "review.jsonl"))  # a directory: open() fails, not missing
+        r = call("log_merge", {"task": "t", "branch": "feat-z", "tasks_merged": 1})
+        self.assertNotIn("warning", json.dumps(r))
+        self.assertEqual(len(self.read("merge")), 1)
+
     def test_log_tools_reject_bad_input_and_write_nothing(self):
         bad = [("log_dispatch", {"task": "t1", "tier": "sonnet", "role": "coder"}),              # missing attempt
                ("log_dispatch", {"task": "", "tier": "sonnet", "role": "coder", "attempt": 1}),  # empty task

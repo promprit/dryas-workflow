@@ -233,6 +233,16 @@ class TuneTest(unittest.TestCase):
         self.assertAlmostEqual(d["cost_per_task"], 2.0)          # (8+2)/(4+1)
         self.assertEqual(d["merges_without_cost"], 1)
 
+    def test_merge_counts_as_reviewed_by_branch(self):
+        # /wreview logs the branch name; orchestrators often log a free-text task label on merge.
+        write(self.d, "review", [{"task": "feat/x", "round": 1}])
+        write(self.d, "merge", [{"task": "x feature, phase 1", "branch": "feat/x", "tasks_merged": 1},
+                                {"task": "y", "branch": "feat/y", "tasks_merged": 1}])
+        self.assertEqual(tune.build()["delivery"]["merges_without_review"], 1)
+
+    def test_render_judged_share_target(self):
+        self.assertIn("target ~60%", tune.render(tune.build(), []))
+
     def test_zero_task_merge_excluded_from_cost_per_task(self):
         write(self.d, "merge", [{"task": "a", "branch": "a", "tasks_merged": 0, "cost_usd": 9.0},
                                 {"task": "b", "branch": "b", "cost_usd": 9.0},
