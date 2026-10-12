@@ -10,10 +10,10 @@ Ruflo and Jev MCP tools may be deferred — load them with ToolSearch (e.g. `sel
 ## 0. Brainstorm first (always)
 Unless the request points at an already-approved design/spec, invoke superpowers:brainstorming first and finish its gates (design approved by the user) before step 1. Orchestration plans from the approved design, never from the raw request.
 
-You (Opus) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.claude/jev/thresholds.json` (defaults in `~/.claude/jev/thresholds.py`). Ruflo tool names: `~/.claude/skills/orchestrate/ruflo-tools.md`.
+You (Opus) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.dryas/jev/thresholds.json` (defaults in `${CLAUDE_PLUGIN_ROOT}/jev/thresholds.py`). Ruflo tool names: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/ruflo-tools.md`.
 
 <!-- pstack-picks -->
-Keep bulk output in executors and only summaries here (`{{CD}}/pstack/principles/guard-the-context-window.md`). Judge each report against the real artifact, not the self-report (`{{CD}}/pstack/principles/prove-it-works.md`).
+Keep bulk output in executors and only summaries here (`${CLAUDE_PLUGIN_ROOT}/pstack/principles/guard-the-context-window.md`). Judge each report against the real artifact, not the self-report (`${CLAUDE_PLUGIN_ROOT}/pstack/principles/prove-it-works.md`).
 
 <!-- /pstack-picks -->
 ## 1. Memory first
@@ -35,7 +35,7 @@ Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project fold
 
    Scopes of tasks that may run in parallel must not overlap.
 <!-- pstack-picks -->
-   When the approved design is performance work, every task that produces or reports a measured number gets the Done line: `numbers vetted per {{CD}}/pstack/benchmark-checklist.md (verdict, run count, range, limiter)`.
+   When the approved design is performance work, every task that produces or reports a measured number gets the Done line: `numbers vetted per ${CLAUDE_PLUGIN_ROOT}/pstack/benchmark-checklist.md (verdict, run count, range, limiter)`.
 <!-- /pstack-picks -->
 3. `.orchestrate/` is ignored globally (~/.config/git/ignore); never commit it.
 
@@ -75,7 +75,7 @@ Review and cleanup tasks (`Failing test first: none (review)` or `none (cleanup)
 ## 5. Dispatch
 1. Initialise the Ruflo swarm once (swarm_init from ruflo-tools.md). Call it with topology "hierarchical" (the plugin default is hierarchical-mesh).
 2. Write `.orchestrate/active.json` = `{"active": [<task ids being dispatched now>]}` before dispatching; this arms the scope lock. On EVERY exit path — success, failure handed to the user (§7.3/§7.4), user abort, or any error — delete `.orchestrate/active.json` before stopping; the scope lock stays armed while it exists.
-3. Give each executor ONLY its section: `"{{PY}}" -X utf8 "{{CD}}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
+3. Give each executor ONLY its section: `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
 4. Dispatch with the Agent tool, `subagent_type: executor`. Pick the start tier per task, first match wins:
    1. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus`, after `mcp__jev__log_escalation` (from_model sonnet, to_model opus, reason "skip-up: <why>", whatever `dispatch.haiku_default` says, so ESC-M1 counts it the same way as before Haiku; the skip-up reason tells observers it is a start tier, not a climb).
    2. `dispatch.haiku_default` false → no `model` (Sonnet from the agent's frontmatter). Do not ask `needs_sonnet`.
@@ -100,7 +100,7 @@ Every `mcp__jev__log_escalation` call passes all five fields: task, reason, deci
 First Sonnet failure: re-dispatch once more on Sonnet with the failure details; the second Sonnet failure escalates to Opus.
 Each re-dispatch is logged with `mcp__jev__log_dispatch` (§5.6).
 <!-- pstack-picks -->
-Before each climb (Haiku → Sonnet, Sonnet → Opus, Opus → Fable), run superpowers:systematic-debugging with `{{CD}}/pstack/principles/fix-root-causes.md` on the failing reports. Read only; do not edit project files. If the root cause is a plan defect (scope too narrow, Done vague or wrong, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the same model: that is not a climb and the failure count stays. Do this at most once per model; a second failure on that model climbs. Otherwise climb, and put the root cause in the re-dispatch prompt and in the `log_escalation` reason.
+Before each climb (Haiku → Sonnet, Sonnet → Opus, Opus → Fable), run superpowers:systematic-debugging with `${CLAUDE_PLUGIN_ROOT}/pstack/principles/fix-root-causes.md` on the failing reports. Read only; do not edit project files. If the root cause is a plan defect (scope too narrow, Done vague or wrong, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the same model: that is not a climb and the failure count stays. Do this at most once per model; a second failure on that model climbs. Otherwise climb, and put the root cause in the re-dispatch prompt and in the `log_escalation` reason.
 <!-- /pstack-picks -->
 1. A Haiku executor that fails done-criteria `escalation.haiku_failures_before_sonnet` times (1), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with no `model` (Sonnet). Call `mcp__jev__log_escalation` first (from haiku, to sonnet, with the reason). From there the Sonnet rules below apply, starting at zero Sonnet failures.
 <!-- pstack-picks -->
@@ -122,8 +122,8 @@ Start only after every build task has left `.orchestrate/active.json`.
   "needs_interrogate": {"type": "noul", "instructions": "Does the change described in `design_summary` and `diff_stat` restructure how components fit together, change an interface other modules depend on, or carry `contested: true`?",
                         "criteria": {"true": "Architectural or contested change", "false": "Contained change with no shared-interface impact"}}}}
 ```
-2. Run `{{CD}}/skills/interrogate/SKILL.md` (read it and follow it) when Jev says true at confidence ≥ `interrogate.min_confidence`, when the user asked, or when the approved design marked the change contested. Below threshold, escalated or Jev unavailable: you decide; call `mcp__jev__log_override` when you differ. Reviewer A runs on the executor's default (Sonnet), reviewer B with `model: opus`. Never put the top rung on the panel. Act On findings become new tasks (§3-§6).
-3. Cleanup: unless the diff touches documentation only, add one task with Scope = the files in the diff, `Failing test first: none (cleanup)`, and Done = `follow {{CD}}/pstack/cleanup.md; behavior unchanged; <project test command> passes`. Dispatch it on Sonnet (no `model`) with `active.json`, like any task otherwise.
+2. Run `${CLAUDE_PLUGIN_ROOT}/skills/interrogate/SKILL.md` (read it and follow it) when Jev says true at confidence ≥ `interrogate.min_confidence`, when the user asked, or when the approved design marked the change contested. Below threshold, escalated or Jev unavailable: you decide; call `mcp__jev__log_override` when you differ. Reviewer A runs on the executor's default (Sonnet), reviewer B with `model: opus`. Never put the top rung on the panel. Act On findings become new tasks (§3-§6).
+3. Cleanup: unless the diff touches documentation only, add one task with Scope = the files in the diff, `Failing test first: none (cleanup)`, and Done = `follow ${CLAUDE_PLUGIN_ROOT}/pstack/cleanup.md; behavior unchanged; <project test command> passes`. Dispatch it on Sonnet (no `model`) with `active.json`, like any task otherwise.
 
 <!-- /pstack-picks -->
 ## 8. Finish

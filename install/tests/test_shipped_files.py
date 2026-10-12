@@ -46,7 +46,7 @@ class ShippedFilesTest(unittest.TestCase):
     def test_md_files_use_tokens(self):
         for p in list((CLAUDE / "commands").glob("*.md")) + list((CLAUDE / "skills").rglob("*.md")):
             self.assertNotIn("/usr/bin/python3", p.read_text(encoding="utf-8"), p)
-        self.assertIn('"{{PY}}" -X utf8 "{{CD}}/jev/handoff.py" save --cwd "$PWD"',
+        self.assertIn('"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/handoff.py" save --cwd "$PWD"',
                       (CLAUDE / "commands" / "handoff.md").read_text(encoding="utf-8"))
 
     def test_shims_gone(self):

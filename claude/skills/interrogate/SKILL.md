@@ -18,7 +18,7 @@ Write one paragraph stating the intent, from the approved design or spec, the PL
 
 ## 3. Reviewers
 
-Read `{{CD}}/pstack/interrogate/reviewer-prompt.md` and fill it with the intent, the diff (or the exact command that prints it), `{{CD}}/pstack/interrogate/rubric.md` and `{{CD}}/pstack/interrogate/code-quality-review.md`. Both reviewers get the same filled prompt.
+Read `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/reviewer-prompt.md` and fill it with the intent, the diff (or the exact command that prints it), `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/rubric.md` and `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/code-quality-review.md`. Both reviewers get the same filled prompt.
 
 Inside `/orchestrate`, dispatch only after every build task has left `.orchestrate/active.json`. Add one section per reviewer to `.orchestrate/PLAN.md`:
 
@@ -46,7 +46,7 @@ Outside `/orchestrate`, dispatch the same two reviewers with "Do not edit any fi
 
 ## 5. Lead judgment
 
-You are the lead reviewer. Read `{{CD}}/pstack/interrogate/lead-judgment.md` and put every finding in one bucket: **Act on**, **Consider**, **Noted** or **Dismissed**, each with the reviewer(s) who raised it and a one-line rationale.
+You are the lead reviewer. Read `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/lead-judgment.md` and put every finding in one bucket: **Act on**, **Consider**, **Noted** or **Dismissed**, each with the reviewer(s) who raised it and a one-line rationale.
 
 ## Output
 

@@ -6,4 +6,4 @@ disable-model-invocation: true
 
 # Benchmark checklist
 
-Read `{{CD}}/pstack/benchmark-checklist.md` in full. Answer each of its questions with evidence from a run, not a guess about the code. Report in its Report format: verdict first, then the number with unit, run count, range and limiter. Call the result inconclusive when its rules say so.
+Read `${CLAUDE_PLUGIN_ROOT}/pstack/benchmark-checklist.md` in full. Answer each of its questions with evidence from a run, not a guess about the code. Report in its Report format: verdict first, then the number with unit, run count, range and limiter. Call the result inconclusive when its rules say so.
