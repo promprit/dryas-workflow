@@ -13,6 +13,10 @@ This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.m
 
 Built and run by [Dryas Studio](https://dryasstudio.com), which delivers every client project with it.
 
+## Why not just install the skills?
+
+You can install Superpowers, Ruflo and a few design skills on their own. Side by side, their rules are prompts the agent may skip, they compete for the same jobs, their hooks fire in install order and nothing controls model spend. Dryas makes them one system: hooks enforce the rules, each job has one owner, the hook chain has a fixed order, a logged ladder picks the model, and a weekly tune checks that the guardrails fit. The full comparison: [Why not just install the skills?](docs/why-dryas.md#why-not-just-install-the-skills)
+
 ## The framework
 
 ```
