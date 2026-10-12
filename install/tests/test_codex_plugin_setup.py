@@ -207,8 +207,10 @@ class SetupTest(unittest.TestCase):
         e.a.mkdir()
         (e.a / "config.toml").write_text('[mcp_servers.jev]\ncommand = "mine"\n', encoding="utf-8")
         rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
-        self.assertEqual(rc, 0)
-        self.assertIn("warning", out)
+        self.assertEqual(rc, 2)
+        self.assertIn("[mcp_servers.jev], not written by Dryas setup", out)
+        self.assertIn("error:", out.strip().splitlines()[-1])
+        self.assertFalse((e.root / "accounts.json").exists())
         self.assertEqual(e.toml(e.a).count("[mcp_servers.jev]"), 1)
         self.assertIn('command = "mine"', e.toml(e.a))
         self.assertNotIn(cps.TOML_START, e.toml(e.a))
@@ -233,23 +235,77 @@ class SetupTest(unittest.TestCase):
         self.assertIn("warning", out)
         self.assertNotIn("mcp_servers.ruflo", e.toml(e.b))
 
+    def test_user_table_with_our_name_near_block_survives(self):
+        # like `codex mcp add ruflo -- ...` after a core-only setup: Codex puts it right before our end marker
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core"], yes=True)
+        user = '[mcp_servers.ruflo]\ncommand = "mine"\n'
+        (e.a / "config.toml").write_text(e.toml(e.a).replace(cps.TOML_END, "\n" + user + cps.TOML_END), encoding="utf-8")
+        self.assertEqual(quiet(cps.setup, REPO, e.a, ["core"], yes=True)[0], 0)
+        self.assertIn(user, e.toml(e.a))
+        self.assertEqual(quiet(cps.setup, REPO, e.a, COMPS, yes=True)[0], 0)
+        self.assertIn(user, e.toml(e.a))
+
+    def test_changed_recorded_table_is_left(self):
+        e = Env(self, py3=False)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        t = e.toml(e.a)
+        start = t.index("[mcp_servers.jev]")
+        end = t.index(cps.TOML_END)
+        mine = '[mcp_servers.jev]\ncommand = "mine"\n'
+        (e.a / "config.toml").write_text(t[:start] + mine + t[end:], encoding="utf-8")
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 2)
+        self.assertIn("was changed after Dryas setup wrote it", out)
+        self.assertIn(mine, e.toml(e.a))
+        with mock.patch.object(cps, "python3_ok", lambda: True):  # nothing to write: warned, left, setup goes on
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("was changed after Dryas setup wrote it", out)
+        self.assertIn(mine, e.toml(e.a))
+
     def test_owned_tables_and_rewrite_pure(self):
-        ov = '[plugins."dryas@dryas-workflow".mcp_servers.jev]'
-        body = ov + "\nenabled = false"
+        ov = ("plugins", cps.ID, "mcp_servers", "jev")
+        ovh = '[plugins."dryas@dryas-workflow".mcp_servers.jev]'
+        body = ovh + "\nenabled = false"
         x = '[mcp_servers.x]\ncommand = "echo"\n'
         text = "a = 1\n\n" + cps.TOML_START + "\n" + body + "\n\n" + x + cps.TOML_END + "\n"
-        self.assertEqual(cps.owned_tables(text, body), {ov})
-        self.assertEqual(cps.owned_tables(text, None), {ov})  # lost record: our headers inside the markers
-        self.assertEqual(cps.owned_tables(text.replace(cps.TOML_START + "\n", ""), None), set())  # x precedes the end
-        self.assertEqual(cps.owned_tables("[mcp_servers.jev]\nc = 1\n" + cps.TOML_END + "\n", None), {"[mcp_servers.jev]"})
-        self.assertEqual(cps.owned_tables("[mcp_servers.jev]\nc = 1\n", None), set())
+        self.assertEqual(cps.owned_tables(text, body), ({ov}, []))
+        self.assertEqual(cps.owned_tables(text, ""), (set(), []))  # a record owns only what it lists
+        self.assertEqual(cps.owned_tables(text.replace("false", "true"), body), (set(), [ov]))
+        self.assertEqual(cps.owned_tables(text.replace("enabled = false", "enabled  =  false # c"), body), ({ov}, []))
+        self.assertEqual(cps.owned_tables(text, None), ({ov}, []))  # lost record: our headers inside the markers
+        self.assertEqual(cps.owned_tables(text.replace(cps.TOML_START + "\n", ""), None)[0], set())  # x before end
+        self.assertEqual(cps.owned_tables("[mcp_servers.jev]\nc = 1\n" + cps.TOML_END + "\n", None)[0],
+                         {("mcp_servers", "jev")})
+        self.assertEqual(cps.owned_tables("[mcp_servers.jev]\nc = 1\n", None)[0], set())
         new = cps.rewrite_config(text, "[mcp_servers.ruflo]\ncommand = \"node\"", {ov})
         self.assertEqual(new, "a = 1\n\n" + x + "\n" + cps.TOML_START + '\n[mcp_servers.ruflo]\ncommand = "node"\n' +
                          cps.TOML_END + "\n")
         self.assertEqual(cps.rewrite_config(text, "", {ov}), "a = 1\n\n" + x)
         self.assertEqual(cps.rewrite_config(cps.TOML_START + "\n" + body + "\n" + cps.TOML_END + "\n", "", {ov}), "")
-        sub = "[mcp_servers.ruflo]\ncommand = 1\n\n# keep\n[mcp_servers.ruflo.env]\nA = 1\n\n[z]\n"
-        self.assertEqual(cps.rewrite_config(sub, "", {"[mcp_servers.ruflo]"}), "# keep\n[z]\n")
+        sub = ("[mcp_servers.ruflo]\ncommand = 1\n\n# keep\n[mcp_servers.ruflo.env]\nA = 1\n"
+               "[[mcp_servers.ruflo.list]]\nb = 2\n\n[z]\nm = [\n  [1],\n]\ns = \"\"\"\n[mcp_servers.ruflo]\n\"\"\"\n")
+        self.assertEqual(cps.rewrite_config(sub, "", {("mcp_servers", "ruflo")}),
+                         "# keep\n[z]\nm = [\n  [1],\n]\ns = \"\"\"\n[mcp_servers.ruflo]\n\"\"\"\n")
+
+    def test_norm_header(self):
+        self.assertEqual(cps.norm_header(' [ mcp_servers . "jev" ]  # c\n'), (("mcp_servers", "jev"), False))
+        self.assertEqual(cps.norm_header("[[a.'b c']]"), (("a", "b c"), True))
+        self.assertEqual(cps.norm_header('[plugins."dryas@dryas-workflow".mcp_servers.jev]'),
+                         (("plugins", "dryas@dryas-workflow", "mcp_servers", "jev"), False))
+        for bad in ("a = [1]", "[a]]", "[a = 1]", "# [a]", "[]"):
+            self.assertIsNone(cps.norm_header(bad), bad)
+
+    def test_nothing_to_do_leaves_file(self):
+        t = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(t), True)
+        cfg, raw = t / "config.toml", "a=1\r\n\r\n\r\n# >>> dryas plugin >>>\r\n"
+        cfg.write_bytes(raw.encode("utf-8"))
+        rec = {}
+        self.assertTrue(cps.write_config_block(cfg, "", rec))
+        self.assertEqual(cfg.read_bytes(), raw.encode("utf-8"))
+        self.assertFalse(rec["toml"])
 
     def test_toml_block_pure(self):
         self.assertEqual(cps.toml_block(["core", "jev"], "/p", "/d", {}, ""), "")
