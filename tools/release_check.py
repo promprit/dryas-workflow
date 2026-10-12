@@ -70,8 +70,26 @@ def fwd(p) -> str:
     return str(p).replace("\\", "/")
 
 
-def _install_path(cd):
-    """installPath of dryas@dryas-workflow in <cd>/plugins/installed_plugins.json (as plugin_setup.install_path)."""
+def _plugin_entry(cd, claude):
+    """dryas@dryas-workflow from `claude plugin list --json` for cd ({} = not listed); None = no CLI or the call failed."""
+    if not claude:
+        return None
+    try:
+        r = subprocess.run([claude, "plugin", "list", "--json"], capture_output=True, universal_newlines=True,
+                           encoding="utf-8", errors="replace", timeout=120, env=dict(os.environ, CLAUDE_CONFIG_DIR=str(cd)))
+        data = json.loads(r.stdout) if r.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        data = None
+    if not isinstance(data, list):
+        return None
+    return next((p for p in data if isinstance(p, dict) and p.get("id") == PLUGIN_ID), {})
+
+
+def _install_path(cd, entry):
+    """The plugin root Claude Code runs (as plugin_setup.install_path): readFromFolder (a directory marketplace
+    loads the plugin in place), else installPath; installed_plugins.json when the CLI call failed."""
+    if entry is not None:
+        return entry.get("readFromFolder") or entry.get("installPath") or None
     try:
         data = json.loads((Path(cd) / "plugins" / "installed_plugins.json").read_text(encoding="utf-8"))
         entries = data.get("plugins", {}).get(PLUGIN_ID, [])
@@ -230,7 +248,10 @@ def jev_route(rep, chain, env):
         return rep.say("SKIP", "Jev route", "no OpenRouter key in this shell (a plugin option key is seen only inside Claude Code: manual step 1)")
     tmp = tempfile.mkdtemp()
     try:
-        env = dict(env, JEV_LOG_DIR=str(Path(tmp) / "logs"))  # the one networked check; its logs stay out of ~/.dryas
+        local = Path(tmp) / "chain.local.json"  # {}: the user's stage choices are not read, local stages stay off
+        local.write_text("{}", encoding="utf-8")
+        # the one networked check; its logs stay out of ~/.dryas
+        env = dict(env, JEV_LOG_DIR=str(Path(tmp) / "logs"), JEV_CHAIN_LOCAL=str(local))
         r = subprocess.run([sys.executable, "-X", "utf8", str(chain), "prompt"],
                            input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "fix a typo in the readme",
                                              "cwd": tempfile.gettempdir(), "session_id": "release-check"}),
@@ -257,6 +278,7 @@ def ruflo(rep, cd, root_dir, env, run_env):
     rep.say("PASS" if ok else "FAIL", "Ruflo data root writable", str(root))
     hh = root / "ruflo" / "helpers" / "hook-handler.cjs"
     rep.say("PASS" if hh.is_file() else "FAIL", "Ruflo helpers in data root", str(hh))
+    Path(run_env["DRYAS_DATA_ROOT"]).mkdir(parents=True, exist_ok=True)  # an existing (temp) root: not a vacuous run
     try:
         r = subprocess.run([sys.executable, "-X", "utf8", str(run), "helper", "node", str(Path(tempfile.gettempdir()) / "dryas-nonexistent-xyz")],
                            input="", capture_output=True, universal_newlines=True, encoding="utf-8", env=run_env, timeout=120)
@@ -295,14 +317,22 @@ def main(argv=None):
 
 def _checks(rep, cds, cdx, env, bash, tmp):
     hook_env = sandbox(env, tmp)
+    claude = shutil.which("claude")
     for cd in cds:
         print()
         print("Claude Code: %s" % cd)
-        root = _install_path(cd)
+        entry = _plugin_entry(cd, claude)
+        root = _install_path(cd, entry)
         if not root:
-            rep.say("FAIL", "dryas plugin installed", "no %s in %s" % (PLUGIN_ID, cd / "plugins" / "installed_plugins.json"))
+            rep.say("FAIL", "dryas plugin installed", "%s not installed in %s" % (PLUGIN_ID, cd))
             continue
         rep.say("PASS", "dryas plugin installed", root)
+        if not claude:
+            rep.say("SKIP", "dryas loads without errors", "claude not on PATH")
+        else:
+            errs = ["`claude plugin list --json` failed"] if entry is None else \
+                [str(e) for e in entry.get("errors") or []] + ([] if entry.get("enabled") else ["not enabled"])
+            rep.say("FAIL" if errs else "PASS", "dryas loads without errors", "; ".join(errs))
         plugin_hooks(rep, root, cd, bash, hook_env)
         penv = dict(env, CLAUDE_PLUGIN_ROOT=fwd(root), DRYAS_PY=fwd(sys.executable), CLAUDE_CONFIG_DIR=str(cd))
         chain = Path(root) / "jev" / "chain.py"

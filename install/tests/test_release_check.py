@@ -18,7 +18,7 @@ class ReleaseCheckTest(unittest.TestCase):
         self.home.mkdir()
         fb = self.tmp / "bin"
         self.fb = fb
-        fakecli.make(fb, "claude", self.tmp / "calls.jsonl", outputs={"mcp list": "jev: ok\n"})
+        fakecli.make(fb, "claude", self.tmp / "calls.jsonl", outputs={"mcp list": "jev: ok\n"}, plugin_list=True)
         fakecli.make(fb, "codex", self.tmp / "calls.jsonl", outputs={"mcp list": "jev\n"})
         self.env = {k: v for k, v in os.environ.items() if k not in release_check.KEY_VARS + (
             "DRYAS_DATA_ROOT", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "DRYAS_PY", "JEV_CHAIN_LOCAL")}
@@ -126,8 +126,61 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertIn("PASS  Ruflo helpers in data root", out)
         self.assertIn("PASS  Ruflo helper runs silently", out)
 
+    def test_read_from_folder_preferred(self):
+        """[C1] a directory marketplace runs the plugin from the clone, not the installPath cache snapshot."""
+        cd = self.tmp / "claude-d"
+        self.plugin(cd, self.tmp / "cache" / "dryas" / "1.0.0")  # a stale cache path that does not exist
+        self.env["FAKE_READ_FROM"] = str(REPO / "claude")
+        rc, out = self.run_check(cd)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("PASS  dryas plugin installed  (%s)" % (REPO / "claude"), out)
+        self.assertIn("PASS  dryas loads without errors", out)
+
+    def test_load_errors_fail(self):
+        self.env["FAKE_PLUGIN_ERRORS"] = json.dumps(["Dependency superpowers is not installed"])
+        rc, out = self.run_check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("FAIL  dryas loads without errors  (Dependency superpowers is not installed)", out)
+
+    def test_plugin_list_failure_falls_back(self):
+        fakecli.make(self.fb, "claude", self.tmp / "calls.jsonl", fail=["plugin list"], plugin_list=True)
+        rc, out = self.run_check()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("PASS  dryas plugin installed  (%s)" % (REPO / "claude"), out)  # installed_plugins.json
+        self.assertIn("FAIL  dryas loads without errors", out)
+
+    def test_jev_route_sandboxed_chain_local(self):
+        seen = {}
+
+        def fake_run(argv, **kw):
+            p = kw["env"].get("JEV_CHAIN_LOCAL", "")
+            seen["local"] = Path(p).read_text(encoding="utf-8") if p and Path(p).is_file() else None
+            seen["logs"] = kw["env"].get("JEV_LOG_DIR")
+            return subprocess.CompletedProcess(argv, 0, "Jev route: x", "")
+        rep = release_check.Report()
+        with mock.patch.object(release_check.subprocess, "run", fake_run), contextlib.redirect_stdout(io.StringIO()):
+            release_check.jev_route(rep, REPO / "claude" / "jev" / "chain.py", {"OPENROUTER_API_KEY": "k"})
+        self.assertEqual(seen["local"], "{}")
+        self.assertTrue(seen["logs"])
+
+    def test_ruflo_helper_runs_with_existing_data_root(self):
+        (self.cd / ".dryas-plugin.json").write_text(json.dumps({"components": ["core", "ruflo"]}), encoding="utf-8")
+        seen = {}
+        real = subprocess.run
+
+        def fake_run(argv, **kw):
+            if "helper" in argv:
+                seen["dir"] = Path(kw["env"]["DRYAS_DATA_ROOT"]).is_dir()
+            return real(argv, **kw)
+        run_root = self.tmp / "run-data"
+        rep = release_check.Report()
+        with mock.patch.object(release_check.subprocess, "run", fake_run), contextlib.redirect_stdout(io.StringIO()):
+            release_check.ruflo(rep, self.cd, REPO / "claude", {"DRYAS_DATA_ROOT": str(self.tmp / "data")},
+                                dict(os.environ, DRYAS_DATA_ROOT=str(run_root)))
+        self.assertTrue(seen.get("dir"))
+
     def test_invalid_manifest_fails(self):
-        fakecli.make(self.fb, "claude", self.tmp / "calls.jsonl", fail=["plugin validate"])
+        fakecli.make(self.fb, "claude", self.tmp / "calls.jsonl", fail=["plugin validate"], plugin_list=True)
         rc, out = self.run_check()
         self.assertEqual(rc, 1, out)
         self.assertIn("FAIL  plugin manifests valid", out)
