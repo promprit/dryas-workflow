@@ -1106,7 +1106,7 @@ git commit -m "feat(plugin): Markdown uses \${CLAUDE_PLUGIN_ROOT} and the dryas-
 **Interfaces:**
 - Consumes: `ruflo_helpers.patched_helpers(ruflo_bin) -> Dict[str, Tuple[bytes, int]]`, `platform_util.make_dir_link(target, dest) -> str`, `platform_util.read_dir_link`, `platform_util.same_path`.
 - Produces: `ruflo_runtime.install(repo: Path, root: Path, helpers: Dict[str, Tuple[bytes, int]], cli_dist: str) -> List[str]` — writes `<root>/ruflo/helpers/<name>` (only when content differs), copies `claude/ruflo/mcp-shim/bin/cli.js` to `<root>/ruflo/mcp-shim/bin/cli.js`, links `<root>/ruflo/mcp-shim/dist` → `cli_dist` (relinks when the target changed). Returns the list of paths written (empty on a no-op re-run).
-- Produces: fragment placeholders used by Task 8's mapping: `$CD` (plugin installPath), `$CD_SAFE`, `$DATA_RULE` (`~/.dryas`, or `/` + the absolute root so the rule reads `Read(//abs/root/**)`), `$DRYAS_DATA_ROOT`, `$PY`, `$PY_SAFE`, Ruflo detect keys.
+- Produces: fragment placeholders used by Task 8's mapping: `$CD` (plugin installPath), `$CD_SAFE`, `$DATA_RULE` (`~/.dryas`, or `//` + the absolute root without its leading slash, so the rule reads `Read(//abs/root/**)`), `$DRYAS_DATA_ROOT`, `$PY`, `$PY_SAFE`, Ruflo detect keys.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1519,7 +1519,7 @@ def _mapping(cd: Path, plugin_root: str, comps: List[str]) -> Dict[str, str]:
     root = data_root()
     m = di._mapping(comps, Path.home(), Path(plugin_root))  # CD = the installed plugin, not the config dir
     default = pu.same_path(str(root), str(Path.home() / ".dryas"))
-    m.update({"DRYAS_DATA_ROOT": pu.fwd(root), "DATA_RULE": "~/.dryas" if default else "/" + pu.fwd(root).lstrip("/")})
+    m.update({"DRYAS_DATA_ROOT": pu.fwd(root), "DATA_RULE": "~/.dryas" if default else "//" + pu.fwd(root).lstrip("/")})
     return m
 
 
