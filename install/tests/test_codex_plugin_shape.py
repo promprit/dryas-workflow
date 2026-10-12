@@ -67,6 +67,12 @@ class CodexPluginShapeTest(unittest.TestCase):
         self.assertNotIn("${", json.dumps(m))
         self.assertNotIn("env", jev)  # secrets only via env_vars
 
+    def test_license_shipped_in_each_plugin(self):
+        # Codex and Claude Code caches copy only the plugin folder: the license must travel with it
+        lic = (ROOT / "LICENSE").read_bytes()
+        for d in ("codex", "claude"):
+            self.assertEqual((ROOT / d / "LICENSE").read_bytes(), lic, d)
+
     def test_no_symlinks(self):
         for d, dirs, files in os.walk(str(CODEX)):
             for n in dirs + files:

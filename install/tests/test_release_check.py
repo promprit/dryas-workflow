@@ -187,6 +187,31 @@ class ReleaseCheckTest(unittest.TestCase):
         calls = [c for c in fakecli.calls(self.tmp / "calls.jsonl") if c[1:3] == ["plugin", "validate"]]
         self.assertTrue(calls)
 
+    def test_codex_manifests_checked(self):
+        self.assertEqual(release_check.codex_manifest_problems(REPO), [])
+        repo = self.tmp / "repo"
+        shutil.copytree(str(REPO / ".agents"), str(repo / ".agents"))
+        shutil.copytree(str(REPO / "codex" / ".codex-plugin"), str(repo / "codex" / ".codex-plugin"))
+        self.assertEqual(release_check.codex_manifest_problems(repo), [])
+        man = repo / "codex" / ".codex-plugin" / "plugin.json"
+        man.write_text(json.dumps({"name": "other"}), encoding="utf-8")
+        bad = release_check.codex_manifest_problems(repo)
+        self.assertTrue(any("plugin.json" in b for b in bad), bad)
+        man.write_text("{broken", encoding="utf-8")
+        self.assertTrue(release_check.codex_manifest_problems(repo))
+        shutil.copy2(str(REPO / "codex" / ".codex-plugin" / "plugin.json"), str(man))
+        (repo / ".agents" / "plugins" / "marketplace.json").write_text(json.dumps({"name": "dryas-workflow", "plugins": [
+            {"name": "dryas", "source": "./elsewhere"}]}), encoding="utf-8")
+        bad = release_check.codex_manifest_problems(repo)
+        self.assertTrue(any("marketplace.json" in b for b in bad), bad)
+
+    def test_bad_codex_manifest_fails_without_claude(self):
+        rep = release_check.Report()
+        with mock.patch.object(release_check, "codex_manifest_problems", lambda repo: ["codex/.codex-plugin/plugin.json: x"]), \
+                contextlib.redirect_stdout(io.StringIO()) as buf:
+            release_check.manifests(rep, None)
+        self.assertIn("FAIL  plugin manifests valid", buf.getvalue())
+
     def test_help(self):
         with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(io.StringIO()):
             release_check.main(["--help"])

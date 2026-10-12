@@ -164,11 +164,43 @@ def plugin_hooks(rep, root, cd, bash, env):
         rep.say("FAIL" if bad else "PASS", name, "; ".join(bad))
 
 
-def manifests(rep, claude):
-    """`claude plugin validate` on the marketplace and the plugin (schema is not checked anywhere else)."""
-    if not claude:
-        return rep.say("SKIP", "plugin manifests valid", "claude not on PATH")
+def _json(p: Path):
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as ex:
+        return ex
+
+
+def codex_manifest_problems(repo: Path) -> list:
+    """A light shape check of the Codex plugin manifest and the .agents marketplace (Codex has no validate command)."""
     bad = []
+    mp, man = repo / ".agents" / "plugins" / "marketplace.json", repo / "codex" / ".codex-plugin" / "plugin.json"
+    m = _json(man)
+    if not isinstance(m, dict):
+        bad.append("codex/.codex-plugin/plugin.json: %s" % (m if isinstance(m, Exception) else "not an object"))
+    elif m.get("name") != PLUGIN_ID.split("@")[0] or not isinstance(m.get("version"), str) or not m["version"] \
+            or not isinstance(m.get("interface", {}), dict):
+        bad.append("codex/.codex-plugin/plugin.json: needs name %r, a version and an interface object"
+                   % PLUGIN_ID.split("@")[0])
+    d = _json(mp)
+    entries = d.get("plugins") if isinstance(d, dict) else None
+    ours = [e for e in entries if isinstance(e, dict) and e.get("name") == PLUGIN_ID.split("@")[0]] \
+        if isinstance(entries, list) else []
+    if not isinstance(d, dict) or d.get("name") != PLUGIN_ID.split("@")[1] or len(ours) != 1 \
+            or ours[0].get("source") != "./codex":
+        bad.append(".agents/plugins/marketplace.json: needs name %r and one plugin %r with source ./codex"
+                   % (PLUGIN_ID.split("@")[1], PLUGIN_ID.split("@")[0]))
+    return bad
+
+
+def manifests(rep, claude):
+    """`claude plugin validate` on the marketplace and the plugin (schema is not checked anywhere else), plus a light
+    shape check of the Codex manifest and marketplace."""
+    bad = codex_manifest_problems(REPO)
+    if not claude:
+        if bad:
+            return rep.say("FAIL", "plugin manifests valid", "; ".join(bad))
+        return rep.say("SKIP", "plugin manifests valid", "claude not on PATH")
     for target in (REPO, REPO / "claude"):
         try:
             r = subprocess.run([claude, "plugin", "validate", str(target)], capture_output=True, universal_newlines=True,

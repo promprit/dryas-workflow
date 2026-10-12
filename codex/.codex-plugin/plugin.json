@@ -2,6 +2,10 @@
   "name": "dryas",
   "version": "1.0.0",
   "description": "Dryas Workflow for Codex: rules, scope lock, Jev gate and route hint, Jev MCP and skills.",
+  "author": {"name": "Promprit"},
+  "homepage": "https://github.com/promprit/dryas-workflow",
+  "repository": "https://github.com/promprit/dryas-workflow",
+  "license": "MIT",
   "keywords": ["workflow", "planning", "review", "scope-lock"],
   "interface": {
     "displayName": "Dryas Workflow",
