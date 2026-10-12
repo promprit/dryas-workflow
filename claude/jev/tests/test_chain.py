@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
@@ -22,6 +23,17 @@ def emit(obj):
 
 def decision(d, reason="r"):
     return emit({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": d, "permissionDecisionReason": reason}})
+
+
+_LOCAL_PATCH = mock.patch.dict(os.environ, {"JEV_CHAIN_LOCAL": os.path.join(tempfile.gettempdir(), "dryas-no-such-chain.local.json")})
+
+
+def setUpModule():  # a real ~/.dryas/chain.local.json must not leak into these tests (subprocesses inherit it)
+    _LOCAL_PATCH.start()
+
+
+def tearDownModule():
+    _LOCAL_PATCH.stop()
 
 
 class ChainTest(unittest.TestCase):

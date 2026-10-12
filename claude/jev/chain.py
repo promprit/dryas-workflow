@@ -16,6 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import codex_event
 import jevlog
+import paths
 
 RANK = {"ask": 1, "deny": 2}
 
@@ -24,16 +25,59 @@ def config_path() -> str:
     return os.environ.get("JEV_CHAIN_CONFIG", os.path.join(HERE, "chain.json"))
 
 
+_PH = re.compile(r"\$(?:\{(CD|PY|DRYAS_DATA_ROOT)\}|(CD|PY|DRYAS_DATA_ROOT)(?![A-Za-z0-9_]))")
+
+
+def placeholders() -> Dict[str, str]:
+    fwd = lambda p: p.replace("\\", "/")
+    return {"CD": fwd(paths.plugin_root()), "PY": fwd(paths.python()), "DRYAS_DATA_ROOT": fwd(paths.data_root())}
+
+
+def load_local() -> Dict[str, Any]:
+    p = paths.chain_local()
+    if not os.path.exists(p):
+        return {}
+    try:
+        with open(p, encoding="utf-8") as f:
+            v = json.load(f)
+        if not isinstance(v, dict):
+            raise ValueError("not an object")
+        return v
+    except (OSError, ValueError) as e:
+        sys.stderr.write("dryas: ignoring %s (%s); using chain defaults\n" % (p, str(e).splitlines()[0][:80]))
+        return {}
+
+
+def apply_local(stages: List[Dict[str, Any]], event: str, local: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Copies of stages with the user's enabled/timeout applied by stage name. Nothing else can be overridden."""
+    over = ((local.get("stages") or {}).get(event) or {}) if isinstance(local, dict) else {}
+    out = []
+    for st in stages:
+        st = dict(st)
+        o = over.get(st.get("name")) if isinstance(over, dict) else None
+        if isinstance(o, dict):
+            if isinstance(o.get("enabled"), bool):
+                st["enabled"] = o["enabled"]
+            t = o.get("timeout")
+            if isinstance(t, (int, float)) and not isinstance(t, bool) and 0 < t <= 120:
+                st["timeout"] = t
+        out.append(st)
+    return out
+
+
 def load_stages(kind: str, harness: str = "claude") -> List[Dict[str, Any]]:
     try:
         with open(config_path(), encoding="utf-8") as f:
             stages = list(json.load(f).get(kind, []))
     except (OSError, ValueError):
         return []
-    return [s for s in stages if isinstance(s, dict) and harness in s.get("harness", ["claude"])]
+    stages = apply_local([s for s in stages if isinstance(s, dict)], kind, load_local())
+    return [s for s in stages if harness in s.get("harness", ["claude"])]
 
 
 def _expand(s: str) -> Optional[str]:
+    ph = placeholders()
+    s = _PH.sub(lambda m: ph[m.group(1) or m.group(2)], s)
     out = os.path.expanduser(os.path.expandvars(s))
     return None if "$" in out else out
 
@@ -58,6 +102,7 @@ def _run(stage: Dict[str, Any], raw: str) -> Tuple[Optional[int], str, str]:
         return None, "", ""
     cmd = [_expand(c) for c in raw_cmd]
     if any(c is None for c in cmd):
+        jevlog.append("chain", {"stage": str(stage.get("name", "?")), "skipped": "unresolved placeholder"})
         return None, "", ""
     try:
         p = subprocess.run(cmd, input=raw.encode("utf-8", "replace"), capture_output=True, timeout=stage.get("timeout", 5))
