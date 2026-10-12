@@ -3,3 +3,4 @@
 *.cmd text eol=crlf
 *.png binary
 *.jpg binary
+claude/bin/dryas-py text eol=lf
