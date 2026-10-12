@@ -69,3 +69,157 @@ def calls(log: Path) -> List[List[str]]:
     if not log.exists():
         return []
     return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+CODEX = r'''
+import hashlib as _hl, os as _os, re as _re, shutil as _sh, time as _time
+_FAIL = __FAIL__
+_home = _os.environ.get("CODEX_HOME") or _os.path.join(_os.path.expanduser("~"), ".codex")
+_sp, _cfg, _a = _os.path.join(_home, "fake_codex.json"), _os.path.join(_home, "config.toml"), sys.argv[1:]
+
+
+def _load():
+    try:
+        with open(_sp, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {"marketplaces": {}, "plugins": {}}
+
+
+def _save(s):
+    _os.makedirs(_home, exist_ok=True)
+    with open(_sp, "w", encoding="utf-8") as f:
+        json.dump(s, f)
+
+
+def _toml():
+    try:
+        with open(_cfg, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
+def _write_toml(text):
+    _os.makedirs(_home, exist_ok=True)
+    with open(_cfg, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def _trust():
+    return dict(_re.findall(r'^\[hooks\.state\."([^"]+)"\]\s*\ntrusted_hash = "([^"]+)"', _toml(), _re.M))
+
+
+def _hooks(s):
+    out, trust = [], _trust()
+    for pid, p in s["plugins"].items():
+        try:
+            with open(_os.path.join(p["path"], "hooks", "hooks.json"), encoding="utf-8") as f:
+                hk = json.load(f).get("hooks", {})
+        except (OSError, ValueError):
+            continue
+        for ev, groups in hk.items():
+            snake = _re.sub(r"(?<!^)(?=[A-Z])", "_", ev).lower()
+            camel = ev[:1].lower() + ev[1:]
+            for gi, g in enumerate(groups):
+                for hi, h in enumerate(g.get("hooks", [])):
+                    key = "%s:hooks/hooks.json:%s:%d:%d" % (pid, snake, gi, hi)
+                    norm = dict(h, event=ev, matcher=g.get("matcher"))
+                    cur = "sha256:" + _hl.sha256(json.dumps(norm, sort_keys=True).encode("utf-8")).hexdigest()
+                    have = trust.get(key)
+                    out.append({"key": key, "pluginId": pid, "source": "plugin", "eventName": camel,
+                                "command": h.get("command"), "currentHash": cur,
+                                "trustStatus": "trusted" if have == cur else ("modified" if have else "untrusted")})
+    return out
+
+
+def _serve(s):
+    for line in sys.stdin:
+        msg = json.loads(line)
+        if "id" not in msg or _os.environ.get("FAKE_APPSERVER_SILENT") == "1":
+            continue
+        m, rid = msg.get("method"), msg["id"]
+        if m == _os.environ.get("FAKE_APPSERVER_FAIL"):
+            resp = {"id": rid, "error": {"code": -32000, "message": "boom"}}
+        elif m == "initialize":
+            resp = {"id": rid, "result": {"userAgent": "fake"}}
+        elif m == "hooks/list":
+            resp = {"id": rid, "result": {"data": [{"cwd": c, "hooks": _hooks(s), "warnings": [], "errors": []}
+                                                   for c in msg["params"]["cwds"]]}}
+        elif m == "config/batchWrite":
+            text = _toml()
+            for e in msg["params"]["edits"]:
+                for k, v in e["value"].items():
+                    text = _re.sub(r'\n?\[hooks\.state\."%s"\]\s*\ntrusted_hash = "[^"]*"\n' % _re.escape(k), "\n", text)
+                    text += '\n[hooks.state."%s"]\ntrusted_hash = "%s"\n' % (k, v["trusted_hash"])
+            _write_toml(text)
+            resp = {"id": rid, "result": {"status": "ok"}}
+        else:
+            resp = {"id": rid, "error": {"code": -32601, "message": "unknown method"}}
+        sys.stdout.write(json.dumps(resp) + "\n")
+        sys.stdout.flush()
+
+
+def _main():
+    s = _load()
+    if _a[:1] == ["--version"]:
+        sys.stdout.write(_os.environ.get("FAKE_CODEX_VERSION", "codex-cli 0.162.1") + "\n")
+    elif _a[:3] == ["plugin", "marketplace", "add"] and "plugin marketplace" not in _FAIL:
+        src = _os.path.abspath(_a[3])
+        with open(_os.path.join(src, ".agents", "plugins", "marketplace.json"), encoding="utf-8") as f:
+            s["marketplaces"][json.load(f)["name"]] = src
+    elif _a[:3] == ["plugin", "marketplace", "list"] and "plugin marketplace" not in _FAIL:
+        sys.stdout.write(json.dumps({"marketplaces": [{"name": n, "root": r, "source": r}
+                                                      for n, r in s["marketplaces"].items()]}))
+    elif _a[:3] == ["plugin", "marketplace", "remove"]:
+        s["marketplaces"].pop(_a[3], None)
+    elif _a[:2] == ["plugin", "add"] and "plugin add" not in _FAIL:
+        name, mkt = _a[2].split("@")
+        root = s["marketplaces"][mkt]
+        with open(_os.path.join(root, ".agents", "plugins", "marketplace.json"), encoding="utf-8") as f:
+            ent = [p for p in json.load(f)["plugins"] if p["name"] == name][0]
+        src = _os.path.normpath(_os.path.join(root, ent["source"]))
+        with open(_os.path.join(src, ".codex-plugin", "plugin.json"), encoding="utf-8") as f:
+            ver = json.load(f)["version"]
+        dest = _os.path.join(_home, "plugins", "cache", mkt, name, ver)
+        _sh.rmtree(dest, ignore_errors=True)
+        _sh.copytree(src, dest, ignore=lambda d, ns: [n for n in ns if n == "__pycache__"
+                                                      or _os.path.islink(_os.path.join(d, n))])
+        s["plugins"][_a[2]] = {"version": ver, "path": dest, "enabled": True}
+        if '[plugins."%s"]' % _a[2] not in _toml():
+            _write_toml(_toml() + '\n[plugins."%s"]\nenabled = true\n' % _a[2])
+        sys.stdout.write(json.dumps({"pluginId": _a[2], "installedPath": dest, "version": ver,
+                                     "authPolicy": "ON_INSTALL"}))
+    elif _a[:2] == ["plugin", "list"] and "plugin list" not in _FAIL:
+        sys.stdout.write(json.dumps({"installed": [{"pluginId": k, "version": v["version"], "installed": True,
+                                                    "enabled": v["enabled"], "source": {"path": v["path"]}}
+                                                   for k, v in s["plugins"].items()], "available": []}))
+    elif _a[:2] == ["plugin", "remove"] and "plugin remove" not in _FAIL:
+        p = s["plugins"].pop(_a[2], None)
+        if p:
+            _sh.rmtree(p["path"], ignore_errors=True)
+            _write_toml(_toml().replace('\n[plugins."%s"]\nenabled = true\n' % _a[2], ""))
+    elif _a[:2] == ["mcp", "list"]:
+        text, out = _toml(), []
+        for pid, p in s["plugins"].items():
+            off = '[plugins."%s".mcp_servers.jev]\nenabled = false' % pid in text
+            if not off and _os.path.exists(_os.path.join(p["path"], ".mcp.json")):
+                out.append({"name": "jev", "plugin": pid})
+        out += [{"name": n} for n in _re.findall(r"^\[mcp_servers\.([A-Za-z0-9_-]+)\]", text, _re.M)]
+        sys.stdout.write(json.dumps(out))
+    elif _a[:2] == ["debug", "prompt-input"]:
+        for pid, p in s["plugins"].items():
+            for n in sorted(_os.listdir(_os.path.join(p["path"], "skills"))):
+                sys.stdout.write("- %s:%s\n" % (pid.split("@")[0], n))
+    elif _a[:1] == ["app-server"] and "app-server" not in _FAIL:
+        _serve(s)
+    _save(s)
+
+
+_main()
+'''
+
+
+def make_codex(bin_dir: Path, log: Path, fail: Iterable[str] = ()) -> Path:
+    """A fake `codex` with plugin, marketplace, mcp, debug and app-server subcommands (state under $CODEX_HOME)."""
+    return make(bin_dir, "codex", log, fail=fail, epilogue=CODEX.replace("__FAIL__", repr(list(fail))))
