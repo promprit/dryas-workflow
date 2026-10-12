@@ -18,13 +18,19 @@ HOOK = ["PreToolUse", "Bash|apply_patch|Edit|Write", '"py" -X utf8 "/h/.claude/j
 AGENTS = "mine\n\n<!-- dryas:start -->\nold rules\n<!-- dryas:end -->\n"
 
 
+def write_lf(p: Path, text: str) -> None:
+    """Write exactly these bytes (write_text turns \\n into \\r\\n on Windows; the install code keeps newline style)."""
+    with open(p, "w", encoding="utf-8", newline="") as fh:
+        fh.write(text)
+
+
 def legacy(home: Path, cdx: Path, claude_copy: bool = False, comps=("core", "jev")) -> Path:
     home, cdx = Path(home), Path(cdx)
     sd = ct.skills_dir(home)
     (sd / "orchestrate").mkdir(parents=True)
     (sd / "orchestrate" / "SKILL.md").write_text("old", encoding="utf-8")
     cdx.mkdir(parents=True, exist_ok=True)
-    (cdx / "AGENTS.md").write_text(AGENTS, encoding="utf-8")
+    write_lf(cdx / "AGENTS.md", AGENTS)
     (cdx / "hooks.json").write_text(json.dumps({"hooks": {"PreToolUse": [{"matcher": HOOK[1], "hooks": [
         {"type": "command", "command": HOOK[2], "timeout": 20}]}]}}), encoding="utf-8")
     (cdx / ct.RECORD).write_text(json.dumps({

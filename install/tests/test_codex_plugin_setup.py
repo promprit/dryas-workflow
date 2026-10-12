@@ -684,10 +684,10 @@ class UninstallTest(unittest.TestCase):
     def test_config_write_error_keeps_record(self):
         e = Env(self)
         quiet(cps.setup, REPO, e.a, COMPS, yes=True)
-        real = open
+        real, target = open, os.path.realpath(e.a / "config.toml")  # codex_home resolves: /var is /private/var on macOS
 
         def fake_open(f, mode="r", *a, **k):
-            if str(f) == str(e.a / "config.toml") and "w" in mode:
+            if "w" in mode and os.path.realpath(f) == target:
                 raise PermissionError("read-only")
             return real(f, mode, *a, **k)
         with mock.patch("builtins.open", fake_open):

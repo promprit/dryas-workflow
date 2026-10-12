@@ -51,8 +51,8 @@ class CodexTargetTest(unittest.TestCase):
         data["hooks"]["Stop"] = [{"hooks": [user_hook]}]
         hp.write_text(json.dumps(data), encoding="utf-8")
         user_toml = 'model = "x"\n'
-        (self.cdx / "config.toml").write_text(user_toml + "\n" + ct.TOML_START + '\n[mcp_servers.jev]\ncommand = "p"\n'
-                                              + ct.TOML_END + "\n", encoding="utf-8")
+        legacy_codex.write_lf(self.cdx / "config.toml", user_toml + "\n" + ct.TOML_START + '\n[mcp_servers.jev]\ncommand = "p"\n'
+                              + ct.TOML_END + "\n")
         rec = self.rec()
         rec.update(toml=True, toml_created=False, toml_sep="\n", mcp={"jev": "toml"})
         self.save(rec)
@@ -63,8 +63,7 @@ class CodexTargetTest(unittest.TestCase):
 
     def test_toml_block_created_file_removed(self):
         legacy_codex.legacy(self.home, self.cdx)
-        (self.cdx / "config.toml").write_text(ct.TOML_START + '\n[mcp_servers.jev]\ncommand = "p"\n' + ct.TOML_END + "\n",
-                                              encoding="utf-8")
+        legacy_codex.write_lf(self.cdx / "config.toml", ct.TOML_START + '\n[mcp_servers.jev]\ncommand = "p"\n' + ct.TOML_END + "\n")
         rec = self.rec()
         rec.update(toml=True, toml_created=True, mcp={"jev": "toml"})
         self.save(rec)
