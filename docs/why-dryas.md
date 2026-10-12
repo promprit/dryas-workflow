@@ -35,6 +35,8 @@ Every tool Dryas uses can be installed on its own: Superpowers, Ruflo, a model r
 
 The skills are still doing the work. Dryas decides which one does which part, in what order, under which checks, and at what cost.
 
+Skills side by side also give you no view of the whole loop. [FlowObserve](https://github.com/promprit/flowobserve), an optional observe-only companion, shows it live: each session's stage, escalations up the ladder, one build lane per plan task and spend against budget.
+
 ## What Dryas is not
 
 - **Not a plugin.** A plugin is one binding of the model to one harness. This repo ships two (Claude Code and Codex). Others can be written against the [specification](../spec/dryas-spec-v1.md).
