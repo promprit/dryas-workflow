@@ -9,6 +9,7 @@
 - State paths (logs, thresholds, handoffs, `chain.local.json`, accounts) go only through `claude/jev/paths.py`, which honors `DRYAS_DATA_ROOT` (default `~/.dryas`) and the `JEV_*` overrides.
 - Paths go through `install/platform_util.py` (`fwd`, `make_dir_link`, `remove_path`, `resolve_argv`).
 - Read and write text files with `encoding="utf-8"`.
+- `codex/jev` and `codex/pstack` are generated: edit `claude/`, run `python tools/sync_codex_plugin.py`, commit both. The command lines in `codex/hooks/hooks.json` are frozen (Codex trusts each hook by a hash of its entry); change one only with a version bump and a release note that setup will ask to re-trust.
 - `install/tests/test_portability.py` enforces the banned patterns. Mark a deliberate exception with `portable-ok: <reason>` on the same line.
 - CI must be green on macOS, Ubuntu and Windows before merging to main. Branch protection enforces this.
 

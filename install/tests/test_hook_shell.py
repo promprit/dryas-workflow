@@ -13,6 +13,7 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = '"${DRYAS_PY:-python3}" -X utf8 "${CLAUDE_PLUGIN_ROOT}/jev/echo_hook.py" pretool'
 LAUNCH = '"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/echo_hook.py" pretool'
+CODEX_HOOK = '"${DRYAS_PY:-python3}" -X utf8 "${PLUGIN_ROOT}/jev/echo_hook.py" pretool --harness codex'
 ECHO = "import sys, json\nprint(json.dumps({'argv': sys.argv[1:], 'stdin': sys.stdin.read(), 'utf8': sys.flags.utf8_mode}))\n"
 
 
@@ -45,7 +46,7 @@ class HookShellTest(unittest.TestCase):
         shutil.rmtree(str(self.root), ignore_errors=True)
 
     def _run(self, cmd: str, py: Optional[str]):
-        env = dict(os.environ, CLAUDE_PLUGIN_ROOT=fwd(self.root))
+        env = dict(os.environ, CLAUDE_PLUGIN_ROOT=fwd(self.root), PLUGIN_ROOT=fwd(self.root))
         env.pop("DRYAS_PY", None)
         if py:
             env["DRYAS_PY"] = fwd(py)
@@ -68,6 +69,11 @@ class HookShellTest(unittest.TestCase):
         if not shutil.which("python3"):
             self.skipTest("no python3 on PATH")
         self.assertEqual(self._run(HOOK, None)["argv"], ["pretool"])
+
+    def test_codex_hook_form(self):
+        out = self._run(CODEX_HOOK, sys.executable)
+        self.assertEqual(out["argv"], ["pretool", "--harness", "codex"])
+        self.assertEqual(out["utf8"], 1)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,14 @@
+{
+  "name": "dryas",
+  "version": "1.0.0",
+  "description": "Dryas Workflow for Codex: rules, scope lock, Jev gate and route hint, Jev MCP and skills.",
+  "keywords": ["workflow", "planning", "review", "scope-lock"],
+  "interface": {
+    "displayName": "Dryas Workflow",
+    "shortDescription": "Plan, scope lock, Jev routing and review for coding sessions.",
+    "developerName": "Promprit",
+    "category": "Coding",
+    "websiteURL": "https://github.com/promprit/dryas-workflow",
+    "defaultPrompt": ["Plan this change with $dryas:wplan", "Run $dryas:orchestrate on the plan"]
+  }
+}
