@@ -14,14 +14,18 @@ with open(%(log)r, "a", encoding="utf-8") as f:
     f.write(json.dumps([%(name)r] + sys.argv[1:]) + "\\n")
 key = " ".join(sys.argv[1:3])
 sys.stdout.write(%(outputs)r.get(key, ""))
+%(epilogue)s
 sys.exit(1 if key in %(fail)r else 0)
 '''
 
 
-def make(bin_dir: Path, name: str, log: Path, outputs: Optional[dict] = None, fail: Iterable[str] = ()) -> Path:
+def make(bin_dir: Path, name: str, log: Path, outputs: Optional[dict] = None, fail: Iterable[str] = (),
+         epilogue: str = "") -> Path:
+    """`epilogue`: extra Python lines run after logging, before the exit."""
     bin_dir.mkdir(parents=True, exist_ok=True)
     py = bin_dir / (name + "_fake.py")
-    py.write_text(SCRIPT % {"name": name, "log": str(log), "outputs": dict(outputs or {}), "fail": list(fail)},
+    py.write_text(SCRIPT % {"name": name, "log": str(log), "outputs": dict(outputs or {}), "fail": list(fail),
+                             "epilogue": epilogue},
                   encoding="utf-8")
     if os.name == "nt":
         launcher = bin_dir / (name + ".cmd")

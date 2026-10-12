@@ -15,16 +15,22 @@ import platform_util as pu  # noqa: E402
 import ruflo_helpers  # noqa: E402
 import ruflo_runtime  # noqa: E402
 import run_cmd  # noqa: E402
+import settings_merge as sm  # noqa: E402
 
 PLUGIN, MARKET = "dryas", "dryas-workflow"
 ID = PLUGIN + "@" + MARKET
 RECORD = ".dryas-plugin.json"
 OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
 WORKFLOW_DOC = ("docs/workflow.md", "docs/dryas-workflow.md")  # repo source -> data root target
+REPO = Path(__file__).resolve().parents[1]
+
+
+def norm(p) -> Path:
+    return Path(p).expanduser().resolve()
 
 
 def claude_dir(arg: Optional[str]) -> Path:
-    return Path(arg or os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    return norm(arg or os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
 
 
 def data_root() -> Path:
@@ -58,13 +64,13 @@ def _save_json(p: Path, v) -> None:
     p.write_text(json.dumps(v, indent=2) + "\n", encoding="utf-8")
 
 
-def write_chain_local(root: Path, comps: List[str], flowobserve: bool) -> None:
+def write_chain_local(root: Path, comps: List[str], flowobserve: bool, repo: Optional[Path] = None) -> None:
     """Unselected components: disabled stages and listed in "off". Core stages are never touched.
-    Keeps the user's own stage entries."""
+    Keeps the user's own stage entries; malformed shapes are replaced."""
     p = Path(root) / "chain.local.json"
     loc = _load_json(p, {})
     loc["off"] = sorted(c for c in OPTIONAL if c not in comps)
-    chain = json.loads((Path(__file__).resolve().parents[1] / "claude" / "jev" / "chain.json").read_text(encoding="utf-8"))
+    chain = json.loads((Path(repo or REPO) / "claude" / "jev" / "chain.json").read_text(encoding="utf-8"))
     stages = loc.get("stages") if isinstance(loc.get("stages"), dict) else {}
     loc["stages"] = stages
     for event, sts in chain.items():
@@ -72,11 +78,15 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: bool) -> None:
             comp, name = st.get("component"), st.get("name")
             if not comp or comp == "core" or not name:
                 continue
-            ev = stages.setdefault(event, {})
+            if not isinstance(stages.get(event), dict):
+                stages[event] = {}
+            ev = stages[event]
+            if name in ev and not isinstance(ev[name], dict):
+                del ev[name]
             if comp == "flowobserve":
                 ev.setdefault(name, {})["enabled"] = bool(flowobserve)
             elif comp in comps:
-                if isinstance(ev.get(name), dict):
+                if name in ev:
                     ev[name].pop("enabled", None)
                     if not ev[name]:
                         del ev[name]
@@ -90,7 +100,11 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: bool) -> None:
 def write_workflow_doc(repo: Path, root: Path) -> None:
     """Copy the repo's workflow reference into the data root, where the injected rules point; only when it differs."""
     src, dest = Path(repo) / WORKFLOW_DOC[0], Path(root) / WORKFLOW_DOC[1]
-    data = src.read_bytes()
+    try:
+        data = src.read_bytes()
+    except OSError:
+        print("warning: %s not found; %s not updated" % (src, dest))
+        return
     try:
         if dest.read_bytes() == data:
             return
@@ -101,19 +115,19 @@ def write_workflow_doc(repo: Path, root: Path) -> None:
 
 
 def add_account(root: Path, cd: Path) -> None:
-    p = Path(root) / "accounts.json"
+    p, cd = Path(root) / "accounts.json", str(norm(cd))
     acc = _load_json(p, {})
     dirs = [d for d in acc.get("claude_dirs", []) if isinstance(d, str)]
-    if str(cd) not in dirs:
-        dirs.append(str(cd))
+    if not any(pu.same_path(d, cd) for d in dirs):
+        dirs.append(cd)
     acc["claude_dirs"] = dirs
     _save_json(p, acc)
 
 
 def remove_account(root: Path, cd: Path) -> List[str]:
-    p = Path(root) / "accounts.json"
+    p, cd = Path(root) / "accounts.json", str(norm(cd))
     acc = _load_json(p, {})
-    dirs = [d for d in acc.get("claude_dirs", []) if isinstance(d, str) and d != str(cd)]
+    dirs = [d for d in acc.get("claude_dirs", []) if isinstance(d, str) and not pu.same_path(d, cd)]
     if p.exists():
         acc["claude_dirs"] = dirs
         _save_json(p, acc)
@@ -127,12 +141,45 @@ def _mcp_python_warning() -> Optional[str]:
             "Install Python 3 so `python3` resolves (on Windows: enable the python3 alias or add it to PATH).")
 
 
-def _mapping(plugin_root: str, comps: List[str]) -> Dict[str, str]:
-    return di._mapping(comps, Path.home(), Path(plugin_root))  # CD = the installed plugin, not the config dir
+def _mapping(plugin_root, comps: List[str], detected: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """di._mapping with CD = the installed plugin (not the config dir); Ruflo detection reused when given."""
+    m = di._mapping([], Path.home(), Path(plugin_root))
+    if "ruflo" in comps:
+        m.update(detected if detected is not None else di.detect())
+    return m
+
+
+def _ruflo_files(repo: Path, root: Path, mapping: Dict[str, str], yes: bool) -> Optional[List[str]]:
+    """Generate the patched helpers and install the Ruflo runtime under the data root; None = failed (reported)."""
+    try:
+        helpers = ruflo_helpers.patched_helpers(mapping.get("RUFLO_BIN", ""))
+    except ruflo_helpers.PatchError as e:
+        helpers = di._ruflo_fallback(e, mapping, yes)
+        if helpers is None:
+            return None
+    except ruflo_helpers.HelperError as e:
+        print("error: Ruflo helpers: %s" % getattr(e, "detail", e))
+        return None
+    return ruflo_runtime.install(repo, root, helpers, mapping.get("RUFLO_CLI_DIST", ""))
 
 
 def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: bool, dry: bool = False) -> int:
-    repo, cd, root = Path(repo).resolve(), Path(cd), data_root()
+    repo, cd, root = Path(repo).resolve(), norm(cd), data_root()
+    try:
+        sm.load_settings(cd / "settings.json")  # malformed settings.json stops here, before any command runs
+    except SystemExit as e:
+        print("error: %s: %s" % (cd / "settings.json", e))
+        return 1
+    rec_path = cd / RECORD
+    rec = _load_json(rec_path, {}) or {"components": [], "settings_backup": None,
+                                      "settings": {"env": {}, "allow": [], "deny": [], "hooks": [], "top": {}}}
+    comps_all = sorted(set(rec.get("components", [])) | set(comps))
+    detected = di.detect() if "ruflo" in comps_all else {}
+    try:  # render old and new fragments once with a stand-in plugin root: unmapped placeholders abort here
+        di._fragment(repo, comps_all, _mapping(rec.get("plugin_root") or repo / "claude", comps_all, detected))
+    except ValueError as e:
+        print("error: settings fragment: %s; nothing changed" % e)
+        return 1
     env = child_env(cd)
     steps = [["claude", "plugin", "marketplace", "add", str(repo), "--scope", "user"],
              ["claude", "plugin", "install", ID, "--scope", "user", "-y"] + (["--config", "openrouter_key=" + key] if key else [])]
@@ -154,26 +201,25 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     rc = run_cmd.thirdparty([c for c in comps if c in ("ruflo", "design", "superpowers")], yes, cd, env)
     if rc:
         return rc
-    mapping = _mapping(plugin_root, comps)
+    mapping = _mapping(plugin_root, comps_all, detected)  # covers old components too, so stale entries render
     if "ruflo" in comps:
-        try:
-            helpers = ruflo_helpers.patched_helpers(mapping.get("RUFLO_BIN", ""))
-        except ruflo_helpers.HelperError as e:
-            print("error: Ruflo helpers: %s" % getattr(e, "detail", e))
+        wrote = _ruflo_files(repo, root, mapping, yes)
+        if wrote is None:
             return 1
-        ruflo_runtime.install(repo, root, helpers, mapping.get("RUFLO_CLI_DIST", ""))
-    rec_path = cd / RECORD
-    rec = _load_json(rec_path, {}) or {"components": [], "settings_backup": None,
-                                      "settings": {"env": {}, "allow": [], "deny": [], "hooks": [], "top": {}}}
-    ok = di.apply_settings(repo, cd, comps, rec, Path.home(), mapping=mapping, yes=yes,
-                           comps_all=sorted(set(rec.get("components", [])) | set(comps)))
+        rec["data_files"] = sorted(set(rec.get("data_files", [])) | set(wrote))
+    try:
+        # comps_all=comps: entries of deselected components are stale and come out of settings.json
+        ok = di.apply_settings(repo, cd, comps, rec, Path.home(), mapping=mapping, yes=yes, comps_all=comps)
+    except ValueError as e:
+        print("error: settings fragment: %s; settings not changed" % e)
+        return 1
     if not ok:
         return 1
     rec["components"] = sorted(set(comps))
     rec["plugin_root"] = plugin_root
     _save_json(rec_path, rec)
     write_workflow_doc(repo, root)
-    write_chain_local(root, comps, flowobserve)
+    write_chain_local(root, comps, flowobserve, repo)
     add_account(root, cd)
     warn = _mcp_python_warning() if "jev" in comps else None
     if warn:
