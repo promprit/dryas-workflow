@@ -304,5 +304,51 @@ class VerifyTest(unittest.TestCase):
         self.assertIn("FAIL  dryas@dryas-workflow listed in", out)
 
 
+class UninstallTest(unittest.TestCase):
+    def test_one_dir_removed_other_kept(self):
+        e = Env(self)
+        for cd in (e.a, e.b):
+            ps.setup(REPO, cd, COMPS, yes=True, key="", flowobserve=False)
+        self.assertEqual(ps.uninstall(e.a, purge=True), 0)
+        un = [c for c in e.calls() if c[1:3] == ["plugin", "uninstall"]]
+        self.assertEqual(len(un), 1)
+        self.assertIn("--keep-data", un[0])
+        self.assertEqual(e.envs()[-1], str(e.a))
+        s = json.loads((e.a / "settings.json").read_text()) if (e.a / "settings.json").exists() else {}
+        self.assertNotIn("DRYAS_PY", s.get("env", {}))
+        self.assertIn("DRYAS_PY", json.loads((e.b / "settings.json").read_text())["env"])
+        self.assertEqual(json.loads((e.root / "accounts.json").read_text())["claude_dirs"], [str(e.b)])
+        self.assertTrue(e.root.exists())  # another account still listed: purge refused
+
+    def test_purge_last_account(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        ps.uninstall(e.a, purge=True)
+        self.assertFalse(e.root.exists())
+
+    def test_keep_data_without_purge(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        ps.uninstall(e.a, purge=False)
+        self.assertTrue((e.root / "chain.local.json").exists())
+
+    def test_nothing_to_uninstall(self):
+        e = Env(self)
+        e.a.mkdir()
+        self.assertEqual(ps.uninstall(e.a, purge=False), 0)
+
+    def test_purge_refuses_symlinked_root(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        real = e.t / "real-root"
+        shutil.move(str(e.root), str(real))
+        try:
+            os.symlink(str(real), str(e.root))
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks unavailable")
+        ps.uninstall(e.a, purge=True)
+        self.assertTrue(real.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

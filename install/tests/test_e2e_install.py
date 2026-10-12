@@ -77,7 +77,6 @@ class E2ETest(unittest.TestCase):
             if out:
                 json.loads(out)
 
-    @unittest.expectedFailure  # plugin_setup.uninstall lands in Task 10; drop this marker there
     def test_plugin_uninstall(self):
         self.assertEqual(self.installer().returncode, 0)
         u = self.installer("--uninstall")

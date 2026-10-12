@@ -5,6 +5,7 @@
 """
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -260,4 +261,42 @@ def verify(cd: Path, comps: List[str]) -> int:
 
 
 def uninstall(cd: Path, purge: bool) -> int:
-    raise NotImplementedError  # Task 10
+    cd, root = norm(cd), data_root()
+    rec_path = cd / RECORD
+    if not rec_path.exists():
+        print("nothing to uninstall in %s" % cd)
+        return 0
+    rec = _load_json(rec_path, {})
+    spath = cd / "settings.json"
+    try:
+        cur = sm.load_settings(spath)  # malformed settings.json aborts before anything is removed
+    except SystemExit as e:
+        print("error: %s: %s; nothing removed" % (spath, e))
+        return 1
+    argv = ["claude", "plugin", "uninstall", ID, "--scope", "user", "--keep-data"]
+    print("CLAUDE_CONFIG_DIR=%s %s" % (cd, " ".join(argv)))
+    rc = di.run(argv, env=child_env(cd))
+    if rc != 0:  # settings cleanup still runs
+        print("warning: `claude plugin uninstall` failed (exit %d); remove %s by hand with /plugin" % (rc, ID))
+    if spath.exists():
+        new = sm.unmerge(cur, rec.get("settings", {}))
+        if rec.get("settings_created") and new == {}:
+            spath.unlink()
+            print("removed %s (Dryas created it)" % spath)
+        elif new != cur:
+            spath.write_text(json.dumps(new, indent=2) + "\n", encoding="utf-8")
+            print("removed Dryas entries from %s" % spath)
+    rec_path.unlink()
+    left = remove_account(root, cd)
+    if purge and left:
+        print("kept %s: still used by %s" % (root, ", ".join(left)))
+    elif purge:
+        if root.is_dir() and not root.is_symlink():
+            shutil.rmtree(str(root))
+            print("removed %s" % root)
+        elif root.exists() or root.is_symlink():
+            print("kept %s: not a plain directory" % root)
+    print("uninstalled Dryas from %s" % cd)
+    if rec.get("settings_backup"):
+        print("settings backup from before the merge (manual fallback): %s" % rec["settings_backup"])
+    return 0
