@@ -198,8 +198,8 @@ def _mapping(comps: List[str], home: Path, cd: Path) -> Dict[str, str]:
     m = {"HOME": pu.fwd(home), "DRYAS_DATA_ROOT": pu.fwd(os.environ.get("DRYAS_DATA_ROOT", str(Path(home) / ".dryas"))),
          "PY": PY, "CD": pu.fwd(cd),
          "PY_SAFE": pu.fwd(pu.space_free(sys.executable) or ""), "CD_SAFE": pu.fwd(pu.space_free(cd) or "")}
-    root, default = m["DRYAS_DATA_ROOT"], pu.fwd(Path(home) / ".dryas")
-    m["DATA_RULE"] = "~/.dryas" if root == default else "//" + root.lstrip("/")  # Read() rule: ~ or //abs
+    root, default = m["DRYAS_DATA_ROOT"], str(Path(home) / ".dryas")
+    m["DATA_RULE"] = "~/.dryas" if pu.same_path(root, default) else pu.read_rule_path(root)  # Read() rule: ~ or //abs
     if "ruflo" in comps:
         m.update(detect())
     return m
@@ -398,7 +398,9 @@ def mapping_for(comps: List[str], home: Path, cd: Path) -> Dict[str, str]:
 
 
 def ruflo_env(repo: Path, mapping: Dict[str, str]) -> Dict[str, str]:
-    return _fragment(repo, ["ruflo"], mapping).get("env", {})
+    env = dict(_fragment(repo, ["ruflo"], mapping).get("env", {}))
+    env.setdefault("DRYAS_DATA_ROOT", mapping["DRYAS_DATA_ROOT"])  # lives in core env now; Codex servers still need it
+    return env
 
 
 def _prune(d: Path) -> None:

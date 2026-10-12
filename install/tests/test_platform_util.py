@@ -109,5 +109,14 @@ class PlatformUtilTest(unittest.TestCase):
         self.assertFalse(os.path.lexists(str(link)))
 
 
+class ReadRulePathTest(unittest.TestCase):
+    def test_posix(self):
+        self.assertEqual(pu.read_rule_path("/a/b/.dryas"), "//a/b/.dryas")
+
+    def test_windows_drive(self):
+        self.assertEqual(pu.read_rule_path("C:/Users/x/.dryas"), "//c/Users/x/.dryas")
+        self.assertEqual(pu.read_rule_path("D:\\Data\\root"), "//d/Data/root")
+
+
 if __name__ == "__main__":
     unittest.main()

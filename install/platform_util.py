@@ -65,6 +65,14 @@ def same_path(a: str, b: str) -> bool:
     return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
 
 
+def read_rule_path(p) -> str:
+    """Absolute path in Claude Code's Read() rule form: `//abs/posix`, `//c/Users/x` for `C:\\Users\\x`. String-only."""
+    f = str(p).replace("\\", "/")
+    if len(f) >= 2 and f[1] == ":" and f[0].isalpha():
+        return "//" + f[0].lower() + "/" + f[2:].lstrip("/")
+    return "//" + f.lstrip("/")
+
+
 def make_dir_link(target: str, dest: str) -> str:
     """Link dest -> directory target. Returns "symlink", or "junction" on Windows without symlink rights."""
     try:

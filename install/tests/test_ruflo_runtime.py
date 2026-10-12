@@ -4,6 +4,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import ruflo_runtime
+import platform_util as pu
 
 REPO = HERE.parents[1]
 
@@ -37,6 +38,30 @@ class RufloRuntimeTest(unittest.TestCase):
         wrote = ruflo_runtime.install(REPO, self.root, self.helpers, str(self.dist))
         self.assertEqual([Path(w).name for w in wrote], ["hook-handler.cjs"])
 
+    def test_relink_when_target_changes(self):
+        ruflo_runtime.install(REPO, self.root, self.helpers, str(self.dist))
+        other = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(other), True)
+        wrote = ruflo_runtime.install(REPO, self.root, self.helpers, str(other))
+        link = self.root / "ruflo" / "mcp-shim" / "dist"
+        self.assertEqual(wrote, [str(link)])
+        self.assertTrue(pu.same_path(pu.read_dir_link(str(link)), str(other)))
+
+    def test_real_dist_dir_is_kept_with_warning(self):
+        d = self.root / "ruflo" / "mcp-shim" / "dist"
+        d.mkdir(parents=True)
+        (d / "x").write_text("keep")
+        ruflo_runtime.install(REPO, self.root, self.helpers, str(self.dist))
+        self.assertEqual((d / "x").read_text(), "keep")
+
+    @unittest.skipIf(os.name == "nt", "exec bit")
+    def test_exec_bit_repaired(self):
+        ruflo_runtime.install(REPO, self.root, self.helpers, "")
+        h = self.root / "ruflo" / "helpers" / "hook-handler.cjs"
+        os.chmod(str(h), 0o644)
+        self.assertEqual(ruflo_runtime.install(REPO, self.root, self.helpers, ""), [])
+        self.assertEqual(h.stat().st_mode & 0o777, 0o755)
+
     def test_no_dist_skips_link(self):
         ruflo_runtime.install(REPO, self.root, self.helpers, "")
         self.assertFalse(os.path.lexists(str(self.root / "ruflo" / "mcp-shim" / "dist")))
@@ -50,6 +75,7 @@ class FragmentTest(unittest.TestCase):
         allow = frag["core"]["permissions"]["allow"]
         self.assertIn("Read($DATA_RULE/**)", allow)
         self.assertIn('Bash("$CD/bin/dryas-py" "$CD/jev/planfile.py":*)', allow)
+        self.assertEqual(json.loads((REPO / "claude" / "settings.fragment.json").read_text(encoding="utf-8"))["jev"]["permissions"]["allow"], ["mcp__plugin_dryas_jev"])
         self.assertEqual(frag["core"]["env"]["DRYAS_PY"], "$PY")
         self.assertEqual(frag["core"]["env"]["DRYAS_DATA_ROOT"], "$DRYAS_DATA_ROOT")
 
@@ -60,6 +86,29 @@ class FragmentTest(unittest.TestCase):
         self.assertNotIn("$CD/ruflo/mcp-shim", text)
         self.assertIn("$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs", text)
         self.assertEqual(frag["env"]["RUFLO_MCP_CLI_OVERRIDE"], "$DRYAS_DATA_ROOT/ruflo/mcp-shim/bin/cli.js")
+
+
+class CodexDataRootTest(unittest.TestCase):
+    def test_custom_root_reaches_codex_server_env(self):
+        import codex_target, dryas_install
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(home), True)
+        old = os.environ.get("DRYAS_DATA_ROOT")
+        os.environ["DRYAS_DATA_ROOT"] = str(home / "custom")
+        self.addCleanup(lambda: os.environ.__setitem__("DRYAS_DATA_ROOT", old) if old else os.environ.pop("DRYAS_DATA_ROOT", None))
+        m = dryas_install._mapping(["core", "ruflo"], home, home / ".claude")
+        env = dryas_install.ruflo_env(REPO, m)
+        srv = codex_target.servers(["ruflo"], m, env)["ruflo"]
+        self.assertEqual(srv[2]["DRYAS_DATA_ROOT"], m["DRYAS_DATA_ROOT"])
+        self.assertIn("custom", srv[2]["DRYAS_DATA_ROOT"])
+        self.assertTrue(m["DATA_RULE"].startswith("//"))
+
+    def test_default_root_rule(self):
+        import dryas_install
+        home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(home), True)
+        os.environ.pop("DRYAS_DATA_ROOT", None)
+        self.assertEqual(dryas_install._mapping(["core"], home, home / ".claude")["DATA_RULE"], "~/.dryas")
 
 
 if __name__ == "__main__":

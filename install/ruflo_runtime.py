@@ -8,13 +8,21 @@ from typing import Dict, List, Tuple
 import platform_util as pu
 
 
-def _write(dest: Path, data: bytes, mode: int, wrote: List[str]) -> None:
-    if dest.is_file() and dest.read_bytes() == data:
-        return
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
+def _chmod(dest: Path, mode: int) -> None:
     if os.name != "nt":
         os.chmod(str(dest), mode)  # portable-ok: guarded; keeps helper exec bit
+
+
+def _write(dest: Path, data: bytes, mode: int, wrote: List[str]) -> None:
+    if dest.is_file() and dest.read_bytes() == data:
+        if os.name != "nt" and (dest.stat().st_mode & 0o777) != mode:
+            _chmod(dest, mode)  # repair the exec bit only
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    tmp.write_bytes(data)
+    _chmod(tmp, mode)
+    os.replace(str(tmp), str(dest))  # atomic: a running hook never sees a partial helper
     wrote.append(str(dest))
 
 
@@ -28,6 +36,9 @@ def install(repo: Path, root: Path, helpers: Dict[str, Tuple[bytes, int]], cli_d
     if cli_dist:
         cur = pu.read_dir_link(str(link))
         if cur is None or not pu.same_path(cur, cli_dist):
+            if os.path.isdir(str(link)) and cur is None:
+                print("warning: %s is a real directory, not a link; leaving it (dist not relinked)" % link)
+                return wrote
             if os.path.lexists(str(link)):
                 pu.remove_path(str(link))
             pu.make_dir_link(cli_dist, str(link))
