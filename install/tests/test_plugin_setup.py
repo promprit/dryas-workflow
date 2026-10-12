@@ -32,12 +32,14 @@ class Env:
             "import os\n"
             "if sys.argv[1:3] == ['plugin', 'install'] and os.environ.get('FAKE_NO_RECORD') != '1':\n"
             "    d = os.path.join(os.environ['CLAUDE_CONFIG_DIR'], 'plugins'); os.makedirs(d, exist_ok=True)\n"
-            "    rec = %r\n"
+            "    p = os.path.join(d, 'installed_plugins.json')\n"
+            "    rec = json.load(open(p)) if os.path.exists(p) else %r\n"
             "    rec['plugins']['dryas@dryas-workflow'][0]['installPath'] = %r\n"
-            "    open(os.path.join(d, 'installed_plugins.json'), 'w').write(json.dumps(rec))\n"
+            "    rec['plugins'].setdefault(sys.argv[3], [{'scope': 'user', 'installPath': 'x', 'version': '1'}])\n"
+            "    open(p, 'w').write(json.dumps(rec))\n"
             "with open(%r, 'a') as f: f.write(json.dumps(os.environ.get('CLAUDE_CONFIG_DIR')) + '\\n')\n"
         ) % (INSTALLED, str(REPO / "claude"), str(self.t / "envs.jsonl"))
-        fakecli.make(bin_dir, "claude", self.log, epilogue=self.epilogue)
+        fakecli.make(bin_dir, "claude", self.log, epilogue=self.epilogue, plugin_list=True)
         fakecli.make(bin_dir, "npm", self.log)
         _patch_env(tc, {"PATH": str(bin_dir) + os.pathsep + os.environ["PATH"], "HOME": str(self.home),
                         "USERPROFILE": str(self.home), "DRYAS_DATA_ROOT": str(self.root)})
@@ -54,6 +56,15 @@ class Env:
 COMPS = ["core", "jev"]
 
 
+def _out(fn):
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        fn()
+    return buf.getvalue()
+
+
 class SetupTest(unittest.TestCase):
     def test_claude_dir_resolution(self):
         with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/cfg"}):
@@ -68,7 +79,7 @@ class SetupTest(unittest.TestCase):
         for cd in (e.a, e.b):
             self.assertEqual(ps.setup(REPO, cd, COMPS, yes=True, key="", flowobserve=False), 0)
         self.assertEqual(set(e.envs()), {str(e.a), str(e.b)})
-        installs = [c for c in e.calls() if c[1:3] == ["plugin", "install"]]
+        installs = [c for c in e.calls() if c[1:3] == ["plugin", "install"] and c[3] == ps.ID]
         self.assertEqual([c[3] for c in installs], ["dryas@dryas-workflow"] * 2)
         self.assertTrue(all("-y" in c and "--scope" in c for c in installs))
         for cd in (e.a, e.b):
@@ -90,10 +101,134 @@ class SetupTest(unittest.TestCase):
         self.assertFalse(any(str(e.a).replace("\\", "/") + "/jev" in r for r in s["permissions"]["allow"]))
         self.assertEqual(json.loads((e.a / ps.RECORD).read_text())["plugin_root"], str(REPO / "claude"))
 
+    def test_cd_is_read_from_folder(self):
+        """[C1] a directory marketplace loads the plugin in place: rules name readFromFolder, not the cache copy."""
+        e = Env(self)
+        live = e.t / "clone" / "claude"
+        _patch_env(self, {"FAKE_READ_FROM": str(live)})
+        self.assertEqual(ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False), 0)
+        allow = json.loads((e.a / "settings.json").read_text())["permissions"]["allow"]
+        self.assertTrue(any(str(live).replace("\\", "/") + "/jev/planfile.py" in r for r in allow), allow)
+        self.assertFalse(any(str(REPO / "claude").replace("\\", "/") + "/jev" in r for r in allow))
+        self.assertEqual(json.loads((e.a / ps.RECORD).read_text())["plugin_root"], str(live))
+        self.assertEqual(ps.install_path(e.a), str(live))
+
+    def test_install_path_falls_back_when_cli_fails(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        fakecli.make(e.bin, "claude", e.log, fail=["plugin list"], epilogue=e.epilogue, plugin_list=True)
+        _patch_env(self, {"FAKE_READ_FROM": str(e.t / "elsewhere")})
+        self.assertEqual(ps.install_path(e.a), str(REPO / "claude"))  # installed_plugins.json installPath
+
+    def test_official_marketplace_added_before_install(self):
+        """[C2] the superpowers dependency needs claude-plugins-official, or dryas does not load. The CLI installs
+        the dependency itself (and can prune it later), so it is not installed by hand when nothing is missing."""
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        cmds = [c[1:5] for c in e.calls()]
+        off = cmds.index(["plugin", "marketplace", "add", ps.OFFICIAL_SOURCE])
+        dr = cmds.index(["plugin", "install", ps.ID, "--scope"])
+        self.assertLess(off, dr)
+        self.assertNotIn(["plugin", "install", ps.SUPERPOWERS, "--scope"], cmds)
+
+    def test_missing_dependency_installed(self):
+        """An existing install whose dependency never resolved: `plugin install dryas` does not retry it."""
+        e = Env(self)
+        _patch_env(self, {"FAKE_MISSING_DEP": ps.SUPERPOWERS})
+        self.assertEqual(ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False), 0)
+        cmds = [c[1:4] for c in e.calls()]
+        self.assertLess(cmds.index(["plugin", "install", ps.ID]), cmds.index(["plugin", "install", ps.SUPERPOWERS]))
+        self.assertTrue((e.a / "settings.json").exists())
+
+    def test_load_errors_stop_before_settings(self):
+        e = Env(self)
+        _patch_env(self, {"FAKE_PLUGIN_ERRORS": json.dumps(["Dependency superpowers is not installed"])})
+        out = _out(lambda: self.assertEqual(ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False), 1))
+        self.assertIn("Dependency superpowers is not installed", out)
+        self.assertFalse((e.a / "settings.json").exists())
+        self.assertFalse((e.root / "accounts.json").exists())
+
+    def test_no_superpowers_note(self):
+        e = Env(self)
+        out = _out(lambda: ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=False))
+        self.assertIn("superpowers is a required dependency", out)
+        self.assertTrue(any(c[1:4] == ["plugin", "marketplace", "add"] and ps.OFFICIAL_SOURCE in c for c in e.calls()))
+        s = json.loads((e.a / "settings.json").read_text())
+        self.assertFalse(any("superpowers" in r for r in s["permissions"].get("deny", [])))
+
+    def test_jev_key_hint(self):
+        e = Env(self)
+        _patch_env(self, {k: "" for k in ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY")})
+        out = _out(lambda: ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False))
+        self.assertIn("set OPENROUTER_API_KEY in your shell profile", out)
+        out = _out(lambda: ps.setup(REPO, e.a, COMPS, yes=True, key="sk-1", flowobserve=False))
+        self.assertNotIn("OPENROUTER_API_KEY in your shell profile", out)
+        _patch_env(self, {"OPENROUTER_API_KEY": "sk-2"})
+        out = _out(lambda: ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False))
+        self.assertNotIn("OPENROUTER_API_KEY in your shell profile", out)
+        out = _out(lambda: ps.setup(REPO, e.b, ["core"], yes=True, key="", flowobserve=False))
+        self.assertNotIn("OPENROUTER_API_KEY in your shell profile", out)
+
+    def test_shared_components_warning(self):
+        """[I3] chain.local.json is shared: changing the "off" set while other accounts exist warns."""
+        e = Env(self)
+        out = _out(lambda: ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False))
+        self.assertNotIn("shared", out)  # first account: nothing to warn about
+        out = _out(lambda: ps.setup(REPO, e.b, COMPS, yes=True, key="", flowobserve=False))
+        self.assertNotIn("warning: component choices", out)  # same choices
+        out = _out(lambda: ps.setup(REPO, e.b, ["core"], yes=True, key="", flowobserve=False))
+        self.assertIn("warning: component choices", out)
+        self.assertIn("jev", out)
+        self.assertIn(str(e.a), out)
+        out = _out(lambda: ps.setup(REPO, e.b, ["core"], yes=True, key="", flowobserve=False))
+        self.assertNotIn("warning: component choices", out)
+
+    def test_shared_components_warning_names_codex(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        cdx = e.home / ".codex"
+        cdx.mkdir()
+        (cdx / ".dryas-installed.json").write_text("{}")
+        _patch_env(self, {"CODEX_HOME": str(cdx)})
+        out = _out(lambda: ps.setup(REPO, e.a, ["core"], yes=True, key="", flowobserve=False))
+        self.assertIn("warning: component choices", out)
+        self.assertIn("Codex", out)
+
+    def test_data_root_expands_user(self):
+        e = Env(self)
+        _patch_env(self, {"DRYAS_DATA_ROOT": "~/state"})
+        self.assertEqual(ps.data_root(), e.home / "state")
+        self.assertEqual(ps.di._mapping([], e.home, e.a)["DRYAS_DATA_ROOT"], str(e.home / "state").replace("\\", "/"))
+
+    def test_native_rules_windows_form(self):
+        """[I6] on Windows ${CLAUDE_PLUGIN_ROOT} may be substituted with backslashes: allow both forms."""
+        root = "C:\\Users\\me\\dryas\\claude"
+        fw = "C:/Users/me/dryas/claude"
+        frag = {"env": {"X": fw + "/ruflo/run.py"},
+                "permissions": {"allow": ["Read(~/.dryas/**)", 'Bash("%s/bin/dryas-py" "%s/jev/tune.py" report)' % (fw, fw),
+                                          "mcp__plugin_dryas_jev"]}}
+        out = ps.native_rules(frag, root)
+        nat = 'Bash("%s/bin/dryas-py" "%s/jev/tune.py" report)' % (root, root)
+        self.assertEqual(out["permissions"]["allow"], frag["permissions"]["allow"] + [nat])
+        self.assertEqual(out["env"], frag["env"])
+        self.assertEqual(len(frag["permissions"]["allow"]), 3)  # input untouched
+        self.assertEqual(ps.native_rules(out, fw), out)  # idempotent, either spelling of the root
+
+    def test_windows_native_rules_recorded_and_removed(self):
+        e = Env(self)
+        with mock.patch.object(ps.pu, "IS_WINDOWS", True):
+            ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        nat = str(REPO / "claude").replace("/", "\\") + "/jev/planfile.py"
+        allow = json.loads((e.a / "settings.json").read_text())["permissions"]["allow"]
+        self.assertTrue(any(nat in r for r in allow), allow)
+        self.assertTrue(any(nat in r for r in json.loads((e.a / ps.RECORD).read_text())["settings"]["allow"]))
+        ps.uninstall(e.a, purge=False)
+        self.assertFalse((e.a / "settings.json").exists())
+
     def test_key_passed_as_config(self):
         e = Env(self)
         ps.setup(REPO, e.a, COMPS, yes=True, key="sk-1", flowobserve=False)
-        inst = [c for c in e.calls() if c[1:3] == ["plugin", "install"]][0]
+        inst = [c for c in e.calls() if c[1:4] == ["plugin", "install", ps.ID]][0]
         self.assertIn("--config", inst)
         self.assertIn("openrouter_key=sk-1", inst)
 
@@ -107,7 +242,7 @@ class SetupTest(unittest.TestCase):
 
     def test_install_failure_stops_before_settings(self):
         e = Env(self)
-        fakecli.make(e.bin, "claude", e.log, fail=["plugin install"], epilogue=e.epilogue)
+        fakecli.make(e.bin, "claude", e.log, fail=["plugin install"], epilogue=e.epilogue, plugin_list=True)
         self.assertEqual(ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False), 1)
         self.assertFalse((e.a / "settings.json").exists())
         self.assertFalse((e.root / "accounts.json").exists())
@@ -291,11 +426,34 @@ class VerifyTest(unittest.TestCase):
         (self.e.a / "plugins" / "installed_plugins.json").write_text(json.dumps(rec))
         fails, out = self.verify(self.e.a)
         self.assertEqual(fails, 0, out)
-        for name in ("dryas@dryas-workflow listed in", "rules hook prints SessionStart JSON",
+        for name in ("dryas@dryas-workflow listed in", "dryas loads without errors", "rules hook prints SessionStart JSON",
                      "scope lock blocks an out-of-scope write"):
             self.assertIn("PASS  " + name, out)
         tests = str(REPO / "claude" / "jev" / "tests")
         self.assertTrue(any(tests in a for argv in self.ran for a in argv), self.ran)  # Jev tests of the plugin
+
+    def _installed(self):
+        rec = json.loads(json.dumps(INSTALLED))
+        rec["plugins"]["dryas@dryas-workflow"][0]["installPath"] = str(REPO / "claude")
+        (self.e.a / "plugins").mkdir(parents=True)
+        (self.e.a / "plugins" / "installed_plugins.json").write_text(json.dumps(rec))
+
+    def test_fails_with_load_errors(self):
+        """[C2] enabled is not enough: Claude Code reports a missing dependency as an error on the plugin."""
+        self._installed()
+        _patch_env(self, {"FAKE_PLUGIN_ERRORS": json.dumps(["Dependency superpowers is not installed"])})
+        fails, out = self.verify(self.e.a)
+        self.assertEqual(fails, 1, out)
+        self.assertIn("FAIL  dryas loads without errors", out)
+        self.assertIn("Dependency superpowers is not installed", out)
+
+    def test_fails_when_plugin_list_fails(self):
+        self._installed()
+        fakecli.make(self.e.bin, "claude", self.e.log, fail=["plugin list"], plugin_list=True)
+        fails, out = self.verify(self.e.a)
+        self.assertEqual(fails, 1, out)
+        self.assertIn("FAIL  dryas loads without errors", out)
+        self.assertIn("PASS  rules hook prints SessionStart JSON", out)  # installPath fallback still checked
 
     def test_fails_without_plugin(self):
         self.e.a.mkdir()
@@ -398,6 +556,41 @@ class UninstallTest(unittest.TestCase):
             self.assertEqual(ps.uninstall(e.a, purge=True), 0)
         self.assertTrue((e.root / "chain.local.json").exists())
         self.assertIn("unreadable", out.getvalue())
+
+    def test_corrupt_record_keeps_account(self):
+        """[I5] the dir may still use Dryas: it stays in accounts.json."""
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        (e.a / ps.RECORD).write_text("[1]")
+        ps.uninstall(e.a, purge=False)
+        self.assertEqual(json.loads((e.root / "accounts.json").read_text())["claude_dirs"], [str(e.a)])
+
+    def test_purge_refused_while_codex_installed(self):
+        """[I4] Codex uses the data root too: --purge keeps it while a Codex install exists."""
+        for where in ("codex", "copy"):
+            e = Env(self)
+            ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+            cdx = e.t / "codex"
+            _patch_env(self, {"CODEX_HOME": str(cdx)})
+            rec = (cdx if where == "codex" else e.home / ".claude") / ".dryas-installed.json"
+            rec.parent.mkdir(parents=True)
+            rec.write_text("{}")
+            out = _out(lambda: self.assertEqual(ps.uninstall(e.a, purge=True), 0))
+            self.assertTrue((e.root / "chain.local.json").exists(), where)
+            self.assertIn("Codex", out)
+            self.assertFalse((e.a / ps.RECORD).exists())
+            rec.unlink()  # Codex uninstalled earlier in the same run: its record is gone, purge goes ahead
+            ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+            ps.uninstall(e.a, purge=True)
+            self.assertFalse(e.root.exists(), where)
+
+    def test_purge_message_names_notes(self):
+        e = Env(self)
+        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        (e.root / "docs" / "dryas-local.md").write_text("mine", encoding="utf-8")
+        out = _out(lambda: ps.uninstall(e.a, purge=True))
+        self.assertIn("kept %s (your notes)" % e.root, out)
+        self.assertNotIn("did not create", out)
 
     def test_purge_refusal_without_cwd(self):
         e = Env(self)

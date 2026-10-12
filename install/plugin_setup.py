@@ -20,10 +20,13 @@ import settings_merge as sm  # noqa: E402
 
 PLUGIN, MARKET = "dryas", "dryas-workflow"
 ID = PLUGIN + "@" + MARKET
+OFFICIAL_SOURCE = "anthropics/claude-plugins-official"  # marketplace of the superpowers dependency
+SUPERPOWERS = "superpowers@claude-plugins-official"
 RECORD = ".dryas-plugin.json"
 OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
 WORKFLOW_DOC = ("docs/workflow.md", "docs/dryas-workflow.md")  # repo source -> data root target
 REPO = Path(__file__).resolve().parents[1]
+KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY")
 
 
 def norm(p) -> Path:
@@ -36,14 +39,48 @@ def claude_dir(arg: Optional[str]) -> Path:
 
 
 def data_root() -> Path:
-    return Path(os.environ.get("DRYAS_DATA_ROOT") or Path.home() / ".dryas")
+    return Path(os.path.expanduser(os.environ.get("DRYAS_DATA_ROOT") or str(Path.home() / ".dryas")))
 
 
 def child_env(cd: Path) -> Dict[str, str]:
     return dict(os.environ, CLAUDE_CONFIG_DIR=str(cd))
 
 
+def plugin_entry(cd: Path) -> Optional[dict]:
+    """dryas@dryas-workflow as `claude plugin list --json` reports it for cd ({} = not listed); None = the call failed."""
+    rc, out = di.capture(["claude", "plugin", "list", "--json"], env=child_env(cd), timeout=120)
+    try:
+        data = json.loads(out) if rc == 0 else None
+    except ValueError:
+        data = None
+    if not isinstance(data, list):
+        return None
+    return next((p for p in data if isinstance(p, dict) and p.get("id") == ID), {})
+
+
 def install_path(cd: Path) -> Optional[str]:
+    """The plugin root Claude Code runs (CLAUDE_PLUGIN_ROOT): readFromFolder, since a directory marketplace loads
+    the plugin in place from the clone; else installPath. installed_plugins.json when the CLI call fails."""
+    return _root(cd, plugin_entry(cd))
+
+
+def _root(cd: Path, entry: Optional[dict]) -> Optional[str]:
+    if entry is not None:
+        return entry.get("readFromFolder") or entry.get("installPath") or None
+    return _recorded_path(cd)
+
+
+def load_errors(entry: Optional[dict]) -> List[str]:
+    """Why dryas does not load, from its plugin list entry; [] = enabled, no errors."""
+    if entry is None:
+        return ["`claude plugin list --json` failed"]
+    if not entry:
+        return ["not listed by `claude plugin list`"]
+    errs = [str(e) for e in entry.get("errors") or []]
+    return errs + ([] if entry.get("enabled") else ["not enabled (run /plugin and enable dryas)"])
+
+
+def _recorded_path(cd: Path) -> Optional[str]:
     try:
         data = json.loads((Path(cd) / "plugins" / "installed_plugins.json").read_text(encoding="utf-8"))
         entries = data.get("plugins", {}).get(ID, [])
@@ -66,12 +103,16 @@ def _save_json(p: Path, v) -> None:
     p.write_text(json.dumps(v, indent=2) + "\n", encoding="utf-8")
 
 
-def write_chain_local(root: Path, comps: List[str], flowobserve: bool, repo: Optional[Path] = None) -> None:
+def write_chain_local(root: Path, comps: List[str], flowobserve: bool, repo: Optional[Path] = None,
+                      cd: Optional[Path] = None) -> None:
     """Unselected components: disabled stages and listed in "off". Core stages are never touched.
-    Keeps the user's own stage entries; malformed shapes are replaced."""
+    Keeps the user's own stage entries; malformed shapes are replaced. Shared by all accounts and Codex:
+    a changed "off" set is reported when another account (other than cd) or Codex uses it."""
     p = Path(root) / "chain.local.json"
     loc = _load_json(p, {})
+    old = loc.get("off")
     loc["off"] = sorted(c for c in OPTIONAL if c not in comps)
+    _shared_warning(root, old, loc["off"], cd)
     chain = json.loads((Path(repo or REPO) / "claude" / "jev" / "chain.json").read_text(encoding="utf-8"))
     stages = loc.get("stages") if isinstance(loc.get("stages"), dict) else {}
     loc["stages"] = stages
@@ -98,6 +139,31 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: bool, repo: Opt
             if not ev:
                 del stages[event]
     _save_json(p, loc)
+
+
+def _codex_installed() -> Optional[str]:
+    """Where a Codex Dryas install is recorded (it reads the same data root and chain.local.json); None = none."""
+    import codex_target as ct
+    for p in (ct.codex_dir() / ct.RECORD, Path.home() / ".claude" / di.RECORD):
+        if p.exists():
+            return str(p)
+    return None
+
+
+def _shared_warning(root: Path, old, new: List[str], cd: Optional[Path] = None) -> None:
+    """chain.local.json is shared by every account and Codex: say what a change of the "off" set does to them."""
+    if not isinstance(old, list) or sorted(old) == new:
+        return
+    users = [d for d in _load_json(Path(root) / "accounts.json", {}).get("claude_dirs", [])
+             if isinstance(d, str) and not (cd and pu.same_path(d, norm(cd)))]
+    if _codex_installed():
+        users.append("Codex")
+    if not users:
+        return
+    on, off = sorted(set(old) - set(new)), sorted(set(new) - set(old))
+    what = "; ".join(x for x in ("turns on " + ", ".join(on) if on else "", "turns off " + ", ".join(off) if off else "") if x)
+    print("warning: component choices are shared (%s): this %s for %s too"
+          % (Path(root) / "chain.local.json", what, ", ".join(users)))
 
 
 def write_workflow_doc(repo: Path, root: Path) -> None:
@@ -137,11 +203,17 @@ def remove_account(root: Path, cd: Path) -> List[str]:
     return dirs
 
 
-def _mcp_python_warning() -> Optional[str]:
-    if pu.which("python3"):
-        return None
-    return ("warning: the Jev MCP server starts with `python3`, which is not on your PATH. "
-            "Install Python 3 so `python3` resolves (on Windows: enable the python3 alias or add it to PATH).")
+def native_rules(frag: dict, root) -> dict:
+    """Windows: Claude Code may substitute ${CLAUDE_PLUGIN_ROOT} with backslashes, so each Bash allow rule naming the
+    plugin root (forward slashes, pu.fwd) is added again with the root in native form; the rest of the path is kept,
+    as in the command text "${CLAUDE_PLUGIN_ROOT}/jev/tune.py". Returns a new fragment."""
+    fw = pu.fwd(root)
+    nat = fw.replace("/", "\\")
+    allow = list(frag.get("permissions", {}).get("allow", []))
+    extra = [r.replace(fw + "/", nat + "/") for r in allow if r.startswith("Bash(") and fw + "/" in r]
+    out = dict(frag)
+    out["permissions"] = dict(frag.get("permissions", {}), allow=allow + [r for r in extra if r not in allow])
+    return out
 
 
 def _mapping(plugin_root, comps: List[str], detected: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -184,7 +256,13 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
         print("error: settings fragment: %s; nothing changed" % e)
         return 1
     env = child_env(cd)
-    steps = [["claude", "plugin", "marketplace", "add", str(repo), "--scope", "user"],
+    if "superpowers" not in comps:
+        print("note: superpowers is a required dependency of the dryas plugin and is installed anyway; "
+              "--no-superpowers only leaves out Dryas's superpowers deny rules and stages.")
+    # superpowers comes from claude-plugins-official: without that marketplace dryas installs but does not load.
+    # The CLI installs the dependency itself (as a dependency, so `claude plugin prune` can remove it later).
+    steps = [["claude", "plugin", "marketplace", "add", OFFICIAL_SOURCE, "--scope", "user"],
+             ["claude", "plugin", "marketplace", "add", str(repo), "--scope", "user"],
              ["claude", "plugin", "install", ID, "--scope", "user", "-y"] + (["--config", "openrouter_key=" + key] if key else [])]
     for argv in steps:
         shown = [a if not a.startswith("openrouter_key=") else "openrouter_key=***" for a in argv]
@@ -197,9 +275,23 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
             return rc
     if dry:
         return 0
-    plugin_root = install_path(cd)
+    entry = plugin_entry(cd)
+    # an earlier install whose dependency never resolved: re-installing dryas does not retry it, so install it here
+    deps = [d.get("dependency") for d in (entry or {}).get("errorDetails") or []
+            if isinstance(d, dict) and d.get("type") == "dependency-unsatisfied" and d.get("dependency")]
+    for dep in deps:
+        argv = ["claude", "plugin", "install", dep, "--scope", "user", "-y"]
+        print("CLAUDE_CONFIG_DIR=%s %s" % (cd, " ".join(argv)))
+        di.run(argv, env=env)
+    if deps:
+        entry = plugin_entry(cd)
+    plugin_root = _root(cd, entry)
     if not plugin_root:
-        print("error: %s is not listed in %s; settings not changed" % (ID, cd / "plugins" / "installed_plugins.json"))
+        print("error: %s is not installed in %s; settings not changed" % (ID, cd))
+        return 1
+    errs = load_errors(entry)
+    if errs:
+        print("error: %s does not load in %s: %s; settings not changed" % (ID, cd, "; ".join(errs)))
         return 1
     rc = run_cmd.thirdparty([c for c in comps if c in ("ruflo", "design", "superpowers")], yes, cd, env)
     if rc:
@@ -212,7 +304,8 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
         rec["data_files"] = sorted(set(rec.get("data_files", [])) | set(wrote))
     try:
         # comps_all=comps: entries of deselected components are stale and come out of settings.json
-        ok = di.apply_settings(repo, cd, comps, rec, Path.home(), mapping=mapping, yes=yes, comps_all=comps)
+        ok = di.apply_settings(repo, cd, comps, rec, Path.home(), mapping=mapping, yes=yes, comps_all=comps,
+                               post=(lambda f: native_rules(f, plugin_root)) if pu.IS_WINDOWS else None)
     except ValueError as e:
         print("error: settings fragment: %s; settings not changed" % e)
         return 1
@@ -222,11 +315,11 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     rec["plugin_root"] = plugin_root
     _save_json(rec_path, rec)
     write_workflow_doc(repo, root)
-    write_chain_local(root, comps, flowobserve, repo)
+    write_chain_local(root, comps, flowobserve, repo, cd)
     add_account(root, cd)
-    warn = _mcp_python_warning() if "jev" in comps else None
-    if warn:
-        print(warn)
+    if "jev" in comps and not key and not any((os.environ.get(k) or "").strip() for k in KEY_VARS):
+        print("note: Jev needs an OpenRouter key: set OPENROUTER_API_KEY in your shell profile, or run "
+              "/plugin configure %s in Claude Code (or re-run with --openrouter-key)." % ID)
     print("Dryas set up in %s (plugin at %s, state in %s)" % (cd, plugin_root, root))
     return 0
 
@@ -239,9 +332,12 @@ def verify(cd: Path, comps: List[str]) -> int:
         print("%s  %s%s" % (status, name, ("  (" + detail + ")") if detail else ""))
         return 1 if status == "FAIL" else 0
 
-    listed = cd / "plugins" / "installed_plugins.json"
-    root = install_path(cd)
-    fails += say("PASS" if root else "FAIL", "%s listed in %s" % (ID, listed))
+    entry = plugin_entry(cd)
+    root = _root(cd, entry)
+    fails += say("PASS" if root else "FAIL", "%s listed in %s" % (ID, cd), root or "")
+    errs = load_errors(entry) if root else []
+    if root:
+        fails += say("FAIL" if errs else "PASS", "dryas loads without errors", "; ".join(errs))
     if not root:
         print("verify: %d failed" % fails)
         return fails
@@ -324,7 +420,8 @@ def _purge(root: Path) -> None:
         root.rmdir()
         print("removed %s" % root)
     except OSError:
-        print("kept %s (contains files Dryas did not create)" % root)
+        left = sorted(str(p.relative_to(root)).replace("\\", "/") for p in root.rglob("*") if not p.is_dir())
+        print("kept %s (%s)" % (root, "your notes" if left == [KEEP] else "contains files Dryas did not create"))
 
 
 def uninstall(cd: Path, purge: bool) -> int:
@@ -368,7 +465,9 @@ def uninstall(cd: Path, purge: bool) -> int:
     except (OSError, ValueError):
         known = False
     left = None  # None = account list unknown
-    if known:
+    if not isinstance(added, dict):  # this dir may still use Dryas: it stays listed
+        print("kept %s in %s" % (cd, acc_path))
+    elif known:
         left = remove_account(root, cd)
     elif acc_path.exists():
         print("warning: %s is unreadable; left as it is" % acc_path)
@@ -380,6 +479,9 @@ def uninstall(cd: Path, purge: bool) -> int:
             why = "the list of accounts using it is missing or unreadable"
         elif left:
             why = "still used by " + ", ".join(left)
+        elif _codex_installed():
+            why = "your Codex Dryas install uses it (%s); uninstall Codex first or in the same run (--harness both)" \
+                % _codex_installed()
         else:
             why = "it is a symlink" if raw.is_symlink() else _purge_refusal(root, cd)
         if why:

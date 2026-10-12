@@ -65,7 +65,7 @@ def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Seq
         probs.append("Missing: %s. Install them and re-run (this installer never installs system packages)."
                      % " ".join(missing))
     if "ruflo" in comps:
-        root = Path(os.environ.get("DRYAS_DATA_ROOT") or Path.home() / ".dryas")
+        root = Path(os.path.expanduser(os.environ.get("DRYAS_DATA_ROOT") or str(Path.home() / ".dryas")))
         if any(pu.space_free(p) is None for p in [sys.executable, root] + list(ruflo_paths)):
             probs.append(NO_SPACE_RUFLO)
     if harness in ("codex", "both") and pu.IS_WINDOWS and \

@@ -29,7 +29,7 @@ class E2ETest(unittest.TestCase):
         self.home.mkdir()
         fb = self.tmp / "bin"
         fakecli.make(fb, "claude", self.tmp / "calls.jsonl", outputs={"mcp list": "jev: ok\n"},
-                     epilogue=EPILOGUE % (INSTALLED, str(self.tmp / "envs.jsonl")))
+                     epilogue=EPILOGUE % (INSTALLED, str(self.tmp / "envs.jsonl")), plugin_list=True)
         fakecli.make(fb, "codex", self.tmp / "calls.jsonl", outputs={"mcp list": "jev\n"})
         self.env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "DRYAS_DATA_ROOT", "CODEX_HOME",
                                                                    "CLAUDE_CONFIG_DIR", "CLAUDE_PLUGIN_ROOT", "DRYAS_PY")}

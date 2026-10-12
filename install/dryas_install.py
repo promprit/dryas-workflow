@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -201,7 +201,8 @@ def _remove_stale_files(repo: Path, cd: Path, comps_all: List[str], rec: dict, d
 
 
 def _mapping(comps: List[str], home: Path, cd: Path) -> Dict[str, str]:
-    m = {"HOME": pu.fwd(home), "DRYAS_DATA_ROOT": pu.fwd(os.environ.get("DRYAS_DATA_ROOT", str(Path(home) / ".dryas"))),
+    m = {"HOME": pu.fwd(home),
+         "DRYAS_DATA_ROOT": pu.fwd(os.path.expanduser(os.environ.get("DRYAS_DATA_ROOT", str(Path(home) / ".dryas")))),
          "PY": PY, "CD": pu.fwd(cd),
          "PY_SAFE": pu.fwd(pu.space_free(sys.executable) or ""), "CD_SAFE": pu.fwd(pu.space_free(cd) or "")}
     root, default = m["DRYAS_DATA_ROOT"], str(Path(home) / ".dryas")
@@ -244,10 +245,12 @@ def _unique(p: Path) -> Path:
 
 def apply_settings(repo: Path, cd: Path, comps: List[str], rec: dict, home: Path, ts: str = "",
                    mapping: Optional[Dict[str, str]] = None, dry: bool = False, yes: bool = False,
-                   comps_all: Optional[List[str]] = None) -> bool:
+                   comps_all: Optional[List[str]] = None, post: Optional[Callable[[dict], dict]] = None) -> bool:
+    """post: applied to each rendered fragment (plugin setup adds the Windows native-path rules there)."""
     mapping = mapping if mapping is not None else _mapping(comps, home, cd)
-    frag = _fragment(repo, comps, mapping)
-    stale = upgrade.stale_settings(rec.get("settings", {}), _fragment(repo, comps_all or comps, mapping))
+    post = post or (lambda f: f)
+    frag = post(_fragment(repo, comps, mapping))
+    stale = upgrade.stale_settings(rec.get("settings", {}), post(_fragment(repo, comps_all or comps, mapping)))
     path = cd / "settings.json"
     orig = sm.load_settings(path)
     base = sm.unmerge(orig, stale) if upgrade.has_any(stale) else orig
