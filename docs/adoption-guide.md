@@ -21,7 +21,7 @@ For: a team that agrees with the model but has its own tools, models or rules.
    - `reference/dryas.yaml`, to record your bindings (models, judge, memory);
    - `claude/CLAUDE.md.template` and `docs/workflow.md`, the always-loaded rules and the full reference.
 3. Re-run the installer on every machine. Each re-install brings `~/.claude` back in step with your fork.
-4. Keep machine-only notes in `~/.claude/docs/dryas-local.md`; the installer never touches it.
+4. Keep machine-only notes in `~/.dryas/docs/dryas-local.md`; the installer never touches it.
 
 ## 3. Write a new edition for another harness
 

@@ -16,6 +16,9 @@ FILES = {"executor.md": "claude/agents/executor.md", "orchestrate-claude.md": "c
 MODEL_POLICY_OWNERS = {"claude/skills/orchestrate/SKILL.md"}
 
 
+SETTINGS = "the account's settings.json (`$CLAUDE_CONFIG_DIR/settings.json`, default `~/.claude/settings.json`)"
+
+
 def plugin_form(t):
     """The pre-pstack fixtures are old releases: apply the plugin rewrite (no install tokens) to compare."""
     for a, b in (('"{{PY}}" -X utf8 "{{CD}}/', '"%s/bin/dryas-py" "%s/' % (ROOT, ROOT)), ("{{CD}}", ROOT),
@@ -25,7 +28,15 @@ def plugin_form(t):
                  ("~/.claude/skills/orchestrate/", ROOT + "/skills/orchestrate/"),
                  ("`~/.claude/jev/chain.json`", "`jev/chain.json` in the Dryas plugin folder"),
                  ("`~/.claude/pstack/benchmark-checklist.md`", "`pstack/benchmark-checklist.md` in the Dryas plugin folder"),
-                 ("`~/.claude/agents/executor.md`", "`agents/executor.md` in the Dryas plugin folder")):
+                 ("`~/.claude/agents/executor.md`", "`agents/executor.md` in the Dryas plugin folder"),
+                 ("`subagent_type: executor`", "`subagent_type: dryas:executor`"),
+                 ("`~/.claude/docs/dryas-workflow.md` (installed from", "`~/.dryas/docs/dryas-workflow.md` (written by setup from"),
+                 ("`~/.claude/docs/dryas-local.md`", "`~/.dryas/docs/dryas-local.md`"),
+                 ("then re-run the installer. Never hand-edit the installed copies or this block.",
+                  "then re-run setup (`install/install.sh`, once per Claude config dir). Never hand-edit the plugin files, the copy in `~/.dryas/docs`, or these injected rules."),
+                 ("`~/.claude/settings.json`. Show", SETTINGS + ". Show"),
+                 ("(`\"model\": \"opus\"` in ~/.claude/settings.json)", "(`\"model\": \"opus\"`, set by setup in " + SETTINGS + ")"),
+                 ("`agents/executor.md` in the Dryas plugin folder stays", "the plugin's `dryas:executor` agent stays")):
         t = t.replace(a, b)
     return t
 

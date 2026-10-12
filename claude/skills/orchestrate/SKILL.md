@@ -76,7 +76,7 @@ Review and cleanup tasks (`Failing test first: none (review)` or `none (cleanup)
 1. Initialise the Ruflo swarm once (swarm_init from ruflo-tools.md). Call it with topology "hierarchical" (the plugin default is hierarchical-mesh).
 2. Write `.orchestrate/active.json` = `{"active": [<task ids being dispatched now>]}` before dispatching; this arms the scope lock. On EVERY exit path — success, failure handed to the user (§7.3/§7.4), user abort, or any error — delete `.orchestrate/active.json` before stopping; the scope lock stays armed while it exists.
 3. Give each executor ONLY its section: `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
-4. Dispatch with the Agent tool, `subagent_type: executor`. Pick the start tier per task, first match wins:
+4. Dispatch with the Agent tool, `subagent_type: dryas:executor`. Pick the start tier per task, first match wins:
    1. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus`, after `mcp__plugin_dryas_jev__log_escalation` (from_model sonnet, to_model opus, reason "skip-up: <why>", whatever `dispatch.haiku_default` says, so ESC-M1 counts it the same way as before Haiku; the skip-up reason tells observers it is a start tier, not a climb).
    2. `dispatch.haiku_default` false → no `model` (Sonnet from the agent's frontmatter). Do not ask `needs_sonnet`.
    3. `needs_sonnet` true at confidence ≥ threshold, or your own judgment → no `model` (Sonnet), after `mcp__plugin_dryas_jev__log_escalation` (from_model haiku, to_model sonnet, reason "skip-up: <why>").

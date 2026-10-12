@@ -88,7 +88,7 @@ Fork this repo and make the workflow yours:
 2. Edit `claude/CLAUDE.md.template` (the rules every session loads) and `docs/workflow.md` (the full reference). If your method differs, change the layer docs and `reference/dryas.yaml` too ([adoption guide](docs/adoption-guide.md)).
 3. Run `./install/install.sh` (or `.\install\install.ps1` on Windows). Every re-install brings your `~/.claude` back in step with your fork.
 
-Keep notes that only fit your machine in `~/.claude/docs/dryas-local.md`. The installer never touches that file.
+Keep notes that only fit your machine in `~/.dryas/docs/dryas-local.md`. The installer never touches that file.
 
 ## Reference stack
 

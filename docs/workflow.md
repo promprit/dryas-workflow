@@ -2,7 +2,7 @@
 
 This is the operational reference for the Dryas reference implementation (the method itself is in `architecture.md` and the spec in the repo): what each layer does, the order things run in, where files live, and the rules. Claude reads it before doing multi-step work, and when asked "how does our workflow work".
 
-- **Source of truth:** this file in the dryas-workflow repo. The installer copies it to `~/.claude/docs/dryas-workflow.md`; the always-loaded rules come from `claude/CLAUDE.md.template`. Change both in the repo (or your fork) and re-run the installer. Machine-specific notes can go in `~/.claude/docs/dryas-local.md`, which the installer never touches.
+- **Source of truth:** this file in the dryas-workflow repo. The installer copies it to `~/.dryas/docs/dryas-workflow.md`; the always-loaded rules come from `claude/CLAUDE.md.template`. Change both in the repo (or your fork) and re-run the installer. Machine-specific notes can go in `~/.dryas/docs/dryas-local.md`, which the installer never touches.
 
 Last updated: 2026-10-05.
 
@@ -246,7 +246,7 @@ This is the maintainer's example layout (a Mac plus a dev SSD at `$DEV_ROOT`); o
 | Mac (`~`) | SSD (`$DEV_ROOT`) |
 |---|---|
 | `~/.claude/` (settings, skills, agents, commands, hooks, jev code and logs, ruflo helpers, plugins, Claude memory per project) | `projects/<name>` |
-| `~/.claude/docs/dryas-workflow.md` (this file, installed) | `CLAUDE.md` (workspace rules, inherited by every project) |
+| `~/.dryas/docs/dryas-workflow.md` (this file, installed) | `CLAUDE.md` (workspace rules, inherited by every project) |
 | `ruflo` CLI (nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, **Ruflo memory**) |
 | `~/.zshrc` (`OPENROUTER_API_KEY`, guarded cache block, `dev` alias) | `_tools/` (settings_merge.py, relink_claude.py) |
 | `~/.claude/release/` (private export pipeline, never published) | `projects/dryas-workflow` (public repo clone; installer `install/install.sh` generates Ruflo helpers with `ruflo init` + pinned patches) |

@@ -32,7 +32,7 @@ Done:
 Failing test first: none (review)
 ```
 
-Put both ids in `.orchestrate/active.json`. The empty Scope makes the scope lock deny every edit. Dispatch both in one message with `subagent_type: executor`: reviewer A on the executor's default model, reviewer B on the next model on the ladder (the orchestrate skill names it), never the top rung. Remove both ids when they return.
+Put both ids in `.orchestrate/active.json`. The empty Scope makes the scope lock deny every edit. Dispatch both in one message with `subagent_type: dryas:executor`: reviewer A on the executor's default model, reviewer B on the next model on the ladder (the orchestrate skill names it), never the top rung. Remove both ids when they return.
 
 Outside `/orchestrate`, dispatch the same two reviewers with "Do not edit any file" at the top of the prompt.
 
