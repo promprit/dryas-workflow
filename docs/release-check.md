@@ -2,6 +2,8 @@
 
 Run this after installing Dryas Workflow on a new machine (Windows, WSL, macOS or Linux). It checks that the plugin is installed in each Claude config dir, that its hooks run and that the scope lock blocks out-of-scope edits. It never changes your Claude or Codex folders or `~/.dryas`: the hooks it runs get a temporary folder for their logs, handoffs, compaction notes, data root and `chain.local.json` (empty, so optional local stages such as FlowObserve stay off), and no OpenRouter key. Only the Jev route check calls OpenRouter, when a key is set, and its logs also go to a temporary folder.
 
+Before tagging a release: bump claude/.claude-plugin/plugin.json version (and the marketplace.json plugin entry) if any shipped plugin content changed.
+
 ## Run it
 
     python tools/release_check.py

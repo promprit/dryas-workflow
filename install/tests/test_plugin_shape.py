@@ -35,6 +35,14 @@ class PluginShapeTest(unittest.TestCase):
         self.assertNotIn("version", dep)
         self.assertTrue(p["userConfig"]["openrouter_key"]["sensitive"])
 
+    def test_versions_are_semver_and_in_sync(self):
+        # no other release version exists in the repo; the marketplace entry must track plugin.json
+        # (bump both whenever shipped plugin content changes)
+        p = load(PLUGIN / ".claude-plugin" / "plugin.json")
+        m = load(ROOT / ".claude-plugin" / "marketplace.json")
+        self.assertRegex(p["version"], r"^\d+\.\d+\.\d+$")
+        self.assertEqual(m["plugins"][0]["version"], p["version"])
+
     def test_hooks_point_at_shipped_files(self):
         h = load(PLUGIN / "hooks" / "hooks.json")["hooks"]
         cmds = [x["command"] for groups in h.values() for g in groups for x in g["hooks"]]

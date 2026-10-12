@@ -12,6 +12,10 @@
 - `install/tests/test_portability.py` enforces the banned patterns. Mark a deliberate exception with `portable-ok: <reason>` on the same line.
 - CI must be green on macOS, Ubuntu and Windows before merging to main. Branch protection enforces this.
 
+## Plugin version
+
+- Bump `version` in `claude/.claude-plugin/plugin.json` (and the plugin entry in `.claude-plugin/marketplace.json`) whenever shipped plugin content changes between releases; installed copies only update on a new version.
+
 ## Running the tests
 
 ```

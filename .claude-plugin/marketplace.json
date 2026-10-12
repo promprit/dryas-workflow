@@ -1,8 +1,18 @@
 {
   "name": "dryas-workflow",
-  "owner": {"name": "Promprit"},
-  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
+  "description": "Dryas Workflow for Claude Code and Codex: plan, scope lock, Jev routing and review.",
+  "owner": {
+    "name": "Promprit"
+  },
+  "allowCrossMarketplaceDependenciesOn": [
+    "claude-plugins-official"
+  ],
   "plugins": [
-    {"name": "dryas", "source": "./claude", "description": "Dryas Workflow for Claude Code: rules, scope lock, Jev chain, agents, commands and skills."}
+    {
+      "name": "dryas",
+      "source": "./claude",
+      "description": "Dryas Workflow for Claude Code: rules, scope lock, Jev chain, agents, commands and skills.",
+      "version": "1.0.0"
+    }
   ]
 }
