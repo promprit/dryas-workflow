@@ -60,17 +60,22 @@ def _scan(line: str, st: dict) -> None:
             i += 1
 
 
-def lines(text: str) -> List[Tuple[str, Optional[Header]]]:
+def rows(text: str) -> List[Tuple[str, Optional[Header], bool]]:
+    """(line, header or None, free): free = the line starts outside a multi-line string and outside brackets."""
     st, out = {"ml": None, "depth": 0}, []  # type: ignore[var-annotated]
     for line in text.splitlines(True):
-        hdr = None
-        if st["ml"] is None and st["depth"] <= 0:
+        hdr, free = None, st["ml"] is None and st["depth"] <= 0
+        if free:
             st["depth"] = 0
             hdr = norm_header(line)
         if hdr is None:
             _scan(line, st)
-        out.append((line, hdr))
+        out.append((line, hdr, free))
     return out
+
+
+def lines(text: str) -> List[Tuple[str, Optional[Header]]]:
+    return [(line, hdr) for line, hdr, _ in rows(text)]
 
 
 _INLINE = re.compile(r"""^\s*("(?:[^"\\]|\\.)*"|'[^']*'|[A-Za-z0-9_-]+)\s*=""")
@@ -87,43 +92,74 @@ def _inline_key(line: str) -> Optional[str]:
         return None
 
 
+def _ours(path: KeyPath, want) -> bool:
+    return len(path) >= 3 and path[:2] == STATE and path[2] in want  # with its sub-tables and [[arrays]]
+
+
 def remove_trust(text: str, keys: List[str]) -> Tuple[str, List[str]]:
-    """Drop the [hooks.state."<key>"] tables (to the next header; comments stay, they head the next table) and the
-    "<key>" = {...} lines inside [hooks.state] for exactly these keys. A [hooks.state] header left with nothing under
-    it and no [hooks.state.*] table left goes too (Codex writes one when it trusts a hook). Returns the new text (unchanged when nothing was found) and
-    the keys not found."""
-    want, found, out = set(keys), set(), []  # type: ignore[var-annotated]
+    """Drop the [hooks.state."<key>"] tables (with their sub-tables, to the next header; comments stay, they head the
+    next table) and the "<key>" = {...} lines inside [hooks.state] for exactly these keys. A [hooks.state] header left
+    with nothing under it and no [hooks.state.*] table left goes too (Codex writes one when it trusts a hook). Only
+    blank lines next to a removed span are collapsed; newline style and the final newline are kept. Returns the new
+    text (unchanged when nothing was found) and the keys not found."""
+    want, found = set(keys), set()  # type: ignore[var-annotated]
+    rs = rows(text)
+    gone = [False] * len(rs)
     skip, section = False, None
-    for line, hdr in lines(text):
+    for i, (line, hdr, free) in enumerate(rs):
         if hdr:
             section = None if hdr[1] else hdr[0]
-            path = hdr[0]
-            skip = not hdr[1] and len(path) == 3 and path[:2] == STATE and path[2] in want
+            skip = _ours(hdr[0], want)
             if skip:
-                found.add(path[2])
-                continue
+                found.add(hdr[0][2])
+                gone[i] = True
         elif skip:
-            if line.strip().startswith("#"):
-                out.append(line)
-            continue
-        elif section == STATE:
+            gone[i] = not (free and line.strip().startswith("#"))
+        elif section == STATE and free:
             k = _inline_key(line)
             if k in want:
                 found.add(k)
-                continue
-        out.append(line)
+                gone[i] = True
     if not found:
         return text, list(keys)
-    rows, keep = lines("".join(out)), []
-    subs = any(h and len(h[0]) > 2 and h[0][:2] == STATE for _, h in rows)
-    for i, (line, hdr) in enumerate(rows):
+    subs = any(h and len(h[0]) > 2 and h[0][:2] == STATE for i, (_, h, _f) in enumerate(rs) if not gone[i])
+    for i, (line, hdr, free) in enumerate(rs):
         if hdr == (STATE, False) and not subs:
             j = i + 1
-            while j < len(rows) and not rows[j][1] and not rows[j][0].strip():
+            while j < len(rs) and not rs[j][1] and (gone[j] or (rs[j][2] and not rs[j][0].strip())):
                 j += 1
-            if j == len(rows) or rows[j][1]:  # nothing but blank lines under it
-                continue
-        keep.append(line)
-    new = re.sub(r"\n{3,}", "\n\n", "".join(keep))
-    new = new.rstrip("\n") + "\n" if new.strip() else ""
+            if j == len(rs) or rs[j][1]:  # nothing left under it
+                for k in range(i, j):
+                    gone[k] = True
+
+    def blank(k: int) -> bool:
+        return rs[k][2] and not rs[k][0].strip()
+    i = 0
+    while i < len(rs):  # each removed span: keep at most one blank line around it, none at the start or end
+        if not gone[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(rs) and gone[j]:
+            j += 1
+        before, k = [], i - 1
+        while k >= 0 and not gone[k] and blank(k):
+            before.append(k)
+            k -= 1
+        after, m = [], j
+        while m < len(rs) and not gone[m] and blank(m):
+            after.append(m)
+            m += 1
+        edge = k < 0 or m == len(rs)
+        for x in (before + after)[0 if edge else 1:]:
+            gone[x] = True
+        i = j
+    new = "".join(line for x, (line, _, _f) in enumerate(rs) if not gone[x])
+    nl = "\r\n" if "\r\n" in text else "\n"
+    if not new.strip():
+        new = ""
+    elif text.endswith(("\n", "\r")):
+        new = new if new.endswith(("\n", "\r")) else new + nl
+    else:
+        new = new.rstrip("\r\n")
     return new, [k for k in keys if k not in found]

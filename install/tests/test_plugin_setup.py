@@ -661,6 +661,24 @@ class UninstallTest(unittest.TestCase):
         self.assertIn("Codex in %s" % (e.t / "cx-b"), out)
         self.assertNotIn(str(e.t / "cx-a"), out)
 
+    def test_no_record_drops_stale_claude_entry(self):
+        e = Env(self)
+        ps.add_account(e.root, e.a, "claude_dirs")
+        ps.add_account(e.root, e.b, "claude_dirs")
+        _out(lambda: self.assertEqual(ps.uninstall(e.a, purge=False), 0))
+        self.assertEqual(json.loads((e.root / "accounts.json").read_text())["claude_dirs"], [str(e.b)])
+
+    def test_account_lists_of_wrong_type(self):
+        e = Env(self)
+        e.root.mkdir()
+        (e.root / "accounts.json").write_text(json.dumps({"codex_dirs": "/x/cdx", "claude_dirs": []}))
+        out = _out(lambda: self.assertFalse(ps.purge_shared()))
+        self.assertIn("unreadable", out)
+        self.assertTrue(e.root.exists())
+        self.assertEqual(ps._codex_dirs(e.root), [])
+        ps.add_account(e.root, e.a, "codex_dirs")  # a broken list is replaced, never iterated char by char
+        self.assertEqual(json.loads((e.root / "accounts.json").read_text())["codex_dirs"], [str(e.a)])
+
     def test_purge_message_names_notes(self):
         e = Env(self)
         ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)

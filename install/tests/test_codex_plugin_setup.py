@@ -662,6 +662,44 @@ class UninstallTest(unittest.TestCase):
         self.assertNotIn("mcp_servers.jev", e.toml(e.a))
         self.assertNotIn("dryas", e.toml(e.a))
 
+    def test_no_record_drops_stale_account_entry(self):
+        e = Env(self)
+        cps.ps.add_account(e.root, e.a, "codex_dirs")
+        cps.ps.add_account(e.root, e.b, "codex_dirs")
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0)
+        acc = json.loads((e.root / "accounts.json").read_text(encoding="utf-8"))
+        self.assertEqual(acc["codex_dirs"], [str(cps.ps.norm(e.b))])
+
+    def test_bad_toml_body_type_is_a_lost_body(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core"], yes=True)
+        rec = json.loads((e.a / cps.RECORD).read_text(encoding="utf-8"))
+        rec["toml_body"] = 5
+        (e.a / cps.RECORD).write_text(json.dumps(rec), encoding="utf-8")
+        rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("dryas", e.toml(e.a))  # the markers still say which tables are ours
+
+    def test_config_write_error_keeps_record(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        real = open
+
+        def fake_open(f, mode="r", *a, **k):
+            if str(f) == str(e.a / "config.toml") and "w" in mode:
+                raise PermissionError("read-only")
+            return real(f, mode, *a, **k)
+        with mock.patch("builtins.open", fake_open):
+            rc, out = quiet(cps.uninstall, e.a)
+        self.assertEqual(rc, 1)
+        self.assertIn("read-only", out)
+        self.assertTrue((e.a / cps.RECORD).exists())
+        self.assertIn(str(cps.ps.norm(e.a)), json.loads((e.root / "accounts.json").read_text(encoding="utf-8"))["codex_dirs"])
+        rc, out = quiet(cps.uninstall, e.a)  # re-run resumes
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("hooks.state", e.toml(e.a))
+
     def test_changed_table_left_with_warning(self):
         e = Env(self)
         quiet(cps.setup, REPO, e.a, ["core"], yes=True)
@@ -765,7 +803,7 @@ class LegacyProblemTest(unittest.TestCase):
             self.assertIn(str(e.a / ct.RECORD), cps.legacy_problem(e.a, e.home), k)
 
     def test_skill_name_must_stay_in_skills_dir(self):
-        for name in ("..", "a/b", "", "."):
+        for name in ("..", "a/b", "", ".", "a\\b", "c:x", "skill.", "skill ", ".hidden", "-x", "a b"):
             e = Env(self)
             legacy_codex.legacy(e.home, e.a)
             rec = json.loads((e.a / ct.RECORD).read_text(encoding="utf-8"))

@@ -212,6 +212,12 @@ def rewrite_config(text: str, body: str, owned) -> str:
     return new + "\n" if new.strip() else ""
 
 
+def _body(rec: dict) -> Optional[str]:
+    """The recorded block body; anything but a string counts as lost (the markers then decide)."""
+    b = rec.get("toml_body")
+    return b if isinstance(b, str) else None
+
+
 def write_config_block(cfg: Path, body: str, rec: dict) -> bool:
     """Write, rewrite or remove our tables in config.toml. Only tables setup wrote (and nobody changed since) are
     touched; tables Codex or the user add, often right after ours inside the markers, stay. False = nothing written:
@@ -222,7 +228,7 @@ def write_config_block(cfg: Path, body: str, rec: dict) -> bool:
     except OSError:
         text = None
     cur = text or ""
-    owned, changed = owned_tables(cur, rec.get("toml_body"))
+    owned, changed = owned_tables(cur, _body(rec))
     for path in changed:
         print("warning: %s in %s was changed after Dryas setup wrote it; leaving it as it is" % (_show(path), cfg))
     ours = [h[0] for _, h in _lines(body) if h]
@@ -318,10 +324,15 @@ def _runtime_users(cdx: Path, home: Path) -> List[Path]:
     return out
 
 
-def _check_legacy_items(rec: dict) -> None:
+SKILL_NAME = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+
+
+def _check_legacy_items(rec: dict, home: Path) -> None:
     """The element shapes ct.uninstall_codex relies on; a skill name must name one folder in ~/.agents/skills."""
+    sd = ct.skills_dir(home).resolve()
     for n in rec.get("skills", []):
-        if not isinstance(n, str) or n in ("", ".", "..") or "/" in n or "\\" in n or ":" in n:
+        if not (isinstance(n, str) and SKILL_NAME.match(n) and not n.endswith(".")
+                and (sd / n).resolve().parent == sd):
             raise ValueError('"skills" holds %s, not a skill folder name' % json.dumps(n))
     for n, b in rec.get("skill_backups", {}).items():
         if b is not None and not isinstance(b, str):
@@ -348,7 +359,7 @@ def legacy_problem(cdx: Path, home: Path) -> str:
             for k, t in (("skills", list), ("skill_backups", dict), ("hooks", dict), ("mcp", dict)):
                 if not isinstance(rec.get(k, t()), t):
                     raise ValueError('"%s" is not a %s' % (k, t.__name__))
-            _check_legacy_items(rec)
+            _check_legacy_items(rec, Path(home))
         except (OSError, ValueError) as e:
             return "%s cannot be read (%s)" % (p, e)
         try:
@@ -502,18 +513,18 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     return 0
 
 
-def _remove_config(cfg: Path, rec: dict) -> None:
+def _remove_config(cfg: Path, rec: dict) -> bool:
     """Drop the recorded trust keys and the tables setup wrote (only while unchanged) from config.toml; everything
-    else in the file stays as it is."""
+    else in the file stays as it is. False = the file could not be written (reported)."""
     try:
         with open(cfg, encoding="utf-8", newline="") as fh:
             text = fh.read()
     except FileNotFoundError:
-        return
+        return True
     except OSError as e:
         print("warning: %s cannot be read (%s); remove the Dryas entries by hand" % (cfg, e))
-        return
-    owned, changed = owned_tables(text, rec.get("toml_body"))
+        return True
+    owned, changed = owned_tables(text, _body(rec))
     for path in changed:
         print("warning: %s in %s was changed after Dryas setup wrote it; left as it is" % (_show(path), cfg))
     new = text
@@ -524,15 +535,20 @@ def _remove_config(cfg: Path, rec: dict) -> None:
     if len(missing) < len(rec.get("trusted") or {}):
         print("removed the Dryas hook trust from %s" % cfg)
     if new == text:
-        return
-    if not new.strip() and rec.get("toml_created"):
-        cfg.unlink()
-        print("removed %s (Dryas created it)" % cfg)
-        return
-    with open(cfg, "w", encoding="utf-8", newline="") as fh:
-        fh.write(new)
+        return True
+    try:
+        if not new.strip() and rec.get("toml_created"):
+            cfg.unlink()
+            print("removed %s (Dryas created it)" % cfg)
+            return True
+        with open(cfg, "w", encoding="utf-8", newline="") as fh:
+            fh.write(new)
+    except OSError as e:
+        print("error: could not write %s (%s)" % (cfg, e))
+        return False
     if owned:
         print("removed the Dryas tables from %s" % cfg)
+    return True
 
 
 def uninstall(cdx: Path) -> int:
@@ -552,6 +568,7 @@ def uninstall(cdx: Path) -> int:
     rec_path = cdx / RECORD
     if not rec_path.exists():
         print("no Dryas plugin install recorded in %s" % cdx)
+        ps.forget_account(root, cdx, "codex_dirs")  # a stale entry must not block --purge forever
         return 0
     rec = ps._load_json(rec_path, {})
     if not rec or not isinstance(rec.get("trusted", {}), dict):
@@ -570,20 +587,15 @@ def uninstall(cdx: Path) -> int:
             rc = _say_run(["codex", "plugin", "marketplace", "remove", MARKET], cdx, False)
             if rc:
                 print("warning: `codex plugin marketplace remove` failed (exit %d); remove %s by hand" % (rc, MARKET))
-    _remove_config(cdx / "config.toml", rec)
+    if not _remove_config(cdx / "config.toml", rec):
+        print("error: Dryas entries are still in %s; the record is kept: fix the error above and re-run the "
+              "uninstall (it resumes)" % (cdx / "config.toml"))
+        return 1
     try:
         (cdx / "plugins" / "cache" / MARKET).rmdir()  # Codex leaves the empty marketplace folder behind
     except OSError:
         pass
-    acc = root / "accounts.json"
-    try:
-        known = isinstance(json.loads(acc.read_text(encoding="utf-8")), dict)
-    except (OSError, ValueError):
-        known = False
-    if known:
-        ps.remove_account(root, cdx, "codex_dirs")
-    elif acc.exists():
-        print("warning: %s is unreadable; left as it is" % acc)
+    ps.forget_account(root, cdx, "codex_dirs")
     rec_path.unlink()
     if rec.get("dir_created") and cdx.is_dir() and not os.listdir(str(cdx)):
         cdx.rmdir()

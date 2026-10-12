@@ -58,6 +58,31 @@ class RemoveTrustTest(unittest.TestCase):
         text = '[hooks.state."%s"]\ntrusted_hash = "a"\n# my note about [z]\n[z]\nb = 2\n' % K1
         self.assertEqual(tt.remove_trust(text, [K1])[0], '# my note about [z]\n[z]\nb = 2\n')
 
+    def test_multiline_string_blank_lines_kept(self):
+        user = 'instructions = """a\n\n\n\nb"""\n\n\n\n[x]\ny = 1\n'
+        text = user + '\n[hooks.state."%s"]\ntrusted_hash = "a"\n' % K1
+        new, _ = tt.remove_trust(text, [K1])
+        self.assertEqual(new, user)  # user blank lines away from the removed table stay too
+        text = 'instructions = """a\n\n\n\n[hooks.state."%s"]\n\n\nb"""\n' % K1
+        self.assertEqual(tt.remove_trust(text, [K1]), (text, [K1]))
+
+    def test_blank_lines_collapse_only_at_removed_spans(self):
+        text = 'a = 1\n\n\n[hooks.state."%s"]\ntrusted_hash = "x"\n\n\n[z]\nb = 2\n' % K1
+        self.assertEqual(tt.remove_trust(text, [K1])[0], 'a = 1\n\n[z]\nb = 2\n')
+
+    def test_sub_tables_go_with_the_key(self):
+        text = ('[hooks.state."%s"]\ntrusted_hash = "x"\n\n[hooks.state."%s".extra]\nv = 1\n\n'
+                '[[hooks.state."%s".list]]\nv = 2\n\n[z]\nb = 2\n' % (K1, K1, K1))
+        self.assertEqual(tt.remove_trust(text, [K1]), ('[z]\nb = 2\n', []))
+
+    def test_newline_style_and_final_newline_kept(self):
+        text = 'a = 1\r\n\r\n[hooks.state."%s"]\r\ntrusted_hash = "x"\r\n\r\n[z]\r\nb = 2' % K1
+        self.assertEqual(tt.remove_trust(text, [K1])[0], 'a = 1\r\n\r\n[z]\r\nb = 2')
+        text = 'a = 1\r\n\r\n[hooks.state."%s"]\r\ntrusted_hash = "x"' % K1
+        self.assertEqual(tt.remove_trust(text, [K1])[0], 'a = 1')
+        text = 'a = 1\r\n\r\n[hooks.state."%s"]\r\ntrusted_hash = "x"\r\n' % K1
+        self.assertEqual(tt.remove_trust(text, [K1])[0], 'a = 1\r\n')
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -141,9 +141,14 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool],
     _save_json(p, loc)
 
 
+def _dirs(acc: dict, key: str) -> List[str]:
+    """The string entries of a list in accounts.json; a value that is not a list counts as empty."""
+    v = acc.get(key, [])
+    return [d for d in v if isinstance(d, str)] if isinstance(v, list) else []
+
+
 def _codex_dirs(root: Path) -> List[str]:
-    acc = _load_json(Path(root) / "accounts.json", {})
-    return [d for d in acc.get("codex_dirs", []) if isinstance(d, str)]
+    return _dirs(_load_json(Path(root) / "accounts.json", {}), "codex_dirs")
 
 
 def _codex_legacy() -> Optional[str]:
@@ -170,9 +175,9 @@ def _shared_warning(root: Path, old, new: List[str], cd: Optional[Path] = None) 
     acc = _load_json(Path(root) / "accounts.json", {})
 
     def others(key):
-        return [d for d in acc.get(key, []) if isinstance(d, str) and not (cd and pu.same_path(d, norm(cd)))]
+        return [d for d in _dirs(acc, key) if not (cd and pu.same_path(d, norm(cd)))]
     users = others("claude_dirs") + ["Codex in %s" % d for d in others("codex_dirs")]
-    if not acc.get("codex_dirs") and _codex_legacy():
+    if not _dirs(acc, "codex_dirs") and _codex_legacy():
         users.append("Codex")
     if not users:
         return
@@ -203,7 +208,7 @@ def add_account(root: Path, cd: Path, key: str = "claude_dirs") -> None:
     """Record a config dir under `key` in accounts.json ("claude_dirs" or "codex_dirs"); other keys are kept."""
     p, cd = Path(root) / "accounts.json", str(norm(cd))
     acc = _load_json(p, {})
-    dirs = [d for d in acc.get(key, []) if isinstance(d, str)]
+    dirs = _dirs(acc, key)
     if not any(pu.same_path(d, cd) for d in dirs):
         dirs.append(cd)
     acc[key] = dirs
@@ -213,11 +218,24 @@ def add_account(root: Path, cd: Path, key: str = "claude_dirs") -> None:
 def remove_account(root: Path, cd: Path, key: str = "claude_dirs") -> List[str]:
     p, cd = Path(root) / "accounts.json", str(norm(cd))
     acc = _load_json(p, {})
-    dirs = [d for d in acc.get(key, []) if isinstance(d, str) and not pu.same_path(d, cd)]
+    dirs = [d for d in _dirs(acc, key) if not pu.same_path(d, cd)]
     if p.exists():
         acc[key] = dirs
         _save_json(p, acc)
     return dirs
+
+
+def forget_account(root: Path, cd: Path, key: str = "claude_dirs") -> None:
+    """remove_account, but only while accounts.json is readable (else it is left as it is, with a warning)."""
+    acc = Path(root) / "accounts.json"
+    try:
+        known = isinstance(json.loads(acc.read_text(encoding="utf-8")), dict)
+    except (OSError, ValueError):
+        known = False
+    if known:
+        remove_account(root, cd, key)
+    elif acc.exists():
+        print("warning: %s is unreadable; left as it is" % acc)
 
 
 def native_rules(frag: dict, root) -> dict:
@@ -450,12 +468,12 @@ def purge_shared() -> bool:
         return False
     try:
         acc = json.loads((root / "accounts.json").read_text(encoding="utf-8"))
-        if not isinstance(acc, dict):
-            raise ValueError("not an object")
+        if not isinstance(acc, dict) or any(not isinstance(acc.get(k, []), list) for k in ("claude_dirs", "codex_dirs")):
+            raise ValueError("not an object with lists")
     except (OSError, ValueError):
         print("kept %s: the list of accounts using it is missing or unreadable" % root)
         return False
-    left = [d for k in ("claude_dirs", "codex_dirs") for d in acc.get(k, []) if isinstance(d, str)]
+    left = [d for k in ("claude_dirs", "codex_dirs") for d in _dirs(acc, k)]
     legacy = _codex_legacy()
     if left:
         why = "still used by " + ", ".join(left)
@@ -476,6 +494,7 @@ def uninstall(cd: Path, purge: bool) -> int:
     rec_path = cd / RECORD
     if not rec_path.exists():
         print("nothing to uninstall in %s" % cd)
+        forget_account(root, cd)  # a stale entry must not block --purge forever
         return 0
     rec = _load_json(rec_path, {})
     spath = cd / "settings.json"
