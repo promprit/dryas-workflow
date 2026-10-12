@@ -1,34 +1,13 @@
 """Render shipped files (chain.json, markdown tokens) for the installer."""
 import json
-import re
+import sys
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import settings_merge as sm
 
-GATED: Tuple[str, ...] = ("pstack-picks",)
-_MARK = re.compile(r"^<!-- (/?)(%s) -->\n?" % "|".join(re.escape(g) for g in GATED), re.M)
-
-
-def gate_blocks(text: str, comps: Iterable[str]) -> str:
-    """Keep the body of each <!-- NAME --> ... <!-- /NAME --> block when NAME is selected, else drop it."""
-    on, out, pos, open_name = set(comps), [], 0, None
-    for m in _MARK.finditer(text):
-        closing, name = m.group(1) == "/", m.group(2)
-        if closing != (open_name is not None) or (closing and name != open_name):
-            raise ValueError("unbalanced <!-- %s%s --> marker" % (m.group(1), name))
-        if not closing:
-            out.append(text[pos:m.start()])
-            open_name = name
-        else:
-            if open_name in on:
-                out.append(text[pos:m.start()])
-            open_name = None
-        pos = m.end()
-    if open_name is not None:
-        raise ValueError("unclosed <!-- %s --> marker" % open_name)
-    out.append(text[pos:])
-    return "".join(out)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "claude" / "jev"))
+from gating import GATED, gate_blocks  # noqa: E402,F401  (shared with the plugin's rules hook)
 
 
 def _installed_stages(cd: Optional[Path]) -> dict:

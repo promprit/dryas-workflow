@@ -50,7 +50,7 @@ class ShippedFilesTest(unittest.TestCase):
                       (CLAUDE / "commands" / "handoff.md").read_text(encoding="utf-8"))
 
     def test_shims_gone(self):
-        self.assertFalse((CLAUDE / "hooks").exists())
+        self.assertEqual(sorted(x.name for x in (CLAUDE / "hooks").iterdir()), ["hooks.json"])  # plugin hooks only, no shims
         self.assertFalse((CLAUDE / "jev" / "hooks").exists())
 
 

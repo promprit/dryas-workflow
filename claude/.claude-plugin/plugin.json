@@ -1,0 +1,9 @@
+{
+  "name": "dryas",
+  "version": "1.0.0",
+  "description": "Dryas Workflow for Claude Code: rules, scope lock, Jev chain, agents, commands and skills.",
+  "dependencies": [{"name": "superpowers", "marketplace": "claude-plugins-official", "version": ">=6.4.2"}],
+  "userConfig": {
+    "openrouter_key": {"type": "string", "title": "OpenRouter API key", "description": "Used by Jev. Leave empty to use OPENROUTER_API_KEY from your shell.", "sensitive": true, "required": false}
+  }
+}

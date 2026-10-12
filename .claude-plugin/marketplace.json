@@ -1,0 +1,8 @@
+{
+  "name": "dryas-workflow",
+  "owner": {"name": "Promprit"},
+  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
+  "plugins": [
+    {"name": "dryas", "source": "./claude", "description": "Dryas Workflow for Claude Code: rules, scope lock, Jev chain, agents, commands and skills."}
+  ]
+}
