@@ -61,7 +61,7 @@ Brainstorm → Plan → Judge → Build → Escalate → Review → Ship
 ## How the reference implementation works
 
 - **Escalation ladder.** Haiku, then Sonnet, then Opus, then Fable. Each step is logged with a reason.
-- **Scope lock.** An executor can only edit the files its task names. A hook blocks other edits.
+- **Scope lock.** An executor can only edit the files its task names. A hook blocks edits to other files made with the file-edit tools; writes from shell commands are not covered.
 - **Parallel loops.** One project can run many loops at once. The rule is one agent per git worktree: each loop has its own worktree and branch, so loops never collide, and each merges only after its own review.
 - **Jev gating.** Jev is a small model that answers narrow, typed questions. It never writes code or plans. If it is unsure, the main model decides.
 - **Design rule.** UI work goes through Impeccable and UI UX Pro Max.
@@ -91,6 +91,15 @@ Manual route, inside Claude Code:
 (Shell form: `claude plugin install dryas --marketplace promprit/dryas-workflow`.) This gives you the plugin only. Superpowers must also be installed from `claude-plugins-official`, and you still need setup for the settings, permissions and shared state in `~/.dryas`.
 
 `--uninstall` removes Dryas from one config dir and keeps `~/.dryas`; adding `--purge` on the last account also deletes the logs, `/tune` thresholds and handoffs there, but keeps your notes in `~/.dryas/docs/dryas-local.md`.
+
+### Codex
+
+```
+install/install.sh --harness codex                            # ~/.codex (--harness both: Codex and Claude Code)
+install/install.sh --harness codex --codex-dir ~/.codex-work  # once more for each other Codex home
+```
+
+Codex 0.162.1 or newer. Setup adds the plugin to that Codex home, then lists the Dryas hooks and asks before it trusts them (`--yes` answers yes); untrusted hooks do not run. Set `OPENROUTER_API_KEY` in the shell Codex runs in. Codex runs a copy of the plugin, so re-run setup for each Codex home after `git pull`. `codex plugin marketplace add promprit/dryas-workflow` on its own is not enough: the hooks stay untrusted and setup does not run. Details: [docs/install.md](docs/install.md#codex-plugin-plus-setup).
 
 Details, flags and troubleshooting: [docs/install.md](docs/install.md).
 

@@ -1,7 +1,7 @@
 # Windows and Codex support — design
 
 Date: 2026-10-05
-Status: approved in brainstorming, awaiting spec review
+Status: implemented (superseded in part by the Codex plugin, 2026-10-13)
 Scope: Part A (Windows support) and Part B (Codex as main harness: rules, MCP, and the safety and routing hooks). One plan; Part A tasks first, Part B builds on the portable installer from Part A.
 
 # Part A — Windows support

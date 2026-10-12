@@ -1,6 +1,6 @@
 # Dryas as a Claude Code plugin
 
-Date: 2026-10-12. Status: approved; amended by the plan (A1–A4), see [Amendments](#amendments). **Contested: no** (packaging and paths; the scope lock and Jev gate keep their deny behavior).
+Date: 2026-10-12. Status: implemented (2026-10-12/13); approved and amended by the plan (A1–A4), see [Amendments](#amendments). **Contested: no** (packaging and paths; the scope lock and Jev gate keep their deny behavior).
 
 ## Goal
 

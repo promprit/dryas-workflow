@@ -1,6 +1,6 @@
 # Dryas as a Codex CLI plugin
 
-Date: 2026-10-13. Status: implemented on `feat/plugin-packaging` (Tasks 1–8, 2026-10-12); CI on all jobs and the manual release check (real model run, TUI skill syntax, Windows) still to do. Implementation decisions: [Amendments from the build](#amendments-from-the-build). Originally: approved for autonomous build (the user approved building it on 2026-10-12; decisions marked **[J]** were made by judgment while writing and are listed under [Decisions made by judgment](#decisions-made-by-judgment)). **Contested: no** (packaging, setup and paths; the scope lock and the Jev gate keep their deny behavior).
+Date: 2026-10-13. Status: implemented; Linux end-to-end verified with real Codex 0.162.1 and a mock model (hooks, rules, scope lock); manual real-model + Windows checks pending. Implementation decisions: [Amendments from the build](#amendments-from-the-build). Originally: approved for autonomous build (the user approved building it on 2026-10-12; decisions marked **[J]** were made by judgment while writing and are listed under [Decisions made by judgment](#decisions-made-by-judgment)). **Contested: no** (packaging, setup and paths; the scope lock and the Jev gate keep their deny behavior).
 
 ## Goal
 
