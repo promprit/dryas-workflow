@@ -83,7 +83,7 @@ Plugin hooks run as soon as the plugin is installed; there is no per-hook approv
 | Workflow core | The `dryas` plugin: rules, agents, commands, hooks and the scope lock | this repo |
 | Jev | Gating and routing hooks, with the [TypeSafe skills](https://github.com/typesafe-ai/skills) | `--no-jev` skips |
 | Ruflo | Orchestration and memory ([ruvnet/ruflo](https://github.com/ruvnet/ruflo), latest; tested 3.53.0) | `--no-ruflo` skips |
-| Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), from the `claude-plugins-official` marketplace; tested 6.4.2) | Required by the plugin; `--no-superpowers` only drops Dryas's superpowers rules |
+| Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), from the `claude-plugins-official` marketplace; plugin tested 6.4.1) | Required by the plugin; `--no-superpowers` only drops Dryas's superpowers rules |
 | Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (latest; tested 4.5.0) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
 | pstack picks | Interrogate review, cleanup, benchmark checklist and principles, adapted from [pstack-claude](https://github.com/michael-denyer/pstack-claude) (see NOTICE.md) | `--no-pstack-picks` skips |
 

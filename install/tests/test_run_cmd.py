@@ -299,7 +299,7 @@ class ThirdpartyWarnTest(unittest.TestCase):
         di.confirm = lambda prompt: False
         self.home = Path(tempfile.mkdtemp())
         (self.home / ".claude" / "plugins").mkdir(parents=True)
-        self.tested = json.loads((HERE.parent / "components.json").read_text())["superpowers"]["tested"]
+        self.tested = json.loads((HERE.parent / "components.json").read_text())["superpowers"]["plugin_tested"]
 
     def tearDown(self):
         self.di.run, self.di.confirm = self.orig
@@ -337,7 +337,7 @@ class ThirdpartyWarnTest(unittest.TestCase):
         from contextlib import redirect_stdout
         table = json.loads((HERE.parent / "components.json").read_text())
         self.assertEqual(table["ruflo"]["plugin_tested"], "0.2.6")
-        self.assertEqual(table["superpowers"]["plugin_tested"], "6.4.2")
+        self.assertEqual(table["superpowers"]["plugin_tested"], "6.4.1")
         self.assertEqual(table["design"]["plugin_tested"], "4.5.0")
         (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(
             json.dumps({"plugins": {"ruflo-core@ruflo": [{"version": "0.2.6"}]}}))
