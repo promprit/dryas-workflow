@@ -46,6 +46,35 @@ class SyncTest(unittest.TestCase):
         (t / "codex/jev/a.py").write_bytes(b"x = 1\r\n")
         self.assertEqual(scp.drift(t), [])
 
+    def test_skips_runtime_dirs_and_gitignore(self):
+        t = self._tree()
+        for d in ("logs", "compact"):
+            (t / "claude/jev" / d).mkdir()
+            (t / "claude/jev" / d / "x.log").write_bytes(b"x")
+        (t / "claude/jev/.gitignore").write_bytes(b"logs/\n")
+        self.assertEqual(sorted(scp.plan(t)), ["codex/jev/a.py", "codex/pstack/p.md"])
+
+    def test_binary_compared_exactly(self):
+        t = self._tree()
+        (t / "claude/jev/b.bin").write_bytes(b"\xff\x00a\r\nb")
+        scp.sync(t)
+        (t / "codex/jev/b.bin").write_bytes(b"\xff\x00a\nb")
+        self.assertEqual(scp.drift(t), ["differs codex/jev/b.bin"])
+
+    def test_strays_in_skipped_dirs_are_extra(self):
+        t = self._tree()
+        scp.sync(t)
+        for rel in ("tests/t.py", "logs/l.log", "compact/c.json", ".gitignore"):
+            f = t / "codex/jev" / rel
+            f.parent.mkdir(exist_ok=True)
+            f.write_bytes(b"")
+        (t / "codex/jev/__pycache__").mkdir()
+        (t / "codex/jev/__pycache__/a.pyc").write_bytes(b"")
+        self.assertEqual(scp.drift(t), sorted("extra codex/jev/" + r for r in
+                                              ("tests/t.py", "logs/l.log", "compact/c.json", ".gitignore")))
+        scp.sync(t)
+        self.assertEqual(scp.drift(t), [])
+
     def test_check_exit_code(self):
         t = self._tree()
         self.assertEqual(scp.main(["--check", "--repo", str(t)]), 1)

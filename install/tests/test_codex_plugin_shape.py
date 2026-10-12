@@ -38,6 +38,20 @@ class CodexPluginShapeTest(unittest.TestCase):
         self.assertEqual(h["hooks"]["PreToolUse"][0]["matcher"], "Bash|apply_patch|Edit|Write")
         self.assertEqual(h["hooks"]["SessionStart"][0]["matcher"], "startup|resume|clear|compact")
 
+    def test_windows_commands_pinned_and_exist(self):
+        P = '"%PLUGIN_ROOT%\\jev\\'
+        W = 'python -X utf8 '
+        want = {"SessionStart": ["rules_inject.py\" --harness codex"],
+                "UserPromptSubmit": ["chain.py\" prompt --harness codex"],
+                "PreToolUse": ["chain.py\" pretool --harness codex"]}
+        h = load(CODEX / "hooks" / "hooks.json")["hooks"]
+        got = {ev: [x["commandWindows"] for g in groups for x in g["hooks"]] for ev, groups in h.items()}
+        self.assertEqual(got, {ev: [W + P + v[0]] for ev, v in want.items()})
+        for cmds in got.values():
+            for c in cmds:
+                for rel in re.findall(r"%PLUGIN_ROOT%\\([^\"]+)", c):
+                    self.assertTrue((CODEX / rel.replace("\\", "/")).is_file(), rel)
+
     def test_hook_paths_exist(self):
         text = (CODEX / "hooks" / "hooks.json").read_text(encoding="utf-8")
         for rel in re.findall(r"\$\{PLUGIN_ROOT\}/([^\"\\]+)", text):

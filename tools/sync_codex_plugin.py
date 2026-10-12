@@ -12,7 +12,9 @@ from typing import Dict, Iterator, List, Optional, Tuple
 
 REPO = Path(__file__).resolve().parents[1]
 TREES = (("claude/jev", "codex/jev"), ("claude/pstack", "codex/pstack"))
-SKIP_DIRS = {"tests", "__pycache__", ".pytest_cache"}
+CACHE_DIRS = {"__pycache__", ".pytest_cache"}
+SKIP_DIRS = {"tests", "logs", "compact"} | CACHE_DIRS  # logs/compact are gitignored runtime dirs
+SKIP_FILES = {".gitignore"}
 
 
 def _files(base: Path) -> Iterator[Tuple[Path, Path]]:
@@ -20,7 +22,7 @@ def _files(base: Path) -> Iterator[Tuple[Path, Path]]:
         return
     for f in sorted(base.rglob("*")):
         rel = f.relative_to(base)
-        if f.is_dir() or any(p in SKIP_DIRS for p in rel.parts[:-1]) or f.suffix == ".pyc":
+        if f.is_dir() or any(p in SKIP_DIRS for p in rel.parts[:-1]) or f.suffix == ".pyc" or f.name in SKIP_FILES:
             continue
         yield rel, f
 
@@ -31,11 +33,27 @@ def plan(repo: Path) -> Dict[str, Path]:
 
 
 def _same(a: Path, b: Path) -> bool:
-    return a.read_bytes().replace(b"\r\n", b"\n") == b.read_bytes().replace(b"\r\n", b"\n")
+    x, y = a.read_bytes(), b.read_bytes()
+    if x == y:
+        return True
+    try:  # CRLF-tolerant only for text; binary files compare exactly
+        return x.decode("utf-8").replace("\r\n", "\n") == y.decode("utf-8").replace("\r\n", "\n")
+    except UnicodeDecodeError:
+        return False
 
 
 def _existing(repo: Path) -> List[str]:
-    return [(Path(dst) / rel).as_posix() for _, dst in TREES for rel, _f in _files(Path(repo) / dst)]
+    """Every file under the codex/ trees (strays in skipped dirs included) except caches."""
+    out = []
+    for _, dst in TREES:
+        base = Path(repo) / dst
+        if base.is_dir():
+            for f in sorted(base.rglob("*")):
+                rel = f.relative_to(base)
+                if f.is_dir() or f.suffix == ".pyc" or any(p in CACHE_DIRS for p in rel.parts[:-1]):
+                    continue
+                out.append((Path(dst) / rel).as_posix())
+    return out
 
 
 def drift(repo: Path) -> List[str]:
