@@ -1,5 +1,5 @@
 {
-  "superpowers": {"tested": "6.4.2", "plugin_tested": "6.4.1", "commands": [["claude", "plugin", "install", "superpowers@claude-plugins-official"]], "plugin": "superpowers@claude-plugins-official"},
+  "superpowers": {"tested": "6.4.1", "plugin_tested": "6.4.1", "commands": [["claude", "plugin", "install", "superpowers@claude-plugins-official"]], "plugin": "superpowers@claude-plugins-official"},
   "ruflo": {"tested": "3.53.0", "plugin_tested": "0.2.6", "commands": [
     ["npm", "install", "-g", "ruflo"],
     ["claude", "plugin", "marketplace", "add", "ruvnet/ruflo"],

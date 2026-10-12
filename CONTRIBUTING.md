@@ -14,7 +14,7 @@
 
 ## Plugin version
 
-- Bump `version` in `claude/.claude-plugin/plugin.json` (and the plugin entry in `.claude-plugin/marketplace.json`) whenever shipped plugin content changes between releases; installed copies only update on a new version.
+- The plugin runs in place from the clone, so a `git pull` is enough for directory installs. Still bump `version` in `claude/.claude-plugin/plugin.json` (and the plugin entry in `.claude-plugin/marketplace.json`) when shipped plugin content changes between releases: cache entries and non-directory installs only update on a new version.
 
 ## Running the tests
 

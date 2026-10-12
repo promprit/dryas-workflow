@@ -12,6 +12,13 @@
         "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/planfile.py\":*)",
         "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/handoff.py\" save:*)",
         "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/tune.py\" report)"
+      ],
+      "deny": [
+        "Skill(superpowers:subagent-driven-development)",
+        "Skill(superpowers:executing-plans)",
+        "Skill(superpowers:dispatching-parallel-agents)",
+        "Skill(superpowers:finishing-a-development-branch)",
+        "Skill(superpowers:diagnosing-superpowers)"
       ]
     }
   },
@@ -119,17 +126,6 @@
             }
           ]
         }
-      ]
-    }
-  },
-  "superpowers": {
-    "permissions": {
-      "deny": [
-        "Skill(superpowers:subagent-driven-development)",
-        "Skill(superpowers:executing-plans)",
-        "Skill(superpowers:dispatching-parallel-agents)",
-        "Skill(superpowers:finishing-a-development-branch)",
-        "Skill(superpowers:diagnosing-superpowers)"
       ]
     }
   }

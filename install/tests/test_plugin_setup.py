@@ -151,10 +151,19 @@ class SetupTest(unittest.TestCase):
     def test_no_superpowers_note(self):
         e = Env(self)
         out = _out(lambda: ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=False))
-        self.assertIn("superpowers is a required dependency", out)
+        self.assertIn("Superpowers is a required dependency", out)
         self.assertTrue(any(c[1:4] == ["plugin", "marketplace", "add"] and ps.OFFICIAL_SOURCE in c for c in e.calls()))
         s = json.loads((e.a / "settings.json").read_text())
-        self.assertFalse(any("superpowers" in r for r in s["permissions"].get("deny", [])))
+        self.assertEqual(len([r for r in s["permissions"]["deny"] if r.startswith("Skill(superpowers:")]), 5)
+
+    def test_rerun_without_superpowers_keeps_denies(self):
+        """The deny rules live in core: dropping superpowers on a re-run must not turn the conflicting skills on."""
+        e = Env(self)
+        ps.setup(REPO, e.a, ["core", "jev", "superpowers"], yes=True, key="", flowobserve=False)
+        _out(lambda: ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=False))
+        deny = json.loads((e.a / "settings.json").read_text())["permissions"]["deny"]
+        self.assertIn("Skill(superpowers:subagent-driven-development)", deny)
+        self.assertEqual(len([r for r in deny if r.startswith("Skill(superpowers:")]), 5)
 
     def test_jev_key_hint(self):
         e = Env(self)

@@ -32,7 +32,7 @@ Run setup once per config dir. The default dir is `$CLAUDE_CONFIG_DIR`, else `~/
 
 Both accounts share one `~/.dryas` (logs, thresholds, handoffs). See [harnesses.md](harnesses.md#several-accounts-t3-code-personal-and-team).
 
-Claude Code runs the plugin in place from your clone (`<clone>/claude`), so `git pull` updates it for every account; the change takes effect at the next session start or after `/reload-plugins`. Re-run setup for each dir after you move the clone (the permission rules name the clone's path) or when you change components or the settings setup merges.
+Claude Code runs the plugin in place from your clone (`<clone>/claude`), so `git pull` updates it for every account; the change takes effect at the next session start or after `/reload-plugins`. Switching branches in the clone changes the live plugin for every account at its next session. Re-run setup for each dir after you move the clone (the permission rules name the clone's path) or when you change components or the settings setup merges.
 
 Component choices are shared: the `--no-` flags write `~/.dryas/chain.local.json`, which every account and Codex read. Setup warns when a run changes them while another account or a Codex install uses them.
 
@@ -83,7 +83,7 @@ Plugin hooks run as soon as the plugin is installed; there is no per-hook approv
 | Workflow core | The `dryas` plugin: rules, agents, commands, hooks and the scope lock | this repo |
 | Jev | Gating and routing hooks, with the [TypeSafe skills](https://github.com/typesafe-ai/skills) | `--no-jev` skips |
 | Ruflo | Orchestration and memory ([ruvnet/ruflo](https://github.com/ruvnet/ruflo), latest; tested 3.53.0) | `--no-ruflo` skips |
-| Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), from the `claude-plugins-official` marketplace; plugin tested 6.4.1) | Required by the plugin; `--no-superpowers` only drops Dryas's superpowers rules |
+| Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), from the `claude-plugins-official` marketplace; plugin tested 6.4.1) | Required by the plugin; `--no-superpowers` has no effect on Claude Code |
 | Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (latest; tested 4.5.0) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
 | pstack picks | Interrogate review, cleanup, benchmark checklist and principles, adapted from [pstack-claude](https://github.com/michael-denyer/pstack-claude) (see NOTICE.md) | `--no-pstack-picks` skips |
 
@@ -97,7 +97,7 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 | --- | --- |
 | `--no-jev` | Do not install Jev |
 | `--no-ruflo` | Do not install Ruflo |
-| `--no-superpowers` | Superpowers is a required dependency of the plugin and is installed anyway; this flag only leaves out Dryas's superpowers deny rules and stages (Codex never installs it) |
+| `--no-superpowers` | Superpowers is a required dependency of the Claude Code plugin: this flag changes nothing there (its conflicting skills stay denied) and prints a note. Codex never installs it |
 | `--no-design` | Do not install Impeccable or UI UX Pro Max |
 | `--no-pstack-picks` | Do not install the pstack picks |
 | `--yes` | Run the third-party install commands without asking |
@@ -167,7 +167,7 @@ The Ruflo helpers are generated locally by `ruflo init` and patched (data root, 
 The installer ends with a verify step for the config dir. Each check prints `PASS`, `FAIL` or `SKIP`:
 
 - **dryas@dryas-workflow listed**: `claude plugin list --json` for that dir lists the plugin; the path shown is the folder it runs from (your clone's `claude/`).
-- **dryas loads without errors**: the plugin is enabled and Claude Code reports no load errors, such as a missing `superpowers` dependency. Setup adds the `claude-plugins-official` marketplace (`anthropics/claude-plugins-official`) and installs `superpowers@claude-plugins-official` before the plugin; if this fails, run those two steps by hand and re-run setup.
+- **dryas loads without errors**: the plugin is enabled and Claude Code reports no load errors, such as a missing `superpowers` dependency. Setup adds the official marketplace (`anthropics/claude-plugins-official`) and the Claude Code CLI installs Superpowers as a dependency of the plugin; install `superpowers@claude-plugins-official` by hand only as a fallback if that fails, then re-run setup.
 - **rules hook prints SessionStart JSON**: the plugin's rules hook runs and injects the rules.
 - **scope lock blocks an out-of-scope write**: a write outside an active task's scope is denied in a temporary folder.
 - **Jev tests**: runs the tests in the installed plugin's `jev/tests` with the Python the installer was started with. They need `pytest`. If `pytest` is missing the check prints `SKIP (install pytest to run the Jev tests)`; install it (`python3 -m pip install pytest`) and re-run the installer.
