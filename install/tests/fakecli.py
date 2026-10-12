@@ -203,10 +203,11 @@ def _serve(s):
 
 
 def _main():
-    s = _load()
-    if _a[:1] == ["--version"]:
+    if _a[:1] == ["--version"]:  # like the real CLI: no state read or written
         sys.stdout.write(_os.environ.get("FAKE_CODEX_VERSION", "codex-cli 0.162.1") + "\n")
-    elif _a[:3] == ["plugin", "marketplace", "add"] and "plugin marketplace" not in _FAIL:
+        return
+    s = _load()
+    if _a[:3] == ["plugin", "marketplace", "add"] and "plugin marketplace" not in _FAIL:
         src = _os.path.abspath(_a[3])
         with open(_os.path.join(src, ".agents", "plugins", "marketplace.json"), encoding="utf-8") as f:
             s["marketplaces"][json.load(f)["name"]] = src

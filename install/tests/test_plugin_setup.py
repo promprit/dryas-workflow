@@ -420,6 +420,16 @@ class SetupTest(unittest.TestCase):
         ps.write_workflow_doc(t / "norepo", t / "root")
         self.assertFalse((t / "root" / "docs" / "dryas-workflow.md").exists())
 
+    def test_accounts_key(self):
+        t = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(t), True)
+        ps.add_account(t, t / "c1")
+        ps.add_account(t, t / "x1", "codex_dirs")
+        acc = json.loads((t / "accounts.json").read_text())
+        self.assertEqual((len(acc["claude_dirs"]), len(acc["codex_dirs"])), (1, 1))
+        self.assertEqual(ps.remove_account(t, t / "x1", "codex_dirs"), [])
+        self.assertEqual(len(json.loads((t / "accounts.json").read_text())["claude_dirs"]), 1)
+
     def test_remove_account(self):
         t = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, str(t), True)

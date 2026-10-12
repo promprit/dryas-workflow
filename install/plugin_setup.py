@@ -183,22 +183,23 @@ def write_workflow_doc(repo: Path, root: Path) -> None:
     dest.write_bytes(data)
 
 
-def add_account(root: Path, cd: Path) -> None:
+def add_account(root: Path, cd: Path, key: str = "claude_dirs") -> None:
+    """Record a config dir under `key` in accounts.json ("claude_dirs" or "codex_dirs"); other keys are kept."""
     p, cd = Path(root) / "accounts.json", str(norm(cd))
     acc = _load_json(p, {})
-    dirs = [d for d in acc.get("claude_dirs", []) if isinstance(d, str)]
+    dirs = [d for d in acc.get(key, []) if isinstance(d, str)]
     if not any(pu.same_path(d, cd) for d in dirs):
         dirs.append(cd)
-    acc["claude_dirs"] = dirs
+    acc[key] = dirs
     _save_json(p, acc)
 
 
-def remove_account(root: Path, cd: Path) -> List[str]:
+def remove_account(root: Path, cd: Path, key: str = "claude_dirs") -> List[str]:
     p, cd = Path(root) / "accounts.json", str(norm(cd))
     acc = _load_json(p, {})
-    dirs = [d for d in acc.get("claude_dirs", []) if isinstance(d, str) and not pu.same_path(d, cd)]
+    dirs = [d for d in acc.get(key, []) if isinstance(d, str) and not pu.same_path(d, cd)]
     if p.exists():
-        acc["claude_dirs"] = dirs
+        acc[key] = dirs
         _save_json(p, acc)
     return dirs
 
