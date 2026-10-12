@@ -1,7 +1,7 @@
 """Set up the Dryas Codex plugin in one CODEX_HOME: marketplace, plugin, config block, hook trust, shared state.
 
   setup(repo, cdx, comps, yes)   one CODEX_HOME; run once per Codex account (install.sh --harness codex --codex-dir DIR)
-  verify(cdx, comps)             PASS/FAIL/SKIP lines (Task 5)
+  verify(cdx, comps)             PASS/FAIL/SKIP lines; returns the number of FAILs
   uninstall(cdx)                 that CODEX_HOME only (Task 7)
 """
 import json
@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import codex_appserver as ca  # noqa: E402
 import codex_target as ct  # noqa: E402
 import dryas_install as di  # noqa: E402
 import platform_util as pu  # noqa: E402
@@ -24,6 +25,7 @@ RECORD = ".dryas-codex-plugin.json"
 MIN_CODEX = (0, 162, 1)
 TOML_START, TOML_END = "# >>> dryas plugin >>>", "# <<< dryas plugin <<<"
 ENV_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "DRYAS_DATA_ROOT")
+TRUST_HINT = "Open Codex and run /hooks to review the Dryas hooks; until then the scope lock and Jev hooks do not run."
 
 
 def codex_home(arg: Optional[str]) -> Path:
@@ -297,6 +299,53 @@ def write_config_block(cfg: Path, body: str, rec: dict) -> bool:
     return True
 
 
+def _event(e: dict) -> str:
+    parts = str(e.get("key", "")).split(":")
+    return str(e.get("eventName") or (parts[2] if len(parts) > 2 else "?"))
+
+
+def trust_hooks(cdx: Path, rec: dict, yes: bool) -> bool:
+    """Trust the Dryas plugin hooks Codex lists as untrusted or modified, after consent (`yes` answers it), the way
+    /hooks does. rec["trusted"] gains {key: hash} for every Dryas hook seen trusted or trusted now (earlier keys
+    stay: uninstall removes them). False = something is still untrusted; the /hooks hint was printed."""
+    env = child_env(cdx)
+    rec["trusted"] = dict(rec.get("trusted") or {})
+    try:
+        entries = ca.list_hooks(env, str(Path.home()))
+    except ca.AppServerError as e:
+        print("warning: could not read Codex hooks (%s)" % e)
+        print(TRUST_HINT)
+        return False
+    mine = [e for e in entries if e.get("pluginId") == ID and e.get("key")]
+    if not mine:
+        print("warning: Codex lists no Dryas hooks in %s" % cdx)
+        print(TRUST_HINT)
+        return False
+
+    def record(es: List[dict]) -> None:
+        rec["trusted"].update({e["key"]: e.get("currentHash") for e in es})
+
+    record([e for e in mine if e.get("trustStatus") == "trusted"])
+    todo = ca.untrusted(mine, ID)
+    if not todo:
+        return True
+    print("Codex runs plugin hooks only after you trust them. Dryas hooks in %s:" % cdx)
+    for e in todo:
+        print("  %s (%s): %s" % (_event(e), e.get("trustStatus"), e.get("command") or e.get("key")))
+    if not (yes or di.confirm("Trust these Dryas hooks?")):
+        print(TRUST_HINT)
+        return False
+    try:
+        ca.write_trust(env, todo, plugin_id=ID)
+    except ca.AppServerError as e:
+        print("warning: could not write hook trust (%s)" % e)
+        print(TRUST_HINT)
+        return False
+    record(todo)
+    print("Trusted %d Dryas hook%s in %s" % (len(todo), "" if len(todo) == 1 else "s", cdx))
+    return True
+
+
 def _keep_record(path: Path, rec: dict) -> None:
     """On a failed run, keep what uninstall must undo (a created CODEX_HOME, an added marketplace)."""
     if rec.get("dir_created") or rec.get("marketplace_added"):
@@ -374,7 +423,7 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
         return 2
     if fallback:
         print("note: python3 3.9+ is not on PATH; Jev MCP runs with %s (re-run setup after each update)" % fallback)
-    # Task 5: trust_hooks(cdx, rec, yes) goes here
+    trust_hooks(cdx, rec, yes)
     ps.write_workflow_doc(repo, root)
     ps.write_chain_local(root, comps, None, repo, None)
     ps.add_account(root, cdx, "codex_dirs")
@@ -386,3 +435,54 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
         print("note: Jev reads OPENROUTER_API_KEY from the shell Codex runs in; set it in your shell profile.")
     print("Dryas set up in %s (plugin at %s, state in %s)" % (cdx, plugin_root, root))
     return 0
+
+
+def verify(cdx: Path, comps: List[str]) -> int:
+    """PASS/FAIL/SKIP lines for one CODEX_HOME; returns the number of FAILs."""
+    cdx = codex_home(str(cdx))
+    env, fails = child_env(cdx), 0
+
+    def say(status: str, name: str, detail: str = "") -> int:
+        print("%s  %s%s" % (status, name, ("  (" + detail + ")") if detail else ""))
+        return 1 if status == "FAIL" else 0
+
+    entry = plugin_entry(cdx) if cdx.is_dir() else None
+    rec = ps._load_json(cdx / RECORD, {}) or {}
+    ok = bool(entry) and bool(entry.get("enabled"))
+    detail = str(cdx)
+    if ok and rec.get("version") and entry.get("version") != rec["version"]:
+        ok, detail = False, "%s: version %s, setup recorded %s; re-run setup" % (cdx, entry.get("version"), rec["version"])
+    fails += say("PASS" if ok else "FAIL", "%s installed and enabled" % ID, detail)
+    if not ok:
+        return fails
+    root = Path(rec.get("plugin_root") or cache_root(cdx, str(entry.get("version"))))
+    if "jev" in comps:
+        data = _json(["codex", "mcp", "list", "--json"], cdx)
+        names = [s.get("name") for s in (data if isinstance(data, list) else []) if isinstance(s, dict)]
+        fails += say("PASS" if "jev" in names else "FAIL", "Codex Jev MCP server listed")
+    try:
+        mine = [e for e in ca.list_hooks(env, str(Path.home())) if e.get("pluginId") == ID]
+        bad = ["%s (%s)" % (_event(e), e.get("trustStatus")) for e in mine if e.get("trustStatus") != "trusted"]
+        fails += say("PASS" if mine and not bad else "FAIL", "Dryas hooks trusted",
+                     ("not trusted: " + ", ".join(bad) + ". " + TRUST_HINT) if bad else
+                     ("" if mine else "Codex lists no Dryas hooks"))
+    except ca.AppServerError as e:
+        fails += say("FAIL", "Dryas hooks trusted", "%s. %s" % (e, TRUST_HINT))
+    rc, out = di.capture(["codex", "debug", "prompt-input", "hi"], env=env, timeout=120)
+    if rc:
+        fails += say("SKIP", "Dryas skills listed", "codex debug prompt-input failed")
+    else:
+        fails += say("PASS" if "dryas:orchestrate" in out else "FAIL", "Dryas skills listed")
+    rc, out = di.capture(di.PYX + [str(root / "jev" / "rules_inject.py"), "--harness", "codex"], "{}",
+                         env=dict(env, PLUGIN_ROOT=str(root)), timeout=60)
+    try:
+        ok = "Dryas paths:" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    except (ValueError, KeyError, TypeError):
+        ok = False
+    fails += say("PASS" if ok else "FAIL", "rules hook prints SessionStart JSON")
+    fails += say("PASS" if di.scope_smoke(root / "jev" / "chain.py", {}, harness="codex") else "FAIL",
+                 "scope lock blocks an out-of-scope apply_patch")
+    legacy = (cdx / ct.RECORD).exists()
+    fails += say("FAIL" if legacy else "PASS", "no legacy Codex copy install",
+                 "re-run install.sh --harness codex to migrate" if legacy else "")
+    return fails

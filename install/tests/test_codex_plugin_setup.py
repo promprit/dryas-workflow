@@ -7,6 +7,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 import fakecli
 import codex_plugin_setup as cps
+import codex_appserver as ca
 
 REPO = HERE.parents[1]
 COMPS = ["core", "jev"]
@@ -313,6 +314,122 @@ class SetupTest(unittest.TestCase):
         self.assertIn('[mcp_servers.ruflo]\ncommand = "node"\nargs = ["/d/ruflo/mcp-shim/bin/cli.js", "mcp", "start"]', b)
         self.assertIn('env = { RUFLO_JS = "/r.js" }', b)
         self.assertNotIn("OTHER", b)
+
+
+class TrustTest(unittest.TestCase):
+    def hooks(self, cdx):
+        return [h for h in ca.list_hooks(dict(os.environ, CODEX_HOME=str(cdx)), str(Path.home()))
+                if h["pluginId"] == cps.ID]
+
+    def test_yes_trusts_and_records(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual({h["trustStatus"] for h in self.hooks(e.a)}, {"trusted"})
+        rec = json.loads((e.a / cps.RECORD).read_text(encoding="utf-8"))
+        self.assertEqual(sorted(rec["trusted"]), sorted(h["key"] for h in self.hooks(e.a)))
+        self.assertEqual(rec["trusted"], {h["key"]: h["currentHash"] for h in self.hooks(e.a)})
+
+    def test_declined_trusts_nothing(self):
+        e = Env(self)
+        with mock.patch.object(cps.di, "confirm", lambda *a: False):
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=False)
+        self.assertEqual(rc, 0)
+        self.assertIn("/hooks", out)
+        self.assertNotIn("hooks.state", e.toml(e.a))
+        self.assertEqual(json.loads((e.a / cps.RECORD).read_text(encoding="utf-8"))["trusted"], {})
+
+    def test_asks_with_the_hook_list(self):
+        e = Env(self)
+        asked = []
+        with mock.patch.object(cps.di, "confirm", lambda p: asked.append(p) or True):
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=False)
+        self.assertEqual(len(asked), 1)
+        self.assertIn("chain.py\" pretool --harness codex", out)
+
+    def test_second_run_does_not_ask(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        before = e.toml(e.a)
+        with mock.patch.object(cps.di, "confirm", lambda *a: self.fail("asked again")):
+            quiet(cps.setup, REPO, e.a, COMPS, yes=False)
+        self.assertEqual(e.toml(e.a), before)
+
+    def test_modified_hook_is_retrusted(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        p = e.a / "config.toml"
+        p.write_text(p.read_text(encoding="utf-8").replace('trusted_hash = "sha256:', 'trusted_hash = "sha256:0', 1),
+                     encoding="utf-8")
+        self.assertIn("modified", {h["trustStatus"] for h in self.hooks(e.a)})
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual({h["trustStatus"] for h in self.hooks(e.a)}, {"trusted"})
+
+    def test_app_server_failure_is_a_hint_not_an_error(self):
+        e = Env(self, fail=["app-server"])
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("/hooks", out)
+        self.assertNotIn("hooks.state", e.toml(e.a))
+
+    def test_trust_error_response_is_a_hint(self):
+        e = Env(self)
+        with mock.patch.dict(os.environ, {"FAKE_APPSERVER_FAIL": "config/batchWrite"}):
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertEqual(rc, 0)
+        self.assertIn(cps.TRUST_HINT, out)
+        self.assertEqual(json.loads((e.a / cps.RECORD).read_text(encoding="utf-8"))["trusted"], {})
+
+    def test_only_dryas_hooks_trusted(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        st = e.state(e.a)
+        other = dict(st["plugins"][cps.ID])
+        st["plugins"]["other@x"] = other  # same hooks under another plugin id
+        (e.a / "fake_codex.json").write_text(json.dumps(st), encoding="utf-8")
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        self.assertNotIn("other@x", e.toml(e.a))
+
+
+class VerifyTest(unittest.TestCase):
+    def test_pass_after_setup(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        fails, out = quiet(cps.verify, e.a, COMPS)
+        self.assertEqual(fails, 0, out)
+        for line in ("PASS  dryas@dryas-workflow installed and enabled", "PASS  Codex Jev MCP server listed",
+                     "PASS  Dryas hooks trusted", "PASS  Dryas skills listed", "PASS  rules hook prints SessionStart JSON",
+                     "PASS  scope lock blocks an out-of-scope apply_patch", "PASS  no legacy Codex copy install"):
+            self.assertIn(line, out)
+
+    def test_untrusted_fails(self):
+        e = Env(self)
+        with mock.patch.object(cps.di, "confirm", lambda *a: False):
+            quiet(cps.setup, REPO, e.a, COMPS, yes=False)
+        fails, out = quiet(cps.verify, e.a, COMPS)
+        self.assertGreaterEqual(fails, 1)
+        self.assertIn("FAIL  Dryas hooks trusted", out)
+        self.assertIn("/hooks", out)
+
+    def test_not_installed(self):
+        e = Env(self)
+        fails, out = quiet(cps.verify, e.a, COMPS)
+        self.assertEqual(fails, 1)
+        self.assertIn("FAIL  dryas@dryas-workflow installed and enabled", out)
+
+    def test_app_server_failure_fails_trust_line(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        with mock.patch.dict(os.environ, {"FAKE_APPSERVER_FAIL": "hooks/list"}):
+            fails, out = quiet(cps.verify, e.a, COMPS)
+        self.assertEqual(fails, 1, out)
+        self.assertIn("FAIL  Dryas hooks trusted", out)
+
+    def test_jev_off_skips_mcp_line(self):
+        e = Env(self)
+        quiet(cps.setup, REPO, e.a, ["core"], yes=True)
+        fails, out = quiet(cps.verify, e.a, ["core"])
+        self.assertEqual(fails, 0, out)
+        self.assertNotIn("Jev MCP", out)
 
 
 if __name__ == "__main__":

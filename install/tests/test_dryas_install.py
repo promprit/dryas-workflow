@@ -29,6 +29,14 @@ def fixture_repo():
     os.chmod(r / "claude/ruflo/run.sh", 0o755)
     return r
 
+class ScopeSmokeTest(unittest.TestCase):
+    def test_scope_smoke_claude_write(self):
+        self.assertTrue(di.scope_smoke(REPO_INSTALL.parent / "claude" / "jev" / "chain.py", {}))
+
+    def test_scope_smoke_codex_apply_patch(self):
+        self.assertTrue(di.scope_smoke(REPO_INSTALL.parent / "codex" / "jev" / "chain.py", {}, harness="codex"))
+
+
 class InstallTest(unittest.TestCase):
     def setUp(self):
         self.repo = fixture_repo()
