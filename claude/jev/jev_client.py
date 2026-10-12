@@ -1,6 +1,6 @@
 """One call to Jev (typesafe/jev-1.13) through OpenRouter's System One endpoint.
 
-The key comes from OPENROUTER_API_KEY at call time and is never stored. State is redacted
+The key comes from OPENROUTER_API_KEY or the plugin option CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY at call time and is never stored. State is redacted
 before sending. Every failure raises JevUnavailable so callers can fail open.
 """
 import http.client
@@ -48,9 +48,14 @@ def _normalize(answers: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def api_key() -> str:
+    """Shell env first; the plugin's sensitive option (exported to hook processes) second. Never stored."""
+    return (os.environ.get("OPENROUTER_API_KEY") or os.environ.get("CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY") or "").strip()
+
+
 def judge(state: Any, questions: Dict[str, Any], timeout: float = TIMEOUT_S,
           opener: Optional[Callable[..., Any]] = None) -> Dict[str, Any]:
-    key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+    key = api_key()
     if not key:
         raise JevUnavailable("OPENROUTER_API_KEY not set")
 

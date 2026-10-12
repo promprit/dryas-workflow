@@ -9,6 +9,7 @@ import urllib.error
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import jev_client
 from jev_client import JevUnavailable, judge
 
 RESPONSE = {
@@ -146,6 +147,23 @@ class ClientTest(unittest.TestCase):
             pass
         elapsed = time.monotonic() - t0
         self.assertLess(elapsed, 0.5)
+
+
+class ApiKeyTest(unittest.TestCase):
+    def test_shell_key_wins(self):
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": " a ", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY": "b"}):
+            self.assertEqual(jev_client.api_key(), "a")
+
+    def test_plugin_option_fallback(self):
+        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
+        env["CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY"] = "b"
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(jev_client.api_key(), "b")
+
+    def test_none(self):
+        env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY")}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(jev_client.api_key(), "")
 
 
 if __name__ == "__main__":
