@@ -50,7 +50,8 @@ def load_local() -> Dict[str, Any]:
 
 def apply_local(stages: List[Dict[str, Any]], event: str, local: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Copies of stages with the user's enabled/timeout applied by stage name. Nothing else can be overridden."""
-    over = ((local.get("stages") or {}).get(event) or {}) if isinstance(local, dict) else {}
+    sect = local.get("stages") if isinstance(local, dict) else None
+    over = sect.get(event) if isinstance(sect, dict) else None
     out = []
     for st in stages:
         st = dict(st)
@@ -71,15 +72,27 @@ def load_stages(kind: str, harness: str = "claude") -> List[Dict[str, Any]]:
             stages = list(json.load(f).get(kind, []))
     except (OSError, ValueError):
         return []
-    stages = apply_local([s for s in stages if isinstance(s, dict)], kind, load_local())
+    stages = [s for s in stages if isinstance(s, dict)]
+    try:
+        stages = apply_local(stages, kind, load_local())
+    except Exception:
+        pass  # a bad local file never changes the defaults (scope lock must keep denying)
     return [s for s in stages if harness in s.get("harness", ["claude"])]
 
 
 def _expand(s: str) -> Optional[str]:
+    """Placeholders are substituted last, so a `$` inside their values (Windows profile names) is not an unresolved var."""
     ph = placeholders()
-    s = _PH.sub(lambda m: ph[m.group(1) or m.group(2)], s)
-    out = os.path.expanduser(os.path.expandvars(s))
-    return None if "$" in out else out
+    parts = _PH.split(s)  # [text, group1, group2, text, ...]
+    out = []
+    for i in range(0, len(parts), 3):
+        t = os.path.expandvars(parts[i])
+        if "$" in t:
+            return None
+        out.append(t)
+        if i + 1 < len(parts):
+            out.append(ph[parts[i + 1] or parts[i + 2]])
+    return os.path.expanduser("".join(out))
 
 
 def _applies(stage: Dict[str, Any], event: Dict[str, Any]) -> bool:

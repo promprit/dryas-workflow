@@ -66,8 +66,15 @@ class PlaceholderTest(unittest.TestCase):
 
     def test_similar_names_not_matched(self):
         with mock.patch.dict(os.environ, {"CLAUDE_PLUGIN_ROOT": "/plug", "DRYAS_PY": "/py"}):
+            os.environ.pop("CDPATH", None)
+            os.environ.pop("PYTHONPATH", None)
             self.assertIsNone(chain._expand("$CDPATH/x"))
             self.assertIsNone(chain._expand("$PYTHONPATH/x"))
+
+    def test_dollar_in_placeholder_value_is_kept(self):
+        with mock.patch.dict(os.environ, {"DRYAS_PY": "C:/Users/a$b/python.exe", "CLAUDE_PLUGIN_ROOT": "/plug"}):
+            self.assertEqual(chain._expand("$PY"), "C:/Users/a$b/python.exe")
+            self.assertEqual(chain._expand("$CD/$PY"), "/plug/C:/Users/a$b/python.exe")
 
     def test_unresolved_stage_skipped_and_logged(self):
         logs = tempfile.mkdtemp()
@@ -89,6 +96,31 @@ class LoadStagesMergesLocalTest(unittest.TestCase):
             json.dump({"stages": {"pretool": {"flowobserve": {"enabled": True}}}}, f)
         with mock.patch.dict(os.environ, {"JEV_CHAIN_CONFIG": cfg, "JEV_CHAIN_LOCAL": loc}):
             self.assertTrue(chain.load_stages("pretool")[1]["enabled"])
+
+
+class BrokenLocalShapeTest(unittest.TestCase):
+    BAD = [{"stages": ["x"]}, {"stages": "abc"}, {"stages": 5}, {"stages": {"pretool": [1]}},
+           {"stages": {"pretool": "s"}}, {"stages": {"pretool": {"scope-lock": 3}}}]
+
+    def test_apply_local_never_raises(self):
+        for bad in self.BAD:
+            out = chain.apply_local(STAGES, "pretool", bad)
+            self.assertEqual(out, STAGES)
+
+    def test_deny_stage_still_denies_with_broken_local(self):
+        d = tempfile.mkdtemp()
+        cfg, loc = os.path.join(d, "chain.json"), os.path.join(d, "chain.local.json")
+        deny = {"name": "scope-lock", "cmd": [sys.executable, "-c", "import sys;sys.stderr.write('no');sys.exit(2)"], "timeout": 5}
+        with open(cfg, "w") as f:
+            json.dump({"pretool": [deny]}, f)
+        for bad in self.BAD:
+            with open(loc, "w") as f:
+                json.dump(bad, f)
+            with mock.patch.dict(os.environ, {"JEV_CHAIN_CONFIG": cfg, "JEV_CHAIN_LOCAL": loc}):
+                stages = chain.load_stages("pretool")
+                self.assertEqual(len(stages), 1)
+                r = chain.pretool({"tool_name": "Write"}, "{}", stages)
+                self.assertEqual(r["hookSpecificOutput"]["permissionDecision"], "deny")
 
 
 if __name__ == "__main__":
