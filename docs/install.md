@@ -32,7 +32,9 @@ Run setup once per config dir. The default dir is `$CLAUDE_CONFIG_DIR`, else `~/
 
 Both accounts share one `~/.dryas` (logs, thresholds, handoffs). See [harnesses.md](harnesses.md#several-accounts-t3-code-personal-and-team).
 
-Re-run setup for each dir after you move the clone or pull a new version of the plugin: the permission rules name the installed plugin path.
+Claude Code runs the plugin in place from your clone (`<clone>/claude`), so `git pull` updates it for every account; the change takes effect at the next session start or after `/reload-plugins`. Re-run setup for each dir after you move the clone (the permission rules name the clone's path) or when you change components or the settings setup merges.
+
+Component choices are shared: the `--no-` flags write `~/.dryas/chain.local.json`, which every account and Codex read. Setup warns when a run changes them while another account or a Codex install uses them.
 
 ### FlowObserve
 
@@ -64,9 +66,9 @@ If Codex also uses that dir's runtime files, a plain `--harness claude` run puts
 ./install/install.sh --uninstall --purge                      # last account: also remove ~/.dryas
 ```
 
-`--uninstall` works on one config dir: it runs `claude plugin uninstall dryas@dryas-workflow` there, removes only the settings entries setup added, and drops that dir from `~/.dryas/accounts.json`. It leaves the shared `~/.dryas` state (logs, thresholds, handoffs, the Ruflo runtime) in place by design, since other accounts or Codex may use it.
+`--uninstall` works on one config dir: it runs `claude plugin uninstall dryas@dryas-workflow` there, removes only the settings entries setup added, and drops that dir from `~/.dryas/accounts.json`. It leaves the shared `~/.dryas` state (logs, thresholds, handoffs, the Ruflo runtime) in place by design, since other accounts or Codex may use it. Superpowers was installed as a dependency of the plugin; `claude plugin prune` (same `CLAUDE_CONFIG_DIR`) removes it when nothing else needs it.
 
-`--purge` also removes the entries Dryas owns in `~/.dryas` (`accounts.json`, `chain.local.json`, `docs`, `jev`, `ruflo`), and only when no other account is listed in `accounts.json`. That deletes your Jev logs, your `/tune` thresholds, saved handoffs and Ruflo memory. It keeps your notes in `~/.dryas/docs/dryas-local.md`. It refuses when `accounts.json` is missing or unreadable or the dir's record cannot be read, and it never removes files Dryas did not create.
+`--purge` also removes the entries Dryas owns in `~/.dryas` (`accounts.json`, `chain.local.json`, `docs`, `jev`, `ruflo`), and only when no other account is listed in `accounts.json` and no Codex install uses it (uninstall Codex first, or in the same run with `--harness both`). That deletes your Jev logs, your `/tune` thresholds, saved handoffs and Ruflo memory. It keeps your notes in `~/.dryas/docs/dryas-local.md`. It refuses when `accounts.json` is missing or unreadable or the dir's record cannot be read (that dir then stays listed), and it never removes files Dryas did not create.
 
 With `--harness codex` or `both`, `--uninstall` also removes the Codex install.
 
@@ -81,7 +83,7 @@ Plugin hooks run as soon as the plugin is installed; there is no per-hook approv
 | Workflow core | The `dryas` plugin: rules, agents, commands, hooks and the scope lock | this repo |
 | Jev | Gating and routing hooks, with the [TypeSafe skills](https://github.com/typesafe-ai/skills) | `--no-jev` skips |
 | Ruflo | Orchestration and memory ([ruvnet/ruflo](https://github.com/ruvnet/ruflo), latest; tested 3.53.0) | `--no-ruflo` skips |
-| Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), latest; tested 6.4.2) | `--no-superpowers` skips |
+| Superpowers | Process skills ([obra/superpowers](https://github.com/obra/superpowers), from the `claude-plugins-official` marketplace; tested 6.4.2) | Required by the plugin; `--no-superpowers` only drops Dryas's superpowers rules |
 | Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (latest; tested 4.5.0) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
 | pstack picks | Interrogate review, cleanup, benchmark checklist and principles, adapted from [pstack-claude](https://github.com/michael-denyer/pstack-claude) (see NOTICE.md) | `--no-pstack-picks` skips |
 
@@ -95,7 +97,7 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 | --- | --- |
 | `--no-jev` | Do not install Jev |
 | `--no-ruflo` | Do not install Ruflo |
-| `--no-superpowers` | Do not install Superpowers |
+| `--no-superpowers` | Superpowers is a required dependency of the plugin and is installed anyway; this flag only leaves out Dryas's superpowers deny rules and stages (Codex never installs it) |
 | `--no-design` | Do not install Impeccable or UI UX Pro Max |
 | `--no-pstack-picks` | Do not install the pstack picks |
 | `--yes` | Run the third-party install commands without asking |
@@ -164,7 +166,8 @@ The Ruflo helpers are generated locally by `ruflo init` and patched (data root, 
 
 The installer ends with a verify step for the config dir. Each check prints `PASS`, `FAIL` or `SKIP`:
 
-- **dryas@dryas-workflow listed**: the plugin is in that dir's `plugins/installed_plugins.json`.
+- **dryas@dryas-workflow listed**: `claude plugin list --json` for that dir lists the plugin; the path shown is the folder it runs from (your clone's `claude/`).
+- **dryas loads without errors**: the plugin is enabled and Claude Code reports no load errors, such as a missing `superpowers` dependency. Setup adds the `claude-plugins-official` marketplace (`anthropics/claude-plugins-official`) and installs `superpowers@claude-plugins-official` before the plugin; if this fails, run those two steps by hand and re-run setup.
 - **rules hook prints SessionStart JSON**: the plugin's rules hook runs and injects the rules.
 - **scope lock blocks an out-of-scope write**: a write outside an active task's scope is denied in a temporary folder.
 - **Jev tests**: runs the tests in the installed plugin's `jev/tests` with the Python the installer was started with. They need `pytest`. If `pytest` is missing the check prints `SKIP (install pytest to run the Jev tests)`; install it (`python3 -m pip install pytest`) and re-run the installer.
@@ -175,7 +178,7 @@ It ends with `verify: N failed`. The installer exits non-zero if any check faile
 
 ## Upgrade
 
-Pull the repo and run `./install/install.sh` again, once per config dir. Setup updates the plugin and the settings it merged. The Codex runtime copy is updated too; your own files there are still kept unless you pass `--force`. You can add a component you skipped earlier (for example, re-run without `--no-ruflo`). For Claude Code, a `--no-` flag on a re-run turns that component's stages off in `chain.local.json` and drops its settings entries. For the Codex copy, re-running with --no-pstack-picks (or any --no- flag) after a full install does not remove that component; use --uninstall.
+`git pull` in the clone updates the plugin itself: Claude Code runs it from the clone. Run `./install/install.sh` again, once per config dir, to refresh the settings it merged (needed when a release changes them, when you change components, or after moving the clone). The Codex runtime copy is updated too; your own files there are still kept unless you pass `--force`. You can add a component you skipped earlier (for example, re-run without `--no-ruflo`). For Claude Code, a `--no-` flag on a re-run turns that component's stages off in `chain.local.json` and drops its settings entries. For the Codex copy, re-running with --no-pstack-picks (or any --no- flag) after a full install does not remove that component; use --uninstall.
 
 `~/.dryas/jev/thresholds.json` is yours (`/tune` changes it); setup never overwrites it. The shipped `jev/chain.json` in the plugin is read-only; your stage choices live in `~/.dryas/chain.local.json` and keep their settings across re-runs.
 
@@ -191,8 +194,9 @@ Uninstall removes only settings values that still match what the installer wrote
 
 ## Troubleshooting
 
+- **dryas fails to load (`/plugin` shows an error).** Usually the `superpowers` dependency: run `claude plugin marketplace add anthropics/claude-plugins-official` and `claude plugin install superpowers@claude-plugins-official` with the same `CLAUDE_CONFIG_DIR`, then re-run setup.
 - **Jev shows `JevUnavailable`.** Apps launched from the GUI do not read your shell profile, so they do not see `OPENROUTER_API_KEY`. Launch Claude Code from a terminal, set the variable in the app's environment, or store the key as the plugin option (`--openrouter-key`).
 - **Hooks do not fire.** Run `/plugin` and check that dryas is enabled. If it is, look for `allowManagedHooksOnly` in managed settings ([Hooks blocked by policy](#hooks-blocked-by-policy)). On Windows, check that Git for Windows is installed.
-- **Permission prompts for `/tune` or `/handoff`.** The allow rules name the installed plugin path. Re-run setup for that config dir after moving the clone or updating the plugin.
+- **Permission prompts for `/tune` or `/handoff`.** The allow rules name the folder the plugin runs from (your clone's `claude/`). Re-run setup for that config dir after moving the clone.
 - **`HOME` contains a space.** Ruflo does not handle this. Install with `--no-ruflo`.
 - **My edited file was not replaced.** Existing files are kept unless you pass `--force`.

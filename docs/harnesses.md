@@ -21,6 +21,6 @@ You can run Dryas on several Claude Code accounts side by side, for example a pe
 ./install/install.sh --claude-dir ~/.claude-team
 ```
 
-Each dir gets the plugin and its own settings merge. All accounts share one state root, `~/.dryas`: Jev logs, `/tune` thresholds, handoffs, `chain.local.json` and the Ruflo runtime. So `/tune` sees the work of every account. `~/.dryas/accounts.json` lists the config dirs set up so far; uninstall removes a dir from it, and `--purge` only clears `~/.dryas` (logs, thresholds, handoffs; your `dryas-local.md` stays) once no account is left.
+Each dir gets the plugin and its own settings merge. All accounts share one state root, `~/.dryas`: Jev logs, `/tune` thresholds, handoffs, `chain.local.json` and the Ruflo runtime. So `/tune` sees the work of every account. Component choices are shared the same way: `chain.local.json` is one file, so a `--no-` flag on one account's setup run turns that component's stages off for every account and for Codex (setup prints a warning naming them). `~/.dryas/accounts.json` lists the config dirs set up so far; uninstall removes a dir from it, and `--purge` only clears `~/.dryas` (logs, thresholds, handoffs; your `dryas-local.md` stays) once no account is left and no Codex install uses it.
 
 FlowObserve reads the Jev logs in `~/.dryas/jev/logs`, so it sees escalations and spend from every account. Its transcript reader still looks in `~/.claude` only; reading transcripts from other config dirs is a FlowObserve follow-up.

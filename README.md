@@ -100,7 +100,7 @@ These are the reference implementation's bindings, not part of the method; each 
 | [Claude Code](https://docs.claude.com/en/docs/claude-code) | The host: agents, hooks, commands | required |
 | [Jev (TypeSafe)](https://github.com/typesafe-ai/skills) | Decision support and gates | `--no-jev` |
 | [Ruflo](https://github.com/ruvnet/ruflo) | Orchestration and memory | `--no-ruflo` |
-| [Superpowers](https://github.com/obra/superpowers) | Process skills (brainstorming, worktrees, review) | `--no-superpowers` |
+| [Superpowers](https://github.com/obra/superpowers) | Process skills (brainstorming, worktrees, review) | required by the plugin (`--no-superpowers` drops only its deny rules) |
 | [Impeccable](https://github.com/pbakaus/impeccable) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Design skills | `--no-design` |
 | [pstack](https://github.com/michael-denyer/pstack-claude) picks | Interrogate review, cleanup, benchmark checklist, executor principles (vendored, adapted) | `--no-pstack-picks` |
 

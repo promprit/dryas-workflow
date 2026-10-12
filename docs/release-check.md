@@ -18,7 +18,8 @@ Each line starts with PASS, FAIL, SKIP or WARN. The exit code is 1 if any line i
 
 Then, for each `--claude-dir`, under a `Claude Code: <dir>` heading:
 
-- `dryas plugin installed`: `dryas@dryas-workflow` is listed in `<dir>/plugins/installed_plugins.json`. FAIL means setup was not run for that dir.
+- `dryas plugin installed`: `claude plugin list --json` (with `CLAUDE_CONFIG_DIR=<dir>`) lists `dryas@dryas-workflow`; the path shown is the folder it runs from (`readFromFolder`, your clone's `claude/`). Without a working `claude` it falls back to `<dir>/plugins/installed_plugins.json`. FAIL means setup was not run for that dir.
+- `dryas loads without errors`: the plugin is enabled and reports no load errors (for example a missing `superpowers` dependency). Skipped when `claude` is not on PATH.
 - `plugin hooks run (<event>)`, one line each for PreToolUse, UserPromptSubmit, SessionStart and PreCompact: every command of that event in the installed plugin's `hooks/hooks.json` is run the way Claude Code runs it (`bash -c`, with `CLAUDE_PLUGIN_ROOT`, `DRYAS_PY` and `CLAUDE_CONFIG_DIR` set) with a sample event. It passes when each exits 0 and prints nothing or JSON. On Windows it needs Git Bash; without it the lines are SKIP.
 - `Scope lock (claude)`: in a temporary worktree whose plan allows only `src/feature/**`, a write to `src/other.ts` must be denied by the plugin's `jev/chain.py`.
 - `Jev route`: with an OpenRouter key in this shell (`OPENROUTER_API_KEY`, `DRYAS_OPENROUTER_KEY` or `CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY`), a sample prompt must produce a `Jev ` line. Skipped without one. A key stored only as the plugin option is visible only inside Claude Code; manual step 1 covers it.
@@ -39,3 +40,5 @@ Codex, last:
 6. Run `/tune` and `/handoff` once in each account. Both must run without a permission prompt.
 
 With several accounts, do steps 1, 2, 5 and 6 in each, and check that `~/.dryas/jev/logs/calls.jsonl` grows from both.
+
+On Windows, also check step 6 closely: the `/tune` and `/handoff` allow rules are written twice, with the plugin path in forward-slash form (`C:/...`) and in backslash form (`C:\...`), because Claude Code may substitute `${CLAUDE_PLUGIN_ROOT}` either way. If either command still prompts, copy the exact command from the prompt into the issue report.
