@@ -1,11 +1,16 @@
-"""All tunable Jev thresholds. Defaults here; overrides in thresholds.json (written by /tune after approval)."""
+"""All tunable Jev thresholds. Defaults here and in the shipped thresholds.json; user overrides in
+~/.dryas/jev/thresholds.json (written by /tune after approval)."""
 import copy
 import json
 import math
 import os
 import re
 import tempfile
+import sys
 from typing import Any, Dict, Optional
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths
 
 DEFAULTS: Dict[str, Dict[str, Any]] = {
     "gate": {
@@ -34,17 +39,30 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
 }
 
 
+SHIPPED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "thresholds.json")
+
+
 def path() -> str:
-    return os.environ.get("JEV_THRESHOLDS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "thresholds.json"))
+    """The user's overrides (written by /tune). Shipped defaults live in SHIPPED, read-only."""
+    return paths.thresholds_file()
 
 
-def _read_file() -> Dict[str, Any]:
+def _read(p: str) -> Dict[str, Any]:
     try:
-        with open(path(), encoding="utf-8") as f:
+        with open(p, encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
+
+
+def _read_file() -> Dict[str, Any]:
+    """Shipped defaults with the user's file on top, section by section."""
+    out = {k: dict(v) for k, v in _read(SHIPPED).items() if isinstance(v, dict)}
+    for section, values in _read(path()).items():
+        if isinstance(values, dict):
+            out.setdefault(section, {}).update(values)
+    return out
 
 
 def _type_check(value: Any, default_value: Any) -> bool:
@@ -151,13 +169,14 @@ def load() -> Dict[str, Dict[str, Any]]:
 
 
 def set_value(dotted: str, value: Any) -> None:
-    data = _read_file()
+    data = _read(path())
     keys = dotted.split(".")
     node = data
     for k in keys[:-1]:
         node = node.setdefault(k, {})
     node[keys[-1]] = value
     p = path()
+    os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p) or ".", prefix=".thresholds-")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)

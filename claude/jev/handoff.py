@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
+import paths
 import thresholds
 import transcript_items
 from handoff_paths import handoff_dir, handoff_path, key_for, project_root  # noqa: F401 (re-exported)
@@ -33,12 +34,12 @@ NOTE_PARTIAL = "Jev deadline reached — newest 30 of the unscored rest kept"
 
 
 def projects_dir() -> str:
-    return os.environ.get("JEV_PROJECTS_DIR", os.path.expanduser("~/.claude/projects"))
+    return paths.projects_dir()
 
 
 def encode_cwd(cwd: str) -> str:
     """Claude Code's project folder name: every char outside [A-Za-z0-9] becomes '-'.
-    Verified against ~/.claude/projects: /Users/x/.claude -> -Users-x--claude."""
+    Verified against <config dir>/projects: /Users/x/.claude -> -Users-x--claude."""
     return re.sub(r"[^A-Za-z0-9]", "-", cwd)
 
 
