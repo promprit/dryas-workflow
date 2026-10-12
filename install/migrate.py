@@ -6,10 +6,13 @@ from pathlib import Path
 from typing import Dict, List
 
 import dryas_install as di
+import platform_util as pu
+import settings_merge as sm
 
 STATE_DIRS = ("logs", "handoff", "compact")
 SHIPPED = Path(__file__).resolve().parents[1] / "claude" / "jev" / "thresholds.json"
 LOCAL_DOC = "docs/dryas-local.md"
+MARKER = "jev/.migrated.json"  # under the data root: config dirs whose state was already merged (no double append)
 
 
 def is_copy_install(cd: Path) -> bool:
@@ -29,7 +32,12 @@ def _merge_tree(src: Path, dst: Path, msgs: List[str]) -> None:
         out = dst / f.relative_to(src)
         out.parent.mkdir(parents=True, exist_ok=True)
         if out.exists() and f.suffix == ".jsonl":
-            with open(str(out), "ab") as o:
+            with open(str(out), "rb+") as o:
+                o.seek(0, os.SEEK_END)
+                if o.tell():
+                    o.seek(-1, os.SEEK_END)
+                    if o.read(1) != b"\n":
+                        o.write(b"\n")
                 o.write(f.read_bytes())
             msgs.append("appended %s" % out)
         elif out.exists():
@@ -97,31 +105,71 @@ def stage_settings(cd: Path) -> Dict[str, Dict[str, dict]]:
     return out
 
 
+def _merged(root: Path) -> List[str]:
+    try:
+        v = json.loads((Path(root) / MARKER).read_text(encoding="utf-8")).get("merged", [])
+        return [str(x) for x in v] if isinstance(v, list) else []
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def _mark_merged(root: Path, cd: Path) -> None:
+    done = _merged(root)
+    if not any(pu.same_path(d, str(cd)) for d in done):
+        done.append(str(cd))
+    p = Path(root) / MARKER
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"merged": done}, indent=2) + "\n", encoding="utf-8")
+
+
 def migrate(cd: Path, root: Path) -> int:
-    """Steps 1-3: move state, carry stage settings into chain.local.json, uninstall the copy. Setup (step 4) is the caller's."""
-    cd, root = Path(cd), Path(root)
+    """Steps 1-3: move state, carry stage settings into chain.local.json, uninstall the copy. Setup (step 4) is the caller's.
+    Everything that can stop the old uninstall is checked first; a re-run after a failed uninstall does not merge twice."""
+    cd, root = Path(os.path.abspath(str(cd))), Path(root)
     if not is_copy_install(cd):
         return 0
+    try:
+        di.load_record(cd)
+        sm.load_settings(cd / "settings.json")
+    except (OSError, ValueError, SystemExit) as e:
+        print("error: cannot migrate the copy install in %s: %s. Nothing was copied." % (cd, e))
+        return 1
     print("Migrating the copy install in %s to the plugin" % cd)
-    for m in move_state(cd, root):
-        print("  " + m)
-    stages = stage_settings(cd)
-    if stages:
-        p = root / "chain.local.json"
-        try:
-            loc = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
-        except ValueError:
-            loc = {}
-        loc = loc if isinstance(loc, dict) else {}
-        if not isinstance(loc.get("stages"), dict):
-            loc["stages"] = {}
-        for event, by_name in stages.items():
-            ev = loc["stages"].get(event)
-            ev = loc["stages"][event] = ev if isinstance(ev, dict) else {}
-            for name, v in by_name.items():
-                if not isinstance(ev.get(name), dict):
-                    ev[name] = {}
-                ev[name].update(v)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(loc, indent=2) + "\n", encoding="utf-8")
-    return di.uninstall(cd)
+    if any(pu.same_path(d, str(cd)) for d in _merged(root)):
+        print("  state from %s was already moved to %s" % (cd, root))
+    else:
+        for m in move_state(cd, root):
+            print("  " + m)
+        stages = stage_settings(cd)
+        if stages:
+            _write_stages(root, stages)
+        _mark_merged(root, cd)
+    try:
+        rc = di.uninstall(cd)
+    except (OSError, ValueError, SystemExit) as e:
+        rc = 1
+        print("error: %s" % e)
+    if rc:
+        print("Your state was copied to %s, but removing the copy install in %s failed; "
+              "fix the error above and re-run install.sh to finish." % (root, cd))
+    return rc
+
+
+def _write_stages(root: Path, stages: Dict[str, Dict[str, dict]]) -> None:
+    p = root / "chain.local.json"
+    try:
+        loc = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    except ValueError:
+        loc = {}
+    loc = loc if isinstance(loc, dict) else {}
+    if not isinstance(loc.get("stages"), dict):
+        loc["stages"] = {}
+    for event, by_name in stages.items():
+        ev = loc["stages"].get(event)
+        ev = loc["stages"][event] = ev if isinstance(ev, dict) else {}
+        for name, v in by_name.items():
+            if not isinstance(ev.get(name), dict):
+                ev[name] = {}
+            ev[name].update(v)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(loc, indent=2) + "\n", encoding="utf-8")

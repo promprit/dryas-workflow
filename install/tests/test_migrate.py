@@ -106,6 +106,29 @@ class MigrateTest(unittest.TestCase):
         self.assertEqual(len(rm), 1)
         self.assertEqual(rm[0][1]["CLAUDE_CONFIG_DIR"], str(self.a))
 
+    def test_malformed_settings_stops_before_copying(self):
+        old_install(self.a, '{"a":1}', 0.8, True)
+        (self.a / "settings.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual(migrate.migrate(self.a, self.root), 1)
+        self.assertFalse(self.root.exists())
+        self.assertTrue((self.a / ".dryas-installed.json").exists())
+
+    def test_failed_uninstall_rerun_does_not_merge_twice(self):
+        old_install(self.a, '{"a":1}', 0.8, True)
+        with mock.patch.object(migrate.di, "uninstall", lambda cd: 1):
+            self.assertEqual(migrate.migrate(self.a, self.root), 1)
+        self.assertTrue(migrate.is_copy_install(self.a))
+        self.assertEqual(migrate.migrate(self.a, self.root), 0)
+        self.assertEqual((self.root / "jev" / "logs" / "calls.jsonl").read_text(), '{"a":1}\n')
+        self.assertFalse((self.a / ".dryas-installed.json").exists())
+
+    def test_append_adds_missing_newline(self):
+        old_install(self.a, '{"a":1}', 0.8, False)
+        (self.root / "jev" / "logs").mkdir(parents=True)
+        (self.root / "jev" / "logs" / "calls.jsonl").write_text('{"z":0}', encoding="utf-8")
+        migrate.migrate(self.a, self.root)
+        self.assertEqual((self.root / "jev" / "logs" / "calls.jsonl").read_text(), '{"z":0}\n{"a":1}\n')
+
 
 if __name__ == "__main__":
     unittest.main()

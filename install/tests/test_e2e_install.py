@@ -22,15 +22,6 @@ EVENTS = {
 }
 
 
-def shells():
-    out = [None]  # None = the OS default shell via shell=True (sh on POSIX, cmd on Windows)
-    if os.name == "nt":
-        git_bash = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Git", "bin", "bash.exe")
-        if os.path.isfile(git_bash):
-            out.append(git_bash)
-    return out
-
-
 class E2ETest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())

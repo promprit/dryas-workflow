@@ -6,6 +6,7 @@ sys.path.insert(0, str(HERE))
 import fakecli
 import platform_util as pu
 import run_cmd
+REPO_ROOT = HERE.parents[1]
 
 
 class RunCmdTest(unittest.TestCase):
@@ -87,6 +88,7 @@ class MainStubs(object):
         import migrate
         import plugin_setup as ps
         self.log = []
+        self.copy = False  # what migrate.is_copy_install reports
 
         def rec(name, rc=0):
             return lambda *a, **k: self.log.append((name, a, k)) or rc
@@ -99,6 +101,7 @@ class MainStubs(object):
                    mock.patch.object(ct, "verify_codex", rec("ct.verify_codex")),
                    mock.patch.object(ct, "codex_dir", lambda: self.tmp / ".codex"),
                    mock.patch.object(migrate, "migrate", rec("migrate")),
+                   mock.patch.object(migrate, "is_copy_install", lambda cd: self.copy),
                    mock.patch.object(ps, "setup", rec("ps.setup")), mock.patch.object(ps, "verify", rec("ps.verify")),
                    mock.patch.object(ps, "uninstall", rec("ps.uninstall")),
                    mock.patch.object(pu, "which", lambda n: "/bin/" + n), mock.patch.object(pu, "space_free", lambda p: str(p)),
@@ -120,11 +123,15 @@ class MainTest(unittest.TestCase):
     def main(self, *args):
         import io
         from contextlib import redirect_stdout
-        with redirect_stdout(io.StringIO()):
-            return run_cmd.main(list(args))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = run_cmd.main(list(args))
+        self.out = buf.getvalue()
+        return rc
 
     def test_claude_dir_migrate_then_setup_then_verify(self):
         st = MainStubs(self)
+        st.copy = True
         cd = st.tmp / "acct"
         self.assertEqual(self.main("--claude-dir", str(cd), "--no-ruflo", "--flowobserve", "--yes"), 0)
         self.assertEqual(st.steps(), ["migrate", "ps.setup", "ps.verify"])
@@ -142,11 +149,60 @@ class MainTest(unittest.TestCase):
         self.assertEqual(k["key"], "sk-flag")
         self.assertFalse(k["flowobserve"])
 
+    def test_no_copy_install_no_migration(self):
+        st = MainStubs(self)
+        self.assertEqual(self.main("--no-ruflo"), 0)
+        self.assertEqual(st.steps(), ["ps.setup", "ps.verify"])
+
     def test_dry_run_skips_migration_and_verify(self):
         st = MainStubs(self)
+        st.copy = True
         self.assertEqual(self.main("--dry-run", "--no-ruflo"), 0)
         self.assertEqual(st.steps(), ["ps.setup"])
         self.assertTrue(st.call("ps.setup")[1]["dry"])
+        self.assertIn("would migrate the copy install in %s" % (st.tmp / ".claude").resolve(), self.out)
+
+    def _codex_record(self, st, comps):
+        (st.tmp / ".codex").mkdir()
+        (st.tmp / ".codex" / ".dryas-installed.json").write_text(json.dumps({"components": comps}))
+
+    def test_claude_only_migration_keeps_existing_codex(self):
+        st = MainStubs(self)
+        st.copy = True
+        self._codex_record(st, ["core", "jev"])
+        self.assertEqual(self.main("--no-ruflo"), 0)
+        self.assertEqual(st.steps(), ["migrate", "ps.setup", "di.install", "ct.install_codex", "ps.verify"])
+        a, k = st.call("di.install")
+        self.assertEqual((a[1], a[2], k["claude"]), (st.tmp / ".claude", ["core", "jev"], False))
+        self.assertIn("Codex keeps working", self.out)
+
+    def test_claude_only_other_dir_leaves_codex_alone(self):
+        st = MainStubs(self)
+        st.copy = True
+        self._codex_record(st, ["core", "jev"])
+        self.main("--no-ruflo", "--claude-dir", str(st.tmp / "acct"))
+        self.assertNotIn("di.install", st.steps())
+
+    def test_setup_failure_after_migration_still_installs_codex(self):
+        st = MainStubs(self)
+        st.copy = True
+        import plugin_setup as ps
+        from unittest import mock
+        with mock.patch.object(ps, "setup", lambda *a, **k: 3):
+            self.assertEqual(self.main("--no-ruflo", "--harness", "both"), 3)
+        self.assertEqual(st.steps(), ["migrate", "di.install", "ct.install_codex"])
+        self.assertIn("Your copy install was migrated", self.out)
+        self.assertIn("plugin setup failed", self.out)
+
+    def test_codex_ruflo_paths_include_copy_dir(self):
+        st = MainStubs(self)
+        from unittest import mock
+        seen = []
+        with mock.patch.object(run_cmd, "preflight", lambda *a: seen.append(a) or []):
+            self.main("--harness", "both", "--no-ruflo")
+        self.assertEqual(seen[0][2], st.tmp / ".claude")
+        self.assertIn(st.tmp / ".claude", seen[0][3])
+        self.assertIn(REPO_ROOT / "claude", seen[0][3])
 
     def test_codex_keeps_runtime_copy_in_home_claude(self):
         st = MainStubs(self)

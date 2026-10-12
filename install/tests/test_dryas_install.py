@@ -434,14 +434,26 @@ class RuntimeOnlyTest(unittest.TestCase):
         di.install(self.repo, self.cd, ["core", "jev", "ruflo"], home=self.home, dry=True, yes=True, claude=False)
         self.assertFalse((self.home / ".dryas").exists())
 
-    def test_codex_run_removes_old_copy_install_extras(self):
+    def test_codex_run_removes_extras_left_after_claude_moved_to_plugin(self):
         self.install(["core", "jev"], claude=True)
-        self.assertTrue((self.cd / "agents/executor.md").exists())
+        rec = json.loads((self.cd / ".dryas-installed.json").read_text())
+        rec.update(claude_md=False, mcp=[], settings={"env": {}, "allow": [], "deny": [], "hooks": [], "top": {}})
+        (self.cd / ".dryas-installed.json").write_text(json.dumps(rec))  # Claude parts gone: not a Claude install
         self.install(["core", "jev"])
         self.assertFalse((self.cd / "agents/executor.md").exists())
         rec = json.loads((self.cd / ".dryas-installed.json").read_text())
         self.assertNotIn("agents/executor.md", rec["files"])
         self.assertIn("jev/x.py", rec["files"])
+
+    def test_codex_run_keeps_live_claude_copy_install(self):
+        import io, contextlib
+        self.install(["core", "jev"], claude=True)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.install(["core", "jev"])
+        self.assertTrue((self.cd / "agents/executor.md").exists())
+        self.assertIn("agents/executor.md", json.loads((self.cd / ".dryas-installed.json").read_text())["files"])
+        self.assertIn("Claude Code still uses the copy install in %s" % self.cd, buf.getvalue())
 
 
 class FallbackTest(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""Installer entry used by install.sh and install.ps1: flags, preflight, then thirdparty -> install -> verify.
+"""Installer entry used by install.sh and install.ps1: flags, preflight, then migrate -> setup -> codex -> verify.
 
   dryas_install.py run [--repo PATH] [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
                        [--yes] [--force] [--dry-run] [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
@@ -119,6 +119,31 @@ def thirdparty(comps: List[str], yes: bool, claude_dir: Path, env: Optional[dict
     return 0
 
 
+def _codex_record_comps(cdx: Path) -> Optional[List[str]]:
+    """Components of an existing Codex install (None when there is none)."""
+    import codex_target as ct
+    p = Path(cdx) / ct.RECORD
+    if not p.exists():
+        return None
+    try:
+        comps = json.loads(p.read_text(encoding="utf-8")).get("components", [])
+    except (OSError, ValueError, AttributeError):
+        comps = []
+    return sorted(set(["core"] + [str(c) for c in comps if isinstance(c, str)]))
+
+
+def _codex(repo: Path, copy_cd: Path, home: Path, comps: List[str], a: argparse.Namespace) -> int:
+    """The Codex side: runtime-only copy in copy_cd, then ~/.codex."""
+    import codex_target as ct
+    import dryas_install as di
+    rc = di.install(repo, copy_cd, comps, home=home, force=a.force, dry=a.dry_run, yes=a.yes, claude=False)
+    if rc:
+        return rc
+    mapping = di.mapping_for(comps, home, copy_cd)
+    renv = di.ruflo_env(repo, mapping) if "ruflo" in comps else {}
+    return ct.install_codex(repo, ct.codex_dir(), home, comps, mapping, renv, di.run, force=a.force, dry=a.dry_run)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     import codex_target as ct
     import dryas_install as di
@@ -136,30 +161,43 @@ def main(argv: Optional[List[str]] = None) -> int:
         rc = ct.uninstall_codex(ct.codex_dir(), home, di.run) if want_codex else 0
         rc = rc or (di.uninstall(copy_cd) if want_codex else 0)
         return rc or (ps.uninstall(cd, a.purge) if want_claude else 0)
-    probs = preflight(comps, a.harness, copy_cd, [repo / "claude", cd] if want_claude else [])
+    ruflo_paths = ([repo / "claude", cd] if want_claude else []) + ([copy_cd] if want_codex else [])
+    probs = preflight(comps, a.harness, copy_cd, ruflo_paths)
     if probs:
         print("\n".join(probs))
         return 1
     if a.preflight_only:
         print("preflight ok")
         return 0
-    if want_claude and not a.dry_run:
+    copy_install = want_claude and migrate.is_copy_install(cd)
+    # migrating ~/.claude removes the runtime files an existing Codex install uses: put them back afterwards
+    keep_codex = None
+    if copy_install and not want_codex and pu.same_path(cd, copy_cd):
+        keep_codex = _codex_record_comps(ct.codex_dir())
+    if copy_install and a.dry_run:
+        print("would migrate the copy install in %s" % cd)
+    elif copy_install:
         rc = migrate.migrate(cd, ps.data_root())
         if rc:
             return rc
     if want_claude:
         rc = ps.setup(repo, cd, comps, yes=a.yes, key=a.openrouter_key, flowobserve=a.flowobserve, dry=a.dry_run)
         if rc:
+            if copy_install and not a.dry_run:
+                print("Your copy install was migrated (state is in %s); plugin setup failed. Fix the error above "
+                      "and re-run install.sh to finish." % ps.data_root())
+                if want_codex or keep_codex is not None:  # Codex must not be left without its files
+                    _codex(repo, copy_cd, home, comps if want_codex else keep_codex, a)
             return rc
     if want_codex:
-        rc = di.install(repo, copy_cd, comps, home=home, force=a.force, dry=a.dry_run, yes=a.yes, claude=False)
+        rc = _codex(repo, copy_cd, home, comps, a)
         if rc:
             return rc
-        mapping = di.mapping_for(comps, home, copy_cd)
-        renv = di.ruflo_env(repo, mapping) if "ruflo" in comps else {}
-        rc = ct.install_codex(repo, ct.codex_dir(), home, comps, mapping, renv, di.run, force=a.force, dry=a.dry_run)
+    elif keep_codex is not None and not a.dry_run:
+        rc = _codex(repo, copy_cd, home, keep_codex, a)
         if rc:
             return rc
+        print("Codex keeps working: its runtime copy in %s was reinstalled after the migration." % copy_cd)
     if a.dry_run:
         return 0
     fails = ps.verify(cd, comps) if want_claude else 0

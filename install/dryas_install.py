@@ -340,6 +340,10 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
     rec = load_record(cd)
     comps_all = sorted(set(rec.get("components", [])) | set(comps))
     mapping = _mapping(comps_all, home, cd)
+    claude_copy = False
+    if not claude:
+        import migrate  # lazy: migrate imports this module
+        claude_copy = migrate.is_copy_install(cd)
     _prevalidate(repo, comps, mapping, cd, runtime_only=not claude)  # unmapped placeholders abort here, before any write
     helpers = {}
     if "ruflo" in comps:
@@ -375,7 +379,11 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
         elif claude and tpl.exists():
             claude_md(cd, gate_blocks(tpl.read_text(encoding="utf-8"), comps_all), rec)
         if not claude or apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes, comps_all=comps_all):
-            _remove_stale_files(repo, cd, comps_all, rec, dry, runtime_only=not claude)
+            # a live Claude copy install still uses its agents/commands/skills: only drop what is no longer shipped
+            _remove_stale_files(repo, cd, comps_all, rec, dry, runtime_only=not claude and not claude_copy)
+            if claude_copy:
+                print("Claude Code still uses the copy install in %s; run with --harness claude or both to move it "
+                      "to the plugin" % cd)
         if "ruflo" in comps:
             root = Path(mapping["DRYAS_DATA_ROOT"])
             if dry:
