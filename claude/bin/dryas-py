@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# Dryas launcher for commands Claude runs from plugin Markdown: the interpreter setup chose (DRYAS_PY), UTF-8 mode.
+exec "${DRYAS_PY:-python3}" -X utf8 "$@"
