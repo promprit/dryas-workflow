@@ -235,17 +235,22 @@ class TestPrescreen(unittest.TestCase):
     def test_repeated_tool_words_stay_linear(self):
         # Compare 8x the input against the base size: linear is ~8x, quadratic ~64x.
         # A ratio holds on slow CI runners where a fixed wall-clock bound flakes.
-        def best(cmd):
-            times = []
-            for _ in range(3):
-                start = time.perf_counter()
-                prescreen.risky(cmd)
-                times.append(time.perf_counter() - start)
-            return min(times)
+        # CPU time of this thread, not wall clock: time spent preempted by other load does
+        # not count. Windows' thread clock ticks every ~15.6 ms (too coarse here), so it keeps
+        # the wall clock. Sizes are interleaved and each keeps its fastest run.
+        clock = time.perf_counter if sys.platform == "win32" else time.thread_time
+
+        def timed(cmd):
+            start = clock()
+            prescreen.risky(cmd)
+            return clock() - start
 
         for word in ("sort ", "find ", "awk ", "base64 ", "xxd ", "git branch "):
             with self.subTest(word=word):
-                small, large = best(word * 1000), best(word * 8000)
+                small = large = float("inf")
+                for _ in range(5):
+                    small = min(small, timed(word * 1000))
+                    large = min(large, timed(word * 8000))
                 self.assertLess(large, 16 * small + 0.005)
 
 
