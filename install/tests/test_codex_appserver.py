@@ -1,5 +1,5 @@
 # install/tests/test_codex_appserver.py
-import json, os, shutil, subprocess, sys, tempfile, unittest
+import json, os, shutil, subprocess, sys, tempfile, time, unittest
 from pathlib import Path
 from unittest import mock
 HERE = Path(__file__).resolve().parent
@@ -32,6 +32,17 @@ class PureTest(unittest.TestCase):
         self.assertEqual(p, {"edits": [{"keyPath": "hooks.state", "mergeStrategy": "upsert",
                                         "value": {"a": {"trusted_hash": "sha256:1"}, "b": {"trusted_hash": "sha256:2"}}}],
                              "reloadUserConfig": True})
+
+    def test_trust_params_needs_current_hash(self):
+        with self.assertRaises(ca.AppServerError):
+            ca.trust_params([{"key": "a", "pluginId": ID}])
+
+    def test_trust_params_plugin_guard(self):
+        es = [{"key": "a", "pluginId": ID, "currentHash": "sha256:1"},
+              {"key": "b", "pluginId": "other@x", "currentHash": "sha256:2"}]
+        with self.assertRaises(ca.AppServerError):
+            ca.trust_params(es, plugin_id=ID)
+        self.assertEqual(list(ca.trust_params(es[:1], plugin_id=ID)["edits"][0]["value"]), ["a"])
 
 
 class FakeCodex:
@@ -84,6 +95,83 @@ class RunnerTest(unittest.TestCase):
         f = FakeCodex(self, fail=["app-server"])
         with self.assertRaises(ca.AppServerError):
             ca.list_hooks(f.env, str(f.t))
+
+    def test_noise_is_ignored(self):
+        f = FakeCodex(self)
+        f.install()
+        env = dict(f.env, FAKE_APPSERVER_NOISE="1")
+        mine = ca.untrusted(ca.list_hooks(env, str(f.t)), ID)
+        self.assertEqual(len(mine), 3)
+        ca.write_trust(env, mine, plugin_id=ID)
+        self.assertEqual(ca.untrusted(ca.list_hooks(env, str(f.t)), ID), [])
+
+    def test_write_trust_plugin_guard(self):
+        f = FakeCodex(self)
+        f.install()
+        es = ca.list_hooks(f.env, str(f.t))
+        with self.assertRaises(ca.AppServerError):
+            ca.write_trust(f.env, [dict(es[0], pluginId="other@x")], plugin_id=ID)
+        self.assertNotIn("hooks.state", (f.cdx / "config.toml").read_text(encoding="utf-8"))
+
+    def test_fake_requires_handshake(self):
+        f = FakeCodex(self)
+        f.install()
+        with ca.AppServer(f.env, timeout=10) as s:
+            with self.assertRaisesRegex(ca.AppServerError, "Not initialized"):
+                s.request("hooks/list", {"cwds": [str(f.t)]})
+            s.request("initialize", {"clientInfo": ca.CLIENT})
+            with self.assertRaisesRegex(ca.AppServerError, "Not initialized"):
+                s.request("config/batchWrite", ca.trust_params([]))
+            s.notify("initialized")
+            self.assertEqual(len(ca.hook_entries(s.request("hooks/list", {"cwds": [str(f.t)]}))), 3)
+
+    def test_fake_rejects_other_batch_writes(self):
+        f = FakeCodex(self)
+        f.install()
+        bad = [{"keyPath": "hooks", "value": {}, "mergeStrategy": "upsert"},
+               {"keyPath": "hooks.state", "value": {}, "mergeStrategy": "replace"}]
+        with ca.AppServer(f.env, timeout=10) as s:
+            s.request("initialize", {"clientInfo": ca.CLIENT})
+            s.notify("initialized")
+            for e in bad:
+                with self.assertRaises(ca.AppServerError):
+                    s.request("config/batchWrite", {"edits": [e], "reloadUserConfig": True})
+
+    def test_null_id_error_raises_at_once(self):
+        f = FakeCodex(self)
+        t0 = time.monotonic()
+        with self.assertRaisesRegex(ca.AppServerError, "Parse error"):
+            ca.list_hooks(dict(f.env, FAKE_APPSERVER_PARSE_ERROR="1"), str(f.t), timeout=20)
+        self.assertLess(time.monotonic() - t0, 10)
+
+    def test_exit_error_carries_stderr(self):
+        f = FakeCodex(self)
+        f.install()
+        with self.assertRaisesRegex(ca.AppServerError, "fake crash in hooks/list"):
+            ca.list_hooks(dict(f.env, FAKE_APPSERVER_CRASH="hooks/list"), str(f.t))
+
+    def test_close_kills_a_hung_server(self):
+        f = FakeCodex(self)
+        s = ca.AppServer(dict(f.env, FAKE_APPSERVER_HANG="1"), timeout=1)
+        s.request("initialize", {"clientInfo": ca.CLIENT})
+        t0 = time.monotonic()
+        s.close()
+        self.assertLess(time.monotonic() - t0, 5)
+        self.assertIsNotNone(s.p.poll())
+
+    def test_session_closes_on_interrupt(self):
+        f = FakeCodex(self)
+        made = []
+        real = ca.AppServer
+
+        def spy(*a, **k):
+            made.append(real(*a, **k))
+            return made[-1]
+        with mock.patch.object(ca, "AppServer", spy), \
+                mock.patch.object(real, "notify", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                ca.list_hooks(f.env, str(f.t))
+        self.assertIsNotNone(made[0].p.poll())
 
     def test_no_codex(self):
         with self.assertRaises(ca.AppServerError):

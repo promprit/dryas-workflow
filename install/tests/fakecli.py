@@ -133,16 +133,57 @@ def _hooks(s):
     return out
 
 
+def _out(obj):
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+def _bad_edit(e):
+    return e.get("keyPath") != "hooks.state" or e.get("mergeStrategy") != "upsert" or not isinstance(e.get("value"), dict)
+
+
 def _serve(s):
+    # Knobs: FAKE_APPSERVER_SILENT=1 never answers; FAKE_APPSERVER_FAIL=<method> answers with an error;
+    # FAKE_APPSERVER_NOISE=1 sends a notification and a server request reusing the id before each response;
+    # FAKE_APPSERVER_PARSE_ERROR=1 answers every request with an id-null parse error;
+    # FAKE_APPSERVER_CRASH=<method> writes to stderr and exits 3 on that method;
+    # FAKE_APPSERVER_HANG=1 keeps running after stdin closes (until killed).
+    env = _os.environ.get
+    state = {"initialize": False, "initialized": False}
     for line in sys.stdin:
-        msg = json.loads(line)
-        if "id" not in msg or _os.environ.get("FAKE_APPSERVER_SILENT") == "1":
+        try:
+            msg = json.loads(line)
+        except ValueError:  # like the real 0.162.1 server: malformed lines are dropped
+            continue
+        if not isinstance(msg, dict):
+            continue
+        if "id" not in msg:
+            if msg.get("method") == "initialized" and state["initialize"]:
+                state["initialized"] = True
+            continue
+        if env("FAKE_APPSERVER_SILENT") == "1":
             continue
         m, rid = msg.get("method"), msg["id"]
-        if m == _os.environ.get("FAKE_APPSERVER_FAIL"):
+        if m == env("FAKE_APPSERVER_CRASH"):
+            sys.stderr.write("fake crash in %s\n" % m)
+            sys.stderr.flush()
+            _os._exit(3)
+        if env("FAKE_APPSERVER_NOISE") == "1":
+            _out({"method": "configWarning", "params": {"summary": "noise"}})
+            _out({"id": rid, "method": "item/tool/requestUserInput", "params": {"questions": []}})
+        if env("FAKE_APPSERVER_PARSE_ERROR") == "1":
+            resp = {"id": None, "error": {"code": -32700, "message": "Parse error"}}
+        elif m == env("FAKE_APPSERVER_FAIL"):
             resp = {"id": rid, "error": {"code": -32000, "message": "boom"}}
         elif m == "initialize":
+            state["initialize"] = True
             resp = {"id": rid, "result": {"userAgent": "fake"}}
+        elif m in ("hooks/list", "config/batchWrite") and not (state["initialize"] and state["initialized"]):
+            # The real server only needs `initialize`; the fake also wants `initialized` so clients do the full handshake.
+            resp = {"id": rid, "error": {"code": -32600, "message": "Not initialized"}}
+        elif m == "config/batchWrite" and any(_bad_edit(e) for e in msg["params"].get("edits", [])):
+            # The real server also takes mergeStrategy "replace" and any keyPath; setup must only upsert hooks.state.
+            resp = {"id": rid, "error": {"code": -32600, "message": "fake: only upsert of hooks.state"}}
         elif m == "hooks/list":
             resp = {"id": rid, "result": {"data": [{"cwd": c, "hooks": _hooks(s), "warnings": [], "errors": []}
                                                    for c in msg["params"]["cwds"]]}}
@@ -156,8 +197,9 @@ def _serve(s):
             resp = {"id": rid, "result": {"status": "ok"}}
         else:
             resp = {"id": rid, "error": {"code": -32601, "message": "unknown method"}}
-        sys.stdout.write(json.dumps(resp) + "\n")
-        sys.stdout.flush()
+        _out(resp)
+    while env("FAKE_APPSERVER_HANG") == "1":
+        _time.sleep(1)
 
 
 def _main():
