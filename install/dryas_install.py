@@ -23,7 +23,7 @@ from hookcheck import hook_problems  # noqa: E402
 from claude_md_block import START, END, claude_md, remove_claude_md  # noqa: E402,F401
 
 RECORD = ".dryas-installed.json"
-SKIP = {"settings.fragment.json", "CLAUDE.md.template"}
+SKIP = {"settings.fragment.json", "CLAUDE.md.template", "hooks/hooks.json", ".mcp.json", ".claude-plugin/plugin.json"}
 COMPONENT_DIRS = {"ruflo": ("ruflo/",), "pstack-picks": ("pstack/", "skills/interrogate/", "skills/benchmark-checklist/")}
 PY = pu.python_exe()
 PYX = [PY, "-X", "utf8"]

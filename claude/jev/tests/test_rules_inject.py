@@ -14,7 +14,9 @@ import rules_inject
 TEMPLATE = os.path.join(os.path.dirname(HERE), "CLAUDE.md.template")
 
 
-@unittest.skipUnless(os.path.isfile(TEMPLATE), "CLAUDE.md.template is not shipped next to an installed copy of jev/")
+# outside the repo (installed copy of jev/tests) the plugin manifest is absent; in the repo a missing template must fail
+@unittest.skipUnless(os.path.isfile(os.path.join(os.path.dirname(HERE), ".claude-plugin", "plugin.json")),
+                     "not running from the repo checkout")
 class RulesInjectTest(unittest.TestCase):
     def text(self):
         with open(TEMPLATE, encoding="utf-8") as f:
@@ -30,6 +32,7 @@ class RulesInjectTest(unittest.TestCase):
         out = rules_inject.build(self.text(), ["pstack-picks"])
         self.assertNotIn("<!-- pstack-picks -->", out)
         self.assertIn(rules_inject.SKIP_LINE, out)
+        self.assertNotIn("benchmark-checklist", out)
 
     def test_under_cap_for_every_combination(self):
         opt = ["jev", "ruflo", "superpowers", "design", "pstack-picks"]
@@ -38,14 +41,14 @@ class RulesInjectTest(unittest.TestCase):
                 self.assertLess(len(rules_inject.build(self.text(), list(off))), 10000, off)
 
     def test_main_emits_sessionstart_json(self):
-        d = tempfile.mkdtemp()
-        loc = os.path.join(d, "chain.local.json")
-        with open(loc, "w") as f:
-            json.dump({"off": ["pstack-picks"]}, f)
-        with mock.patch.dict(os.environ, {"JEV_CHAIN_LOCAL": loc}), \
-                mock.patch("sys.stdin", io.StringIO('{"source":"startup"}')), \
-                mock.patch("sys.stdout", new_callable=io.StringIO) as out:
-            rules_inject.main()
+        with tempfile.TemporaryDirectory() as d:
+            loc = os.path.join(d, "chain.local.json")
+            with open(loc, "w") as f:
+                json.dump({"off": ["pstack-picks"]}, f)
+            with mock.patch.dict(os.environ, {"JEV_CHAIN_LOCAL": loc}), \
+                    mock.patch("sys.stdin", io.StringIO('{"source":"startup"}')), \
+                    mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+                rules_inject.main()
         hso = json.loads(out.getvalue())["hookSpecificOutput"]
         self.assertEqual(hso["hookEventName"], "SessionStart")
         self.assertIn(rules_inject.SKIP_LINE, hso["additionalContext"])

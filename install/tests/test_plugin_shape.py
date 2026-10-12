@@ -53,7 +53,7 @@ class PluginShapeTest(unittest.TestCase):
 
     def test_mcp(self):
         m = load(PLUGIN / ".mcp.json")["mcpServers"]["jev"]
-        self.assertEqual(m["env"]["OPENROUTER_API_KEY"], "${user_config.openrouter_key}")
+        self.assertEqual(m["env"]["DRYAS_OPENROUTER_KEY"], "${user_config.openrouter_key}")
         self.assertIn("${CLAUDE_PLUGIN_ROOT}/jev/jev_mcp.py", m["args"])
         self.assertTrue((PLUGIN / "jev" / "jev_mcp.py").is_file())
 

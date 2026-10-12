@@ -160,8 +160,23 @@ class ApiKeyTest(unittest.TestCase):
         with mock.patch.dict(os.environ, env, clear=True):
             self.assertEqual(jev_client.api_key(), "b")
 
+    def test_dryas_key_fallback(self):
+        with mock.patch.dict(os.environ, {"DRYAS_OPENROUTER_KEY": " d "}, clear=True):
+            self.assertEqual(jev_client.api_key(), "d")
+
+    def test_unexpanded_literal_ignored(self):
+        with mock.patch.dict(os.environ, {"DRYAS_OPENROUTER_KEY": "${user_config.openrouter_key}",
+                                          "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY": "b"}, clear=True):
+            self.assertEqual(jev_client.api_key(), "b")
+        with mock.patch.dict(os.environ, {"DRYAS_OPENROUTER_KEY": "${user_config.openrouter_key}"}, clear=True):
+            self.assertEqual(jev_client.api_key(), "")
+
+    def test_empty_shell_var_falls_through(self):
+        with mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "  ", "DRYAS_OPENROUTER_KEY": "d"}, clear=True):
+            self.assertEqual(jev_client.api_key(), "d")
+
     def test_none(self):
-        env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY")}
+        env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY")}
         with mock.patch.dict(os.environ, env, clear=True):
             self.assertEqual(jev_client.api_key(), "")
 

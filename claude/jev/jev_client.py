@@ -49,8 +49,13 @@ def _normalize(answers: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 
 def api_key() -> str:
-    """Shell env first; the plugin's sensitive option (exported to hook processes) second. Never stored."""
-    return (os.environ.get("OPENROUTER_API_KEY") or os.environ.get("CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY") or "").strip()
+    """OPENROUTER_API_KEY (shell), then DRYAS_OPENROUTER_KEY (MCP env from the plugin option), then
+    CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY (hook processes). Blank or unexpanded "${...}" values are unset. Never stored."""
+    for name in ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY"):
+        v = os.environ.get(name, "").strip()
+        if v and not v.startswith("${"):
+            return v
+    return ""
 
 
 def judge(state: Any, questions: Dict[str, Any], timeout: float = TIMEOUT_S,
