@@ -65,18 +65,19 @@ Brainstorm → Plan → Judge → Build → Escalate → Review → Ship
 - **Parallel loops.** One project can run many loops at once. The rule is one agent per git worktree: each loop has its own worktree and branch, so loops never collide, and each merges only after its own review.
 - **Jev gating.** Jev is a small model that answers narrow, typed questions. It never writes code or plans. If it is unsure, the main model decides.
 - **Design rule.** UI work goes through Impeccable and UI UX Pro Max.
-- **One source for the rules.** The always-loaded rules in `~/.claude/CLAUDE.md` come from `claude/CLAUDE.md.template`, and the full reference from `docs/workflow.md`. Change them here and re-run the installer; every machine's copy then matches the repo.
+- **One source for the rules.** The always-loaded rules come from `claude/CLAUDE.md.template`; the Dryas plugin injects them at session start. The full reference comes from `docs/workflow.md`. Change them here and re-run the installer; every machine and account then matches the repo.
 
 ## Install
 
 ```
 git clone https://github.com/promprit/dryas-workflow
 cd dryas-workflow
-./install/install.sh      # macOS, Linux, WSL
-.\install\install.ps1     # Windows (PowerShell)
+install/install.sh                              # macOS, Linux, WSL
+install/install.sh --claude-dir ~/.claude-team  # once more for each other Claude account
+.\install\install.ps1                            # Windows (PowerShell)
 ```
 
-Works on macOS, Linux, WSL and Windows, with Claude Code and Codex (`--harness codex|both`).
+For Claude Code, Dryas installs as a plugin (`dryas@dryas-workflow`) into one config dir per run; all accounts share one state folder, `~/.dryas`. Works on macOS, Linux, WSL and Windows, with Claude Code and Codex (`--harness codex|both`).
 
 Details, flags and troubleshooting: [docs/install.md](docs/install.md). Other agent harnesses: [docs/harnesses.md](docs/harnesses.md).
 
@@ -86,7 +87,7 @@ Fork this repo and make the workflow yours:
 
 1. Fork it and clone your fork.
 2. Edit `claude/CLAUDE.md.template` (the rules every session loads) and `docs/workflow.md` (the full reference). If your method differs, change the layer docs and `reference/dryas.yaml` too ([adoption guide](docs/adoption-guide.md)).
-3. Run `./install/install.sh` (or `.\install\install.ps1` on Windows). Every re-install brings your `~/.claude` back in step with your fork.
+3. Run `./install/install.sh` (or `.\install\install.ps1` on Windows). Every re-install brings each account back in step with your fork.
 
 Keep notes that only fit your machine in `~/.dryas/docs/dryas-local.md`. The installer never touches that file.
 

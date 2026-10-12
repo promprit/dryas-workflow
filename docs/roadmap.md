@@ -54,4 +54,4 @@ Only once the spec is stable.
 - [x] Claude Code edition (this repo's `claude/`)
 - [x] Codex edition (this repo's `codex/`, partial conformance, see [harnesses.md](harnesses.md))
 - [ ] OpenCode, Roo, Cursor editions, by anyone, against the spec
-- [ ] Packaged plugins per harness, generated from the manifest
+- [ ] Packaged plugins per harness, generated from the manifest (Claude Code done: plugin dryas@dryas-workflow)

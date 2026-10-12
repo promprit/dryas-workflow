@@ -34,4 +34,4 @@
 
 ## Reference binding
 
-Jev (TypeSafe, via OpenRouter) is the judge and gate. The scope lock is `claude/jev/scope_lock.py`, armed by `.orchestrate/active.json`. Hook order comes from `claude/jev/chain.json`. Thresholds live in `~/.claude/jev/thresholds.json`; `/tune` proposes changes. Details: [workflow.md §1, §5–6](workflow.md).
+Jev (TypeSafe, via OpenRouter) is the judge and gate. The scope lock is `claude/jev/scope_lock.py`, armed by `.orchestrate/active.json`. Hook order comes from `claude/jev/chain.json` (local choices in `~/.dryas/chain.local.json`). Thresholds live in `~/.dryas/jev/thresholds.json`; `/tune` proposes changes. Details: [workflow.md §1, §5–6](workflow.md).

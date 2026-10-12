@@ -1,6 +1,7 @@
 """One call to Jev (typesafe/jev-1.13) through OpenRouter's System One endpoint.
 
-The key comes from OPENROUTER_API_KEY or the plugin option CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY at call time and is never stored. State is redacted
+The key comes from OPENROUTER_API_KEY, then the plugin option (DRYAS_OPENROUTER_KEY in the MCP server,
+CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY in hooks) at call time and is never stored. State is redacted
 before sending. Every failure raises JevUnavailable so callers can fail open.
 """
 import http.client

@@ -155,7 +155,7 @@ class ApiKeyTest(unittest.TestCase):
             self.assertEqual(jev_client.api_key(), "a")
 
     def test_plugin_option_fallback(self):
-        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
+        env = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY")}
         env["CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY"] = "b"
         with mock.patch.dict(os.environ, env, clear=True):
             self.assertEqual(jev_client.api_key(), "b")

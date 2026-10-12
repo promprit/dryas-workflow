@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Post-install check for a real machine. Prints PASS/FAIL/SKIP per check; exit 1 if any FAIL.
 
-Read-only: it never writes to the Claude or Codex folders, only to temp dirs.
+Claude Code: the dryas plugin per --claude-dir (repeatable, one per account). Codex: its copy install.
+Never writes to the Claude or Codex folders, only to temp dirs (hooks it runs may append to the Jev logs).
 """
 import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -19,13 +21,19 @@ SAMPLES = {
     "SessionStart": {"source": "startup"},
     "PreCompact": {"trigger": "manual"},
 }
+PLUGIN_ID = "dryas@dryas-workflow"
+RECORD = ".dryas-plugin.json"
+KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY")
+REPO = Path(__file__).resolve().parents[1]
 PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 MANUAL = """Manual checks (needs the app open):
-  1. In Claude Code, send any prompt; the reply context shows a "Jev route:" line (when OPENROUTER_API_KEY is set).
+  1. In Claude Code, send any prompt; the reply context shows a "Jev route:" line (when an OpenRouter key is set).
   2. In a scratch git repo, run /orchestrate on a tiny task (or create .orchestrate/PLAN.md and active.json by hand);
      ask Claude to write a file outside the Scope. The scope lock must deny it.
   3. In Codex, ask it to edit a file outside the Scope (apply_patch). It must be denied.
-  4. Report the output of this script and these steps in an issue."""
+  4. Report the output of this script and these steps in an issue.
+  5. In each account's Claude Code, run /plugin and check dryas is enabled; if hooks did not fire, check for allowManagedHooksOnly in managed settings (docs/install.md).
+  6. Run /tune and /handoff once in each account; both must run without a permission prompt."""
 
 
 class Report:
@@ -38,6 +46,40 @@ class Report:
         print("%-4s  %s%s" % (status, name, ("  (" + detail + ")") if detail else ""))
 
 
+def api_key(env) -> str:
+    """Same rule as jev_client.api_key: the first of KEY_VARS that is not blank or an unexpanded "${...}"."""
+    for name in KEY_VARS:
+        v = env.get(name, "").strip()
+        if v and not v.startswith("${"):
+            return v
+    return ""
+
+
+def find_bash():
+    """Git Bash on Windows (never WSL's System32 bash), sh elsewhere. Same as install/tests/test_hook_shell.py."""
+    if os.name != "nt":
+        return shutil.which("sh")
+    for cand in (shutil.which("bash"), r"C:\Program Files\Git\bin\bash.exe"):
+        if cand and "system32" not in cand.lower() and os.path.isfile(cand):
+            return cand
+    return None
+
+
+def fwd(p) -> str:
+    return str(p).replace("\\", "/")
+
+
+def _install_path(cd):
+    """installPath of dryas@dryas-workflow in <cd>/plugins/installed_plugins.json (as plugin_setup.install_path)."""
+    try:
+        data = json.loads((Path(cd) / "plugins" / "installed_plugins.json").read_text(encoding="utf-8"))
+        entries = data.get("plugins", {}).get(PLUGIN_ID, [])
+        paths = [e.get("installPath") for e in entries if isinstance(e, dict) and e.get("installPath")]
+        return paths[0] if paths else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def load(d):
     try:
         return json.loads((d / ".dryas-installed.json").read_text(encoding="utf-8"))
@@ -45,11 +87,15 @@ def load(d):
         return None
 
 
-def run_hook(cmd, ev, env):
+def sample(ev):
     event = dict(SAMPLES.get(ev, {}), hook_event_name=ev, cwd=tempfile.gettempdir(), session_id="release-check")
-    data = json.dumps(event, ensure_ascii=False).encode("utf-8")
+    return json.dumps(event, ensure_ascii=False).encode("utf-8")
+
+
+def run_hook(cmd, ev, env, argv=None, timeout=120):
     try:
-        r = subprocess.run(cmd, shell=True, input=data, capture_output=True, env=env, timeout=120)  # portable-ok: tests the OS default shell
+        r = subprocess.run(argv or cmd, shell=argv is None, input=sample(ev), capture_output=True, env=env,  # portable-ok: Codex hooks run in the OS default shell
+                           timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, str(e)
     if r.returncode != 0:
@@ -70,6 +116,55 @@ def check_hooks(rep, label, hooks, env):
         ok, why = run_hook(cmd, ev, env)
         warn = ok and why.startswith("WARN")
         rep.say("WARN" if warn else ("PASS" if ok else "FAIL"), "%s hook %s" % (label, ev), why or cmd[:60])
+
+
+def plugin_hooks(rep, root, cd, bash, env):
+    """Run each hooks.json command of the installed plugin the way Claude Code does: bash -c with the plugin env."""
+    try:
+        hooks = json.loads((Path(root) / "hooks" / "hooks.json").read_text(encoding="utf-8")).get("hooks", {})
+    except (OSError, ValueError, AttributeError) as e:
+        return rep.say("FAIL", "plugin hooks.json", str(e))
+    e = dict(env, CLAUDE_PLUGIN_ROOT=fwd(root), DRYAS_PY=fwd(sys.executable), CLAUDE_CONFIG_DIR=str(cd))
+    for ev in SAMPLES:
+        name = "plugin hooks run (%s)" % ev
+        cmds = [h for g in hooks.get(ev, []) for h in g.get("hooks", []) if h.get("command")]
+        if not cmds:
+            rep.say("SKIP", name, "no hooks")
+            continue
+        if bash is None:
+            rep.say("SKIP", name, "no bash (Windows needs Git Bash)")
+            continue
+        bad = []
+        for h in cmds:
+            ok, why = run_hook(h["command"], ev, e, [bash, "-c", h["command"]], h.get("timeout") or 60)
+            if not ok or why.startswith("WARN"):
+                bad.append(why)
+        rep.say("FAIL" if bad else "PASS", name, "; ".join(bad))
+
+
+def manifests(rep, claude):
+    """`claude plugin validate` on the marketplace and the plugin (schema is not checked anywhere else)."""
+    if not claude:
+        return rep.say("SKIP", "plugin manifests valid", "claude not on PATH")
+    bad = []
+    for target in (REPO, REPO / "claude"):
+        try:
+            r = subprocess.run([claude, "plugin", "validate", str(target)], capture_output=True, universal_newlines=True,
+                               encoding="utf-8", errors="replace", timeout=120)
+            if r.returncode != 0:
+                bad.append("%s: %s" % (target.name or str(target), (r.stdout + r.stderr).strip()[-200:]))
+        except (OSError, subprocess.TimeoutExpired) as ex:
+            bad.append(str(ex))
+    rep.say("FAIL" if bad else "PASS", "plugin manifests valid", "; ".join(bad))
+
+
+def codex_chain(rec):
+    """chain.py the Codex hooks call (Codex keeps a runtime-only copy in a Claude config dir)."""
+    for h in rec.get("hooks", {}).get("hooks", []):
+        m = re.search(r'"([^"]*[/\\]jev[/\\]chain\.py)"', str(h[2]))
+        if m:
+            return Path(m.group(1))
+    return Path.home() / ".claude" / "jev" / "chain.py"
 
 
 def codex_hooks(cdx, rec):
@@ -104,7 +199,7 @@ def scope_lock(rep, chain, harness, env):
         else:
             event = {"tool_name": "Write", "tool_input": {"file_path": "src/other.ts", "content": "x"}, "cwd": str(wt)}
             extra = []
-        e = {k: v for k, v in env.items() if k != "OPENROUTER_API_KEY"}
+        e = {k: v for k, v in env.items() if k not in KEY_VARS}
         e["JEV_LOG_DIR"] = str(wt / "logs")
         r = subprocess.run([sys.executable, "-X", "utf8", str(chain), "pretool"] + extra, input=json.dumps(event),
                            capture_output=True, universal_newlines=True, encoding="utf-8", env=e, timeout=120)
@@ -120,8 +215,8 @@ def scope_lock(rep, chain, harness, env):
 
 
 def jev_route(rep, chain, env):
-    if not env.get("OPENROUTER_API_KEY"):
-        return rep.say("SKIP", "Jev route", "OPENROUTER_API_KEY not set")
+    if not api_key(env):
+        return rep.say("SKIP", "Jev route", "no OpenRouter key in this shell (a plugin option key is seen only inside Claude Code: manual step 1)")
     try:
         r = subprocess.run([sys.executable, "-X", "utf8", str(chain), "prompt"],
                            input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "fix a typo in the readme",
@@ -133,13 +228,19 @@ def jev_route(rep, chain, env):
     rep.say("PASS" if "Jev " in out else "WARN", "Jev route", "" if "Jev " in out else "no 'Jev ' line in output")
 
 
-def ruflo(rep, cd, env):
-    run = cd / "ruflo" / "run.py"
-    if not run.is_file():
-        return rep.say("SKIP", "Ruflo", "not installed")
+def ruflo(rep, cd, root_dir, env):
+    try:
+        comps = json.loads((cd / RECORD).read_text(encoding="utf-8")).get("components", [])
+    except (OSError, ValueError, AttributeError):
+        comps = []
+    if "ruflo" not in comps:
+        return rep.say("SKIP", "Ruflo", "not set up in %s" % cd)
+    run = Path(root_dir) / "ruflo" / "run.py"
     root = Path(env.get("DRYAS_DATA_ROOT") or Path.home() / ".dryas")
     ok = root.is_dir() and os.access(str(root), os.W_OK)
     rep.say("PASS" if ok else "FAIL", "Ruflo data root writable", str(root))
+    hh = root / "ruflo" / "helpers" / "hook-handler.cjs"
+    rep.say("PASS" if hh.is_file() else "FAIL", "Ruflo helpers in data root", str(hh))
     try:
         r = subprocess.run([sys.executable, "-X", "utf8", str(run), "helper", "node", str(Path(tempfile.gettempdir()) / "dryas-nonexistent-xyz")],
                            input="", capture_output=True, universal_newlines=True, encoding="utf-8", env=env, timeout=120)
@@ -152,10 +253,12 @@ def ruflo(rep, cd, env):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Check a Dryas Workflow install on this machine (read-only).")
-    ap.add_argument("--claude-dir", default=str(Path.home() / ".claude"))
+    ap.add_argument("--claude-dir", action="append", help="a Claude Code config dir; repeat for each account "
+                    "(default: ~/.claude)")
     ap.add_argument("--codex-dir", default=os.environ.get("CODEX_HOME") or str(Path.home() / ".codex"))
     a = ap.parse_args(argv)
-    cd, cdx = Path(a.claude_dir), Path(a.codex_dir)
+    cds = [Path(d) for d in (a.claude_dir or [str(Path.home() / ".claude")])]
+    cdx = Path(a.codex_dir)
     env = dict(os.environ)
     rep = Report()
     print("Environment")
@@ -164,23 +267,30 @@ def main(argv=None):
     for t in ("git", "claude", "codex", "node"):
         p = shutil.which(t)
         rep.say("PASS" if p else "SKIP", t, p or "not on PATH")
-    rep.say("PASS" if env.get("OPENROUTER_API_KEY") else "SKIP", "OPENROUTER_API_KEY", "set" if env.get("OPENROUTER_API_KEY") else "not set")
-    chain = cd / "jev" / "chain.py"
-    rec = load(cd)
-    if rec is None:
-        rep.say("SKIP", "Claude install", "no .dryas-installed.json in %s" % cd)
-    else:
-        hooks = [(h[0], h[2]) for h in rec.get("settings", {}).get("hooks", [])]
-        check_hooks(rep, "Claude", hooks, env)
-        scope_lock(rep, chain, "claude", env)
-        jev_route(rep, chain, env)
-        ruflo(rep, cd, env)
+    rep.say("PASS" if api_key(env) else "SKIP", "OpenRouter key", "set" if api_key(env) else "not set in this shell")
+    manifests(rep, shutil.which("claude"))
+    bash = find_bash()
+    for cd in cds:
+        print()
+        print("Claude Code: %s" % cd)
+        root = _install_path(cd)
+        if not root:
+            rep.say("FAIL", "dryas plugin installed", "no %s in %s" % (PLUGIN_ID, cd / "plugins" / "installed_plugins.json"))
+            continue
+        rep.say("PASS", "dryas plugin installed", root)
+        plugin_hooks(rep, root, cd, bash, env)
+        penv = dict(env, CLAUDE_PLUGIN_ROOT=fwd(root), DRYAS_PY=fwd(sys.executable), CLAUDE_CONFIG_DIR=str(cd))
+        chain = Path(root) / "jev" / "chain.py"
+        scope_lock(rep, chain, "claude", penv)
+        jev_route(rep, chain, penv)
+        ruflo(rep, cd, root, penv)
+    print()
     crec = load(cdx)
     if crec is None:
         rep.say("SKIP", "Codex install", "no .dryas-installed.json in %s" % cdx)
     else:
         check_hooks(rep, "Codex", codex_hooks(cdx, crec), env)
-        scope_lock(rep, chain, "codex", env)
+        scope_lock(rep, codex_chain(crec), "codex", env)
     print()
     print(MANUAL)
     return 1 if rep.fails else 0

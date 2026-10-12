@@ -86,6 +86,20 @@ class PortabilityTest(unittest.TestCase):
         hits = scan(shipped_files(), root=ROOT)
         self.assertEqual(hits, [], "\n" + "\n".join(hits))
 
+    def test_plugin_commands_use_plugin_placeholders(self):
+        """Hook and MCP commands name the plugin root and DRYAS_PY, never installer placeholders."""
+        import json
+        hooks = json.loads((ROOT / "claude" / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        for groups in hooks.values():
+            for g in groups:
+                for h in g["hooks"]:
+                    self.assertNotRegex(h["command"], r'"\$PY"|\$CD\b|\{\{')
+                    self.assertIn("${CLAUDE_PLUGIN_ROOT}/", h["command"])
+                    self.assertIn("${DRYAS_PY:-python3}", h["command"])
+        mcp = json.loads((ROOT / "claude" / ".mcp.json").read_text(encoding="utf-8"))
+        for srv in mcp["mcpServers"].values():
+            self.assertFalse(any("$CD" in a or "{{" in a for a in srv["args"]))
+
 
 if __name__ == "__main__":
     unittest.main()

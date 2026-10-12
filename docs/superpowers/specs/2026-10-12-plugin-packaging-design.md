@@ -1,6 +1,6 @@
 # Dryas as a Claude Code plugin
 
-Date: 2026-10-12. Status: approved in conversation, pending written-spec review. **Contested: no** (packaging and paths; the scope lock and Jev gate keep their deny behavior).
+Date: 2026-10-12. Status: approved; amended by the plan (A1–A4), see [Amendments](#amendments). **Contested: no** (packaging and paths; the scope lock and Jev gate keep their deny behavior).
 
 ## Goal
 
@@ -124,3 +124,21 @@ All in the existing CI matrix (macOS, Ubuntu, Windows; Python 3.9 and 3.12). The
 - The Codex harness and its installer path.
 - A Windows `.cmd` launcher, unless the Git Bash check fails.
 - Publishing to an external marketplace.
+
+## Amendments
+
+The plan (`docs/superpowers/plans/2026-10-12-plugin-packaging.md`) fixed four things this spec missed:
+
+- **[A1] Markdown tokens.** Agents, commands and skills used `{{CD}}` / `{{PY}}` tokens and `<!-- pstack-picks -->` blocks that the copy installer rendered. A plugin ships them raw. `{{CD}}` becomes `${CLAUDE_PLUGIN_ROOT}` (Claude Code substitutes it in plugin skill, command and agent bodies). `"{{PY}}" -X utf8` becomes a launcher, `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py"`, which runs `"${DRYAS_PY:-python3}" -X utf8 "$@"`. After substitution the Bash command holds only literal absolute paths, so permission rules can match it. `<!-- pstack-picks -->` blocks stay in the files; when pstack-picks is off, the rules hook adds one line telling Claude to skip them. Hardcoded `~/.claude/jev/...` and `~/.claude/skills/...` paths in Markdown are rewritten.
+- **[A2] Codex still reads `~/.claude`.** Codex hooks and MCP point at `~/.claude/jev/*.py` and `~/.claude/ruflo/*`. To keep Codex unchanged, the copy install stays for `--harness codex|both`, but copies only runtime files (`jev/`, `ruflo/`, `pstack/`, and `docs/dryas-workflow.md`), never `agents/`, `commands/`, `skills/` (those would duplicate the plugin's).
+- **[A3] Jev key in hooks.** `gate.py`, `route.py` and `compact_keep.py` call OpenRouter from hooks. Hooks get the plugin option as `CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY`, not `OPENROUTER_API_KEY`. The MCP server gets it as `DRYAS_OPENROUTER_KEY` through `env` in `.mcp.json` (not as `OPENROUTER_API_KEY`, so an empty option cannot hide the shell key). `jev_client.api_key()` reads `OPENROUTER_API_KEY` first, then `DRYAS_OPENROUTER_KEY`, then `CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY`, and ignores blank or unexpanded `${...}` values.
+- **[A4] Ruflo stays in user settings.** Ruflo hooks are optional and point at helpers in `~/.dryas`, so they stay in the settings fragment that `setup` merges (not in `hooks.json`). The helpers and the MCP shim live in `~/.dryas/ruflo` (`helpers/`, `mcp-shim/`) because the shim's `dist` link must not be created inside the plugin (the repo clone). `ruflo/run.py` stays in the plugin.
+
+Also changed during implementation:
+
+- A malformed `chain.local.json` (wrong shapes) falls back to the defaults instead of breaking the chain.
+- On Windows the `Read` allow rule for the data root uses the `//c/...` form.
+- The executor agent is `dryas:executor`; the Jev MCP tools are `mcp__plugin_dryas_jev__*`.
+- The workflow reference is `~/.dryas/docs/dryas-workflow.md` (setup copies it from `docs/workflow.md`); local notes move to `~/.dryas/docs/dryas-local.md`.
+- The Codex runtime-only copy also gets the Ruflo runtime in the data root.
+- `--purge` removes only the entries Dryas owns in `~/.dryas`, and only when no other account is listed in `accounts.json` (it refuses when that file is missing or unreadable).
