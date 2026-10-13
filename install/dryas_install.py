@@ -449,7 +449,7 @@ def uninstall(cd: Path) -> int:
         elif root.exists():
             print("kept data root (not empty): %s" % root)
     if "jev" in rec.get("mcp", []):
-        run(["claude", "mcp", "remove", "--scope", "user", "jev"], env=dict(os.environ, CLAUDE_CONFIG_DIR=str(cd)))
+        run(["claude", "mcp", "remove", "--scope", "user", "jev"], env=pu.claude_env(cd))
     (cd / RECORD).unlink()
     if rec.get("claude_dir_created") and cd.is_dir() and not cd.is_symlink() and not os.listdir(str(cd)):
         cd.rmdir()

@@ -2,7 +2,8 @@
 import os
 import shutil
 import sys
-from typing import List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional
 
 IS_WINDOWS = os.name == "nt"
 
@@ -10,6 +11,25 @@ IS_WINDOWS = os.name == "nt"
 def fwd(p) -> str:
     """Path as a string with forward slashes (valid in bash, Git Bash, cmd and Python on every OS)."""
     return str(p).replace("\\", "/")
+
+
+def claude_env(cd, base=None) -> Dict[str, str]:
+    """Env for running `claude` against config dir `cd`. The CLI reads its global config from
+    $CLAUDE_CONFIG_DIR/.claude.json when the variable is set (else ~/.claude.json), so the default dir leaves it
+    unset unless the caller's env already sets it."""
+    env = dict(os.environ if base is None else base)
+    if not env.get("CLAUDE_CONFIG_DIR") and Path(cd).expanduser().resolve() == (Path.home() / ".claude").resolve():
+        env.pop("CLAUDE_CONFIG_DIR", None)
+    else:
+        env["CLAUDE_CONFIG_DIR"] = str(cd)
+    return env
+
+
+def claude_global_config(cd, base=None) -> Path:
+    """The global config file (user-scope MCP servers) the CLI uses for `cd`."""
+    if "CLAUDE_CONFIG_DIR" in claude_env(cd, base):
+        return Path(cd) / ".claude.json"
+    return Path.home() / ".claude.json"
 
 
 _PYTHON_EXE: Optional[str] = None

@@ -30,6 +30,7 @@ KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "install"))
 import codex_appserver as ca  # noqa: E402  (stdlib only; tools never import tests)
+import platform_util as pu  # noqa: E402
 PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 MANUAL = """Manual checks (needs the app open):
   1. In Claude Code, send any prompt; the reply context shows a "Jev route:" line (when an OpenRouter key is set).
@@ -84,7 +85,7 @@ def _plugin_entry(cd, claude):
         return None
     try:
         r = subprocess.run([claude, "plugin", "list", "--json"], capture_output=True, universal_newlines=True,
-                           encoding="utf-8", errors="replace", timeout=120, env=dict(os.environ, CLAUDE_CONFIG_DIR=str(cd)))
+                           encoding="utf-8", errors="replace", timeout=120, env=pu.claude_env(cd))
         data = json.loads(r.stdout) if r.returncode == 0 else None
     except (OSError, subprocess.TimeoutExpired, ValueError):
         data = None
