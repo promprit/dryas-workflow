@@ -1,4 +1,5 @@
 import os, shutil, sys, tempfile, unittest
+from unittest import mock
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import platform_util as pu
@@ -116,6 +117,61 @@ class ReadRulePathTest(unittest.TestCase):
     def test_windows_drive(self):
         self.assertEqual(pu.read_rule_path("C:/Users/x/.dryas"), "//c/Users/x/.dryas")
         self.assertEqual(pu.read_rule_path("D:\\Data\\root"), "//d/Data/root")
+
+
+class ClaudeEnvTest(unittest.TestCase):
+    def setUp(self):
+        self.home = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, str(self.home), True)
+        env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home))
+        env.pop("CLAUDE_CONFIG_DIR", None)
+        p = mock.patch.dict(os.environ, env, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+        h = mock.patch.object(Path, "home", classmethod(lambda cls: self.home))
+        h.start()
+        self.addCleanup(h.stop)
+        self.default = self.home / ".claude"
+
+    def test_claude_env_default_dir_drops_var(self):
+        env = pu.claude_env(self.default, {"PATH": "/bin"})
+        self.assertNotIn("CLAUDE_CONFIG_DIR", env)
+        self.assertEqual(env["PATH"], "/bin")
+
+    def test_claude_env_default_dir_drops_var_from_process_env(self):
+        self.assertNotIn("CLAUDE_CONFIG_DIR", pu.claude_env(self.default))
+
+    def test_claude_env_custom_dir_sets_var(self):
+        cd = self.home / "other"
+        self.assertEqual(pu.claude_env(cd, {})["CLAUDE_CONFIG_DIR"], str(cd))
+
+    def test_claude_env_user_set_var_kept_even_for_default_dir(self):
+        base = {"CLAUDE_CONFIG_DIR": str(self.default)}
+        self.assertEqual(pu.claude_env(self.default, base)["CLAUDE_CONFIG_DIR"], str(self.default))
+
+    def test_claude_env_user_set_var_uses_cd(self):
+        cd = self.home / "other"
+        base = {"CLAUDE_CONFIG_DIR": str(self.home / "elsewhere")}
+        self.assertEqual(pu.claude_env(cd, base)["CLAUDE_CONFIG_DIR"], str(cd))
+
+    def test_claude_env_empty_var_counts_as_unset(self):
+        self.assertNotIn("CLAUDE_CONFIG_DIR", pu.claude_env(self.default, {"CLAUDE_CONFIG_DIR": ""}))
+
+    def test_claude_env_base_arg_overrides_os_environ(self):
+        os.environ["CLAUDE_CONFIG_DIR"] = str(self.home / "x")
+        self.assertNotIn("CLAUDE_CONFIG_DIR", pu.claude_env(self.default, {}))
+
+    def test_claude_env_does_not_mutate_base(self):
+        base = {"CLAUDE_CONFIG_DIR": str(self.default)}
+        pu.claude_env(self.home / "other", base)
+        self.assertEqual(base["CLAUDE_CONFIG_DIR"], str(self.default))
+
+    def test_claude_global_config_default_dir(self):
+        self.assertEqual(pu.claude_global_config(self.default, {}), self.home / ".claude.json")
+
+    def test_claude_global_config_custom_dir(self):
+        cd = self.home / "other"
+        self.assertEqual(pu.claude_global_config(cd, {}), cd / ".claude.json")
 
 
 if __name__ == "__main__":
