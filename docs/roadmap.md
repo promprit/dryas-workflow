@@ -56,3 +56,13 @@ Only once the spec is stable.
 - [x] Codex plugin (`dryas@dryas-workflow` from `codex/`)
 - [ ] Pi, OpenCode, Roo and Cursor editions (later), by anyone, against the spec
 - [ ] Packaged plugins per harness, generated from the manifest (Claude Code and Codex done: plugin dryas@dryas-workflow)
+
+## Phase 4: Jev judges the task, not every edit
+
+Today the Jev gate judges every `Write` and `Edit`, each as a remote call with no context beyond the one diff. The next change moves the judgement to the task:
+
+- [ ] When the orchestrator dispatches a task, ask Jev once: given this plan step, file scope and done check, which files need per-edit review? Store the answer in `active.json` next to the scope.
+- [ ] Scope lock reads that set on each edit: files in it go to the gate, the rest are allowed locally. One Jev call per task instead of one per edit.
+- [ ] Keep the fallbacks. Edits outside any task still use the path filter and the gate. Classes that are always judged (`.git/`, dotfiles, CI config, secrets-adjacent files) stay judged whatever Jev said. Cheap local content signals (`subprocess`, `eval`, deletes, env and network access) still trigger a per-edit call inside a trusted scope, so an executor that drifts from its task is caught.
+- [ ] Log one dispatch record per task with Jev's verdict, for `/tune` and [metrics.md](metrics.md).
+- [ ] Spec first, under `docs/specs/`, since it changes the orchestrate skill, the `active.json` format, scope lock, the gate and the dispatch log.
