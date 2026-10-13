@@ -79,7 +79,7 @@ Orchestrate gains one line for guard-the-context-window (route bulk output to ex
 
 ### 5.3 Escalate (§3, orchestrate §7): RCA before each climb
 
-Before re-dispatching Sonnet -> Opus, and again before Opus -> Fable, the orchestrator runs `superpowers:systematic-debugging` with the fix-root-causes principle on the failing reports. It reads; it does not edit project files.
+Before re-dispatching standard -> strong, and again before strong -> frontier, the orchestrator runs `superpowers:systematic-debugging` with the fix-root-causes principle on the failing reports. It reads; it does not edit project files.
 
 - If the root cause is a plan defect (scope too narrow, vague or wrong `Done:`, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the **same** model. This does not count as a climb and does not reset the failure counter. At most once per model: a second failure on that model climbs, so a plan-blaming loop cannot stall the ladder.
 - Otherwise climb as today, with the root cause in the re-dispatch prompt and in the `log_escalation` reason.
@@ -92,7 +92,7 @@ After every task has returned and passed, and before cleanup:
 
 1. One `jev_judge` call, noul `needs_interrogate`, state `{design_summary, diff_stat, files_touched, contested}`. Instructions: "Does the change described in `design_summary` and `diff_stat` restructure how components fit together, change an interface other modules depend on, or carry `contested: true`?"
 2. Run interrogate when Jev says true at confidence >= `interrogate.min_confidence` (default 0.7), or the user asked, or the approved design marked the change contested. Below threshold or Jev unavailable: the orchestrator decides and calls `log_override` when it differs from Jev.
-3. Panel: two `executor` reviewers in one message, one on the executor's default model, one on the next model on the ladder. Each gets a review task section with an empty `Scope:`, so the scope lock denies every edit (read-only by structure, not by instruction). Fable is never on the panel.
+3. Panel: two `executor` reviewers in one message, one on the executor's default model, one on the next model on the ladder. Each gets a review task section with an empty `Scope:`, so the scope lock denies every edit (read-only by structure, not by instruction). The frontier tier is never on the panel.
 4. The orchestrator is the lead judge, using `lead-judgment.md`. Each "Act on" finding becomes a new PLAN.md task and goes through the normal TDD gate and dispatch. "Consider" items go to the user in the final report.
 
 ### 5.5 Step 9, finish: cleanup task before review
@@ -116,11 +116,11 @@ New Codex skills `$interrogate` and `$benchmark-checklist` read the same files u
 | Escalation | RCA by the orchestrator, no new agents. Saves climbs when the cause is a plan defect |
 | Perf task | Extra runs the checklist demands (5+ per side), only when numbers are reported |
 
-The cheap-first ladder is untouched: the panel never includes Fable, and nothing starts a build task above its rung.
+The cheap-first ladder is untouched: the panel never includes frontier, and nothing starts a build task above its rung.
 
 **Jev decides when interrogate runs**, through the new narrow question in 5.4, with the user and the design able to force it. Its override rate shows up in `/tune` like every other question.
 
-**Success check after rollout:** compare two weeks of `/tune` before and after: Sonnet -> Opus and Opus -> Fable counts and reasons (expect fewer climbs and some "plan fixed, same rung" reasons), and the `needs_interrogate` override rate (high overrides mean the question needs rewording).
+**Success check after rollout:** compare two weeks of `/tune` before and after: standard -> strong and strong -> frontier counts and reasons (expect fewer climbs and some "plan fixed, same rung" reasons), and the `needs_interrogate` override rate (high overrides mean the question needs rewording).
 
 ## 7. Collisions (spec question 5)
 

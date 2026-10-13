@@ -20,20 +20,21 @@ TOOLS = [
         "description": ("Ask Jev (TypeSafe System One) narrow typed questions about a named JSON state. "
                         "questions: map name -> {type: noul|choice|score, instructions, criteria}. Choice criteria must "
                         "include a none_of_these option. Batch independent questions in one call. Answers below the "
-                        "confidence threshold are listed in 'escalate': Opus decides those."),
+                        "confidence threshold are listed in 'escalate': the strong tier decides those."),
         "inputSchema": {"type": "object", "properties": {"state": {}, "questions": {"type": "object"}},
                         "required": ["state", "questions"]},
     },
     {
         "name": "log_escalation",
-        "description": ("Record one escalation step with its reason. Ladder: haiku -> sonnet -> opus -> fable; fable only after an "
-                        "Opus executor failed the same task. Required for every step."),
+        "description": ("Record one escalation step with its reason. Ladder: fast -> standard -> strong -> frontier; frontier only after a "
+                        "strong executor failed the same task. from_model/to_model take the model ids haiku, sonnet, opus, "
+                        "fable (fast, standard, strong, frontier). Required for every step."),
         "inputSchema": {"type": "object", "properties": {k: {"type": "string"} for k in ("task", "reason", "decided_by", "from_model", "to_model")},
                         "required": ["task", "reason", "decided_by", "from_model", "to_model"]},
     },
     {
         "name": "log_override",
-        "description": "Record that Opus acted against a Jev answer. Feeds /tune calibration.",
+        "description": "Record that the strong tier acted against a Jev answer. Feeds /tune calibration.",
         "inputSchema": {"type": "object", "properties": {"question": {"type": "string"}, "jev_answer": {}, "jev_confidence": {"type": "number"},
                                                          "opus_decision": {}, "reason": {"type": "string"}},
                         "required": ["question", "jev_answer", "opus_decision", "reason"]},
@@ -255,7 +256,7 @@ def _judge(mid: Any, args: Dict[str, Any], judge_fn) -> Dict[str, Any]:
         # Extract safe cause message from exception
         cause = str(e) if str(e) else type(e).__name__
         jevlog.append("mcp", {"tool": "jev_judge", "error": cause})
-        return _text(mid, "Jev unavailable (%s). Opus decides." % cause, True)
+        return _text(mid, "Jev unavailable (%s). The orchestrator decides." % cause, True)
 
     # Log successfully, but catch and log any post-judge errors
     try:

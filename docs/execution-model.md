@@ -27,7 +27,7 @@
 3. **Need-to-know dispatch.** Each executor gets only its own task section and the worktree path, never the whole plan.
 4. **Test first.** If no failing test exists, a tester goes first; the coder runs only after that test fails for the right reason.
 5. **Parallel when independent.** Tasks with non-overlapping scopes may run in parallel.
-6. **Cheapest capable executor.** Executors start on the cheap tier (see [escalation-model.md](escalation-model.md)).
+6. **Cheapest capable executor.** Executors start on the `fast` tier (see [escalation-model.md](escalation-model.md)).
 7. **Minimal change.** No refactors, renames or extras outside the goal. Remove code the change makes dead.
 8. **Fixed report.** Every executor ends with:
    ```

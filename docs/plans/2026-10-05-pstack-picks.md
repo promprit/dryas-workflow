@@ -1016,7 +1016,7 @@ If your section names `{{CD}}/pstack/cleanup.md` or `{{CD}}/pstack/benchmark-che
 
 `claude/skills/orchestrate/SKILL.md`, five blocks.
 
-(a) After the paragraph that starts "You (Opus) plan, dispatch, judge and integrate." and its blank line:
+(a) After the paragraph that starts "You (strong) plan, dispatch, judge and integrate." and its blank line:
 
 ```markdown
 <!-- pstack-picks -->

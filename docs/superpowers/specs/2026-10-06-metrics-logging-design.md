@@ -11,7 +11,7 @@ In scope (project 1 of 2):
 1. Log the planned metrics: `scope`, `dispatch`, `review` and `merge` records, reported by `/tune`.
 2. Drop no-op `/tune` proposals (new value equals old value).
 3. Canonical judge question names, so calibration groups calls correctly.
-4. Filter the Sonnet→Opus count on `from_model == "sonnet"` (same defect as the Fable fix in `6555fb8`).
+4. Filter the standard→strong count on `from_model == "sonnet"` (same defect as the frontier fix in `6555fb8`).
 
 Out of scope: compound-command gating in `gate.py` (project 2, own spec and `/interrogate`); time windows for `/tune` (it reads all-time logs).
 
@@ -42,7 +42,7 @@ Rules:
 | --- | --- | --- |
 | Tasks dispatched | distinct `task` in `dispatch` where `attempt == 1` | denominator |
 | Scope-lock denials per task (healthy 0–1) | count of `scope` records ÷ tasks dispatched | GOV-M4 |
-| Sonnet→Opus climb rate (healthy under 20%) | `escalations` with `from_model == "sonnet"` and `to_model == "opus"` ÷ tasks dispatched | ESC-M1 |
+| Standard→strong climb rate (healthy under 20%) | `escalations` with `from_model == "sonnet"` and `to_model == "opus"` ÷ tasks dispatched | ESC-M1 |
 | Median review rounds per branch (healthy ≤ 1) | max `round` per `task` in `review`, then the median | REV-M1 |
 | Merges without a review (should be 0) | `merge` records whose `task` has no `review` record | L1 check |
 | Cost per merged task | Σ `cost_usd` ÷ Σ `tasks_merged` over merges that have `cost_usd`; plus "N of M merges had no cost" | EXE-M3 |
@@ -88,7 +88,7 @@ TDD in `claude/jev/tests` and `install/tests`:
 
 - `test_scope_lock.py`: a denied edit writes one `scope` record with the active task ids and path; an allowed edit writes none; a log directory that cannot be written still denies.
 - `test_jev_mcp.py`: `log_dispatch`, `log_review`, `log_merge` appear in `tools/list`, write valid records, and reject calls missing a required field without writing.
-- `test_tune.py`: each new report key on sample logs; `n/a` on empty logs; no-op proposal dropped; `canonical()` on every legacy shape listed above; Sonnet→Opus count ignores records not from Sonnet.
+- `test_tune.py`: each new report key on sample logs; `n/a` on empty logs; no-op proposal dropped; `canonical()` on every legacy shape listed above; standard→strong count ignores records not from standard.
 - `install/tests`: existing shipped-file and docs tests pass; a test asserts both editions' orchestrate skill texts mention `log_dispatch` and `log_merge`, and both `wreview` texts mention `log_review`.
 
 Full suite: `python3 -m pytest -q claude/jev/tests install/tests claude/ruflo/tests`.

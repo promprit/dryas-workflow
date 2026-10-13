@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Run a multi-step coding task as Opus orchestrator with Haiku-first executors (Sonnet, Opus, Fable on escalation), Jev routing/gates, Ruflo memory and Superpowers process. Use for /orchestrate or any multi-file task. Not for single-file fixes.
+description: Run a multi-step coding task as strong-tier orchestrator with fast-first executors (standard, strong, frontier on escalation), Jev routing/gates, Ruflo memory and Superpowers process. Use for /orchestrate or any multi-file task. Not for single-file fixes.
 ---
 
 # Orchestrate
@@ -10,7 +10,7 @@ Ruflo and Jev MCP tools may be deferred — load them with ToolSearch (e.g. `sel
 ## 0. Brainstorm first (always)
 Unless the request points at an already-approved design/spec, invoke superpowers:brainstorming first and finish its gates (design approved by the user) before step 1. Orchestration plans from the approved design, never from the raw request.
 
-You (Opus) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.dryas/jev/thresholds.json` (defaults in `${CLAUDE_PLUGIN_ROOT}/jev/thresholds.py`). Ruflo tool names: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/ruflo-tools.md`.
+You (the strong tier) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.dryas/jev/thresholds.json` (defaults in `${CLAUDE_PLUGIN_ROOT}/jev/thresholds.py`). Ruflo tool names: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/ruflo-tools.md`.
 
 <!-- pstack-picks -->
 Keep bulk output in executors and only summaries here (`${CLAUDE_PLUGIN_ROOT}/pstack/principles/guard-the-context-window.md`). Judge each report against the real artifact, not the self-report (`${CLAUDE_PLUGIN_ROOT}/pstack/principles/prove-it-works.md`).
@@ -77,11 +77,11 @@ Review and cleanup tasks (`Failing test first: none (review)` or `none (cleanup)
 2. Write `.orchestrate/active.json` = `{"active": [<task ids being dispatched now>]}` before dispatching; this arms the scope lock. On EVERY exit path — success, failure handed to the user (§7.3/§7.4), user abort, or any error — delete `.orchestrate/active.json` before stopping; the scope lock stays armed while it exists.
 3. Give each executor ONLY its section: `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
 4. Dispatch with the Agent tool, `subagent_type: dryas:executor`. Pick the start tier per task, first match wins:
-   1. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus`, after `mcp__plugin_dryas_jev__log_escalation` (from_model sonnet, to_model opus, reason "skip-up: <why>", whatever `dispatch.haiku_default` says, so ESC-M1 counts it the same way as before Haiku; the skip-up reason tells observers it is a start tier, not a climb).
-   2. `dispatch.haiku_default` false → no `model` (Sonnet from the agent's frontmatter). Do not ask `needs_sonnet`.
-   3. `needs_sonnet` true at confidence ≥ threshold, or your own judgment → no `model` (Sonnet), after `mcp__plugin_dryas_jev__log_escalation` (from_model haiku, to_model sonnet, reason "skip-up: <why>").
+   1. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus`, after `mcp__plugin_dryas_jev__log_escalation` (from_model sonnet, to_model opus, reason "skip-up: <why>", whatever `dispatch.haiku_default` says, so ESC-M1 counts it the same way as before the fast tier; the skip-up reason tells observers it is a start tier, not a climb).
+   2. `dispatch.haiku_default` false → no `model` (standard tier from the agent's frontmatter). Do not ask `needs_sonnet`.
+   3. `needs_sonnet` true at confidence ≥ threshold, or your own judgment → no `model` (standard tier), after `mcp__plugin_dryas_jev__log_escalation` (from_model haiku, to_model sonnet, reason "skip-up: <why>").
    4. Otherwise → `model: haiku`.
-   Independent tasks go out in one message, in parallel. Never dispatch Fable here: Fable is only reached through §7. Review, interrogate and cleanup dispatches (§7b) never use Haiku: they start on Sonnet (no `model`) and log no skip-up.
+   Independent tasks go out in one message, in parallel. Never dispatch the frontier tier here: it is only reached through §7. Review, interrogate and cleanup dispatches (§7b) never use the fast tier: they start on the standard tier (no `model`) and log no skip-up.
 5. Every `log_dispatch` and `log_escalation` call for a task uses the same task id: "<worktree branch>:<PLAN.md task id>", e.g. worktree-feat:3. `/tune` joins the two logs on it.
 6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__plugin_dryas_jev__log_dispatch` with task (the §5.5 id), tier (haiku, sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
 
@@ -95,21 +95,21 @@ Note: `risk` is a score question whose criteria is the list ["routine", "worth a
 Only an incident, a failure or an escalation reaches you in full; otherwise log one summary line per task. Remove a task id from `active.json` only when that task is finished or handed to the user; a task being re-dispatched stays active. If an executor reports `SCOPE: need <path> because <reason>`, you (main thread) decide; if justified, add the glob to that task's Scope in .orchestrate/PLAN.md (the scope lock lets only the main thread edit .orchestrate/PLAN.md), then re-dispatch. Store the outcome in Ruflo memory (memory_store, same namespace): task title, what worked, what failed.
 
 ## 7. Escalation
-Ladder: **Haiku → Sonnet → Opus → Fable**. Fable is used only when Opus also could not do the task.
+Ladder: **fast → standard → strong → frontier**. The frontier tier is used only when the strong tier also could not do the task.
 Every `mcp__plugin_dryas_jev__log_escalation` call passes all five fields: task, reason, decided_by ("jev" or "opus"), from_model, to_model.
-First Sonnet failure: re-dispatch once more on Sonnet with the failure details; the second Sonnet failure escalates to Opus.
+First standard-tier failure: re-dispatch once more on standard with the failure details; the second standard failure escalates to strong.
 Each re-dispatch is logged with `mcp__plugin_dryas_jev__log_dispatch` (§5.6).
 <!-- pstack-picks -->
-Before each climb (Haiku → Sonnet, Sonnet → Opus, Opus → Fable), run superpowers:systematic-debugging with `${CLAUDE_PLUGIN_ROOT}/pstack/principles/fix-root-causes.md` on the failing reports. Read only; do not edit project files. If the root cause is a plan defect (scope too narrow, Done vague or wrong, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the same model: that is not a climb and the failure count stays. Do this at most once per model; a second failure on that model climbs. Otherwise climb, and put the root cause in the re-dispatch prompt and in the `log_escalation` reason.
+Before each climb (fast → standard, standard → strong, strong → frontier), run superpowers:systematic-debugging with `${CLAUDE_PLUGIN_ROOT}/pstack/principles/fix-root-causes.md` on the failing reports. Read only; do not edit project files. If the root cause is a plan defect (scope too narrow, Done vague or wrong, missing context), fix that task section in `.orchestrate/PLAN.md` and re-dispatch on the same model: that is not a climb and the failure count stays. Do this at most once per model; a second failure on that model climbs. Otherwise climb, and put the root cause in the re-dispatch prompt and in the `log_escalation` reason.
 <!-- /pstack-picks -->
-1. A Haiku executor that fails done-criteria `escalation.haiku_failures_before_sonnet` times (1), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with no `model` (Sonnet). Call `mcp__plugin_dryas_jev__log_escalation` first (from haiku, to sonnet, with the reason). From there the Sonnet rules below apply, starting at zero Sonnet failures.
+1. A fast-tier executor that fails done-criteria `escalation.haiku_failures_before_sonnet` times (1), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with no `model` (standard tier). Call `mcp__plugin_dryas_jev__log_escalation` first (from haiku, to sonnet, with the reason). From there the standard-tier rules below apply, starting at zero standard failures.
 <!-- pstack-picks -->
-   A plan-defect re-run on Haiku after the root-cause step above is not a climb; it is the one same-model re-run, like any tier.
+   A plan-defect re-run on the fast tier after the root-cause step above is not a climb; it is the one same-model re-run, like any tier.
 <!-- /pstack-picks -->
-2. A Sonnet executor that fails done-criteria `escalation.sonnet_failures_before_opus` times (2), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with `model: opus`. Call `mcp__plugin_dryas_jev__log_escalation` first (from sonnet, to opus, with the reason).
-3. If the Opus executor succeeds, stop: no Fable.
-4. Only if the Opus executor fails `escalation.opus_failures_before_fable` times (1), or reports CONFIDENCE below the threshold, re-dispatch once with `model: fable`, after `mcp__plugin_dryas_jev__log_escalation` (from opus, to fable, reason naming what Opus could not resolve). If Fable is unavailable, stop and report to the user.
-5. A Fable failure comes to the user with every tier's report.
+2. A standard-tier executor that fails done-criteria `escalation.sonnet_failures_before_opus` times (2), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with `model: opus`. Call `mcp__plugin_dryas_jev__log_escalation` first (from sonnet, to opus, with the reason).
+3. If the strong executor succeeds, stop: no frontier.
+4. Only if the strong executor fails `escalation.opus_failures_before_fable` times (1), or reports CONFIDENCE below the threshold, re-dispatch once with `model: fable`, after `mcp__plugin_dryas_jev__log_escalation` (from opus, to fable, reason naming what the strong tier could not resolve). If the frontier tier is unavailable, stop and report to the user.
+5. A frontier failure comes to the user with every tier's report.
 
 <!-- pstack-picks -->
 ## 7b. Interrogate (gated), then cleanup
@@ -122,8 +122,8 @@ Start only after every build task has left `.orchestrate/active.json`.
   "needs_interrogate": {"type": "noul", "instructions": "Does the change described in `design_summary` and `diff_stat` restructure how components fit together, change an interface other modules depend on, or carry `contested: true`?",
                         "criteria": {"true": "Architectural or contested change", "false": "Contained change with no shared-interface impact"}}}}
 ```
-2. Run `${CLAUDE_PLUGIN_ROOT}/skills/interrogate/SKILL.md` (read it and follow it) when Jev says true at confidence ≥ `interrogate.min_confidence`, when the user asked, or when the approved design marked the change contested. Below threshold, escalated or Jev unavailable: you decide; call `mcp__plugin_dryas_jev__log_override` when you differ. Reviewer A runs on the executor's default (Sonnet), reviewer B with `model: opus`. Never put the top rung on the panel. Act On findings become new tasks (§3-§6).
-3. Cleanup: unless the diff touches documentation only, add one task with Scope = the files in the diff, `Failing test first: none (cleanup)`, and Done = `follow ${CLAUDE_PLUGIN_ROOT}/pstack/cleanup.md; behavior unchanged; <project test command> passes`. Dispatch it on Sonnet (no `model`) with `active.json`, like any task otherwise.
+2. Run `${CLAUDE_PLUGIN_ROOT}/skills/interrogate/SKILL.md` (read it and follow it) when Jev says true at confidence ≥ `interrogate.min_confidence`, when the user asked, or when the approved design marked the change contested. Below threshold, escalated or Jev unavailable: you decide; call `mcp__plugin_dryas_jev__log_override` when you differ. Reviewer A runs on the executor's default (standard tier), reviewer B with `model: opus`. Never put the top rung on the panel. Act On findings become new tasks (§3-§6).
+3. Cleanup: unless the diff touches documentation only, add one task with Scope = the files in the diff, `Failing test first: none (cleanup)`, and Done = `follow ${CLAUDE_PLUGIN_ROOT}/pstack/cleanup.md; behavior unchanged; <project test command> passes`. Dispatch it on the standard tier (no `model`) with `active.json`, like any task otherwise.
 
 <!-- /pstack-picks -->
 ## 8. Finish

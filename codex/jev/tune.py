@@ -107,8 +107,8 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
     dispatch = [r for r in dispatch if isinstance(r, dict)]
     review = [r for r in review if isinstance(r, dict)]
     merge = [r for r in merge if isinstance(r, dict) and r.get("task") is not None]
-    # A task's start tier is its coder's first dispatch: a Haiku tester logged before a
-    # skip-up Sonnet coder must not make the task Haiku-started. Attempts are numbered per
+    # A task's start tier is its coder's first dispatch: a fast (`haiku`) tester logged before a
+    # skip-up standard (`sonnet`) coder must not make the task fast-started. Attempts are numbered per
     # task, so that coder may be attempt 2. Without a coder record, fall back to the first
     # attempt-1 dispatch of any role.
     first_tier: Dict[str, Any] = {}
@@ -124,8 +124,8 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
     n = len(first_tier)
     denials = sum(1 for r in scope if isinstance(r, dict))
     climbs = _steps(esc, "opus", "sonnet")["count"]
-    # ESC-M3: Haiku-started = attempt-1 dispatch on haiku. Skip-ups start on sonnet at attempt 1,
-    # so their haiku->sonnet records are not counted.
+    # ESC-M3: fast-started = attempt-1 dispatch on `haiku`. Skip-ups start on `sonnet` at attempt 1,
+    # so their `haiku`->`sonnet` records are not counted.
     haiku_tasks = {t for t, tier in first_tier.items() if tier == "haiku"}
     reached_cheap = {str(r["task"]) for r in dispatch if r.get("task") is not None and r.get("tier") != "haiku"}
     haiku_climbs = [r for r in esc if isinstance(r, dict) and r.get("from_model") == "haiku"
@@ -134,7 +134,7 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
     for r in haiku_climbs:
         last_climb[str(r.get("task"))] = r
     haiku_climbed = set(last_climb)
-    # Tasks that reached the cheap tier: everything except Haiku-started tasks that never got a non-Haiku dispatch.
+    # Tasks that reached the cheap tier: everything except fast-started tasks that never got a non-fast dispatch.
     cheap_n = n - len(haiku_tasks - reached_cheap)
     rounds: Dict[str, int] = {}
     for r in review:

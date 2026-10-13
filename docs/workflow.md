@@ -30,7 +30,7 @@ Last updated: 2026-10-05.
 
 | Layer | Role | Never does |
 |---|---|---|
-| **Orchestrator (main session)** — Claude Code on Opus by default; may be another harness (§14) | Orchestrator: brainstorms with you, plans, dispatches, judges, integrates | Edit project files itself on multi-step work |
+| **Orchestrator (main session)** — Claude Code on the `strong` tier by default; may be another harness (§14) | Orchestrator: brainstorms with you, plans, dispatches, judges, integrates | Edit project files itself on multi-step work |
 | **Jev** (TypeSafe `typesafe/jev-1.13` via OpenRouter) | Decision support: tool-call gate, prompt routing, per-task triage, commit check, compaction keep/drop | Write code or plans |
 | **Ruflo** (`ruflo`, latest; tested 3.53.0) | Orchestration plumbing (hierarchical swarm) and the **only** memory/learning layer | Plan (its goals/planning hooks are dropped); use `ANTHROPIC_API_KEY` |
 | **Superpowers** (plugin) | Process: brainstorming, worktrees, TDD, two-stage review, verification, plan format | — |
@@ -39,18 +39,27 @@ Last updated: 2026-10-05.
 
 ## 3. Model policy and escalation ladder
 
-- **The orchestrator is Opus, always.** `"model": "opus"` is set in each config dir's `settings.json` by setup.
-- **Executors start on Haiku by default.** `/orchestrate` passes `model: haiku`; the `dryas:executor` agent (`claude/agents/executor.md`) stays `model: sonnet`, so review dispatches never run on Haiku. Kill switch: `dispatch.haiku_default` (false = every task starts on Sonnet, as before).
-- **The ladder is Haiku → Sonnet → Opus → Fable.**
-  1. A Haiku executor that fails done-criteria `haiku_failures_before_sonnet` times (default once), or reports confidence below 0.5, is re-run on **Sonnet**.
-  2. A Sonnet executor that fails done-criteria twice, or reports confidence below 0.5, is re-run on **Opus**.
-  3. If Opus solves it, stop. **No Fable.**
-  4. Only if the Opus executor also fails is the task re-run once on **Fable**.
-  5. If Fable fails too, the task goes to you with every tier's report.
-  - Jev's per-task `needs_sonnet` answer can start an executor on Sonnet, and `needs_opus` on Opus. Nothing starts a task on Fable directly. A direct start on Opus is logged from sonnet whatever the kill switch says, so ESC-M1 stays comparable. Every start-tier log (Haiku → Sonnet and Sonnet → Opus) carries a reason that starts with `skip-up:`, so observers such as FlowObserve show it as a Build start, not a climb.
+- **The orchestrator is the `strong` tier, always.** `"model": "opus"` is set in each config dir's `settings.json` by setup. The four tiers map to models per harness:
+
+  | Tier | Role | Claude Code | Codex |
+  | --- | --- | --- | --- |
+  | `fast` | First-try executor | Haiku | configured in Codex (see `codex models`) |
+  | `standard` | Default executor and reviewer | Sonnet | configured in Codex (see `codex models`) |
+  | `strong` | Orchestrator; decides when Jev escalates | Opus | configured in Codex (see `codex models`) |
+  | `frontier` | Last resort, only after a `strong` executor fails | Fable | GPT-6 Astra |
+
+  Other harnesses (Pi, OpenCode, Roo, Cursor): to be decided. Only this table names models; prose uses the tier names.
+- **Executors start on the `fast` tier by default.** `/orchestrate` passes `model: haiku`; the `dryas:executor` agent (`claude/agents/executor.md`) stays `model: sonnet`, so review dispatches never run on the `fast` tier. Kill switch: `dispatch.haiku_default` (false = every task starts on the `standard` tier, as before).
+- **The ladder is fast → standard → strong → frontier.**
+  1. A `fast` executor that fails done-criteria `haiku_failures_before_sonnet` times (default once), or reports confidence below 0.5, is re-run on the **`standard`** tier.
+  2. A `standard` executor that fails done-criteria twice, or reports confidence below 0.5, is re-run on the **`strong`** tier.
+  3. If the `strong` tier solves it, stop. **No `frontier`.**
+  4. Only if the `strong` executor also fails is the task re-run once on the **`frontier`** tier.
+  5. If the `frontier` tier fails too, the task goes to you with every tier's report.
+  - Jev's per-task `needs_sonnet` answer (needs the `standard` tier) can start an executor on the `standard` tier, and `needs_opus` (needs the `strong` tier) on the `strong` tier. Nothing starts a task on the `frontier` tier directly. A direct start on the `strong` tier is logged from `sonnet` whatever the kill switch says, so ESC-M1 stays comparable. Every start-tier log (`fast` → `standard` and `standard` → `strong`) carries a reason that starts with `skip-up:`, so observers such as FlowObserve show it as a Build start, not a climb.
   - Every escalation step is logged with its reason via the `log_escalation` MCP tool.
-- **Root cause before each climb** (pstack picks). Before Haiku → Sonnet, Sonnet → Opus and Opus → Fable, the orchestrator runs systematic-debugging on the failing reports. A plan defect is fixed in PLAN.md and re-run on the same model; otherwise the climb carries the root cause in its prompt and its log_escalation reason.
-- **Jev answers narrow typed questions only.** A Jev answer below 0.7 confidence, or flagged to escalate, means Opus decides.
+- **Root cause before each climb** (pstack picks). Before `fast` → `standard`, `standard` → `strong` and `strong` → `frontier`, the orchestrator runs systematic-debugging on the failing reports. A plan defect is fixed in PLAN.md and re-run on the same tier; otherwise the climb carries the root cause in its prompt and its log_escalation reason.
+- **Jev answers narrow typed questions only.** A Jev answer below 0.7 confidence, or flagged to escalate, means the orchestrator decides.
 
 ## 4. How a task flows
 
@@ -63,7 +72,7 @@ Last updated: 2026-10-05.
 
    **Design work.** Anything that needs design (UI, UX, layout, visual style, components, pages, design systems, copy on screen) uses both design skills: `ui-ux-pro-max` for design intelligence (style, palette, font pairing, UX guidelines, stack-specific patterns) and `impeccable` to shape, critique and polish the result. Use them while designing and again as a review pass before `/wreview`. Design executors get the same instruction in their task section.
 2. **Route.** On every prompt, the Jev route hook may add one line such as `Jev route: swarm (0.82); opus: no (0.91)`. This is advisory, and it's silent below 0.7.
-   - Single-file fix: plain Claude on Opus.
+   - Single-file fix: plain Claude on the `strong` tier.
    - Multi-step: `/orchestrate <task>`.
 3. **Memory first.** `/orchestrate` searches Ruflo memory (`memory_search`, with the main repo folder name as the namespace) and writes down the top 3 past outcomes (what worked, what failed).
 4. **Plan as a file.**
@@ -93,16 +102,16 @@ Last updated: 2026-10-05.
    - Independent tasks run in parallel through Ruflo's hierarchical swarm. Agents spawn via Claude Code's Agent tool, so they run on the subscription.
    - Executors follow four principles (fix root causes, prove it works, test behavior, subtract before you add), full text in the plugin's `pstack/principles/`.
 8. **On return.** Jev checks `done` (done-criteria met?) and `risk` (routine / worth a look / incident).
-   - Only incidents, failures and escalations reach Opus in full; everything else becomes one summary line.
+   - Only incidents, failures and escalations reach the orchestrator in full; everything else becomes one summary line.
    - The outcome is stored in Ruflo memory.
-8b. **Interrogate and cleanup** (pstack picks). Jev noul (yes/no) needs_interrogate (architectural or contested change?); at ≥ 0.7, or when you ask, two read-only executor reviewers (Sonnet and Opus, never Fable) run /interrogate and Opus judges; Act On items become tasks. Then one Sonnet cleanup task removes slop and stale comments from the diff's files, tests rerun. Docs-only diffs skip cleanup.
+8b. **Interrogate and cleanup** (pstack picks). Jev noul (yes/no) needs_interrogate (architectural or contested change?); at ≥ 0.7, or when you ask, two read-only executor reviewers (`standard` and `strong`, never `frontier`) run /interrogate and the orchestrator judges; Act On items become tasks. Then one `standard` cleanup task removes slop and stale comments from the diff's files, tests rerun. Docs-only diffs skip cleanup.
 9. **Finish.**
    - Delete `active.json`.
    - Run `/wreview` (two-stage: spec compliance, then code quality).
    - Run `superpowers:verification-before-completion`.
-   - Run `/commit`: Jev asks "safe to commit?"; below 0.7, Opus decides. Commits only, never pushes.
+   - Run `/commit`: Jev asks "safe to commit?"; below 0.7, the orchestrator decides. Commits only, never pushes.
    - Merge only after review and verification pass.
-10. **Overrides.** Whenever Opus acts against a Jev answer, it calls `log_override`. That feeds `/tune`.
+10. **Overrides.** Whenever the orchestrator acts against a Jev answer, it calls `log_override`. That feeds `/tune`.
 
 ## 5. Hooks and their order
 
@@ -167,7 +176,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   | gate | deny_safe_below 0.2, min_confidence 0.7, ask_risk destructive, allowlist, compound true, prescreen true |
   | route | 0.7 (swarm needs max(swarm_min 0.7, min_confidence); `/tune` proposes raising swarm_min when swarm costs >3x plain over ≥3 comparisons) |
   | dispatch | min_confidence 0.7, haiku_default true |
-  | escalation | executor_confidence_below 0.5, haiku_failures_before_sonnet 1, sonnet_failures_before_opus 2, opus_failures_before_fable 1, haiku_climb_max 0.35 (`/tune` proposes haiku_default false above it over ≥10 Haiku-started tasks) |
+  | escalation | executor_confidence_below 0.5, haiku_failures_before_sonnet 1, sonnet_failures_before_opus 2, opus_failures_before_fable 1, haiku_climb_max 0.35 (`/tune` proposes haiku_default false above it over ≥10 `fast`-started tasks) |
   | commit | 0.7 |
   | compact | keep_above 0.5 |
   | handoff | keep_min 0.5 |
@@ -177,7 +186,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - **Logs** go to `~/.dryas/jev/logs/*.jsonl` (gate, route, mcp, calls, escalations, overrides, compact, compare). They hold decisions and confidences only, never payloads; a Bash call logs just the first word of the command.
 - **Compaction.**
   - `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75` starts auto-compaction at about 75%.
-  - **Context warning** (`context_watch.py`, prompt chain stage): at 65% and again at 70% Claude tells you to run `/handoff` then `/clear`. Window = `JEV_CONTEXT_WINDOW`, else 1M if the model id contains `[1m]`, names a 1M-default model (Fable, Mythos, or Opus/Sonnet 4.6 and later, e.g. `claude-opus-5-5`; version read as 1-2 digits so dates never count), or usage went past 200k; else 200k (Haiku 4.5, Opus/Sonnet 4.5 and older, 3.x, unknown ids). Same rule as FlowObserve's `millionModel()`/`windowFor()` (`server/src/transcript.ts`); change both together. Tiers reset after a compaction.
+  - **Context warning** (`context_watch.py`, prompt chain stage): at 65% and again at 70% Claude tells you to run `/handoff` then `/clear`. Window = `JEV_CONTEXT_WINDOW`, else 1M if the model id contains `[1m]`, names a 1M-default model (`Fable`, `Mythos`, or `Opus`/`Sonnet` 4.6 and later, e.g. `claude-opus-5-5`; version read as 1-2 digits so dates never count), or usage went past 200k; else 200k (`Haiku` 4.5, `Opus`/`Sonnet` 4.5 and older, 3.x, unknown ids). Same rule as FlowObserve's `millionModel()`/`windowFor()` (`server/src/transcript.ts`); change both together. Tiers reset after a compaction.
   - **Manual (preferred, no lossy summary): `/handoff` then `/clear`.** `handoff.py` reads the whole transcript (deduped by uuid) into items: real user messages, Claude replies, subagent hand-backs, and one line per tool call with a trimmed result. Always kept without Jev: last 10 user messages, files touched, latest result per test command, commits. Jev scores the newest 200 other items keep/drop (40 per call, 60 s deadline). Saved redacted to `~/.dryas/jev/handoff/<project>-<hash>.md` (0600, keyed by the main repo root so worktrees match, pruned after 24 h). `/clear` fires `SessionStart(clear)` -> `handoff_restore.py` injects it (only if under 30 min old and same project) and deletes it.
   - **Automatic (safety net):** at 75% Claude Code compacts and writes its own summary (kept short by the compact instructions in the injected rules). `PreCompact` runs the same handoff engine (`compact_keep.py`, 20 s deadline, hook timeout 30 s) and `SessionStart(compact)` re-injects the scored items word for word.
   - If Jev is down or the deadline passes, the newest 30 unscored items are kept instead, and the file says so.
@@ -233,7 +242,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 | `/handoff` | Jev-scored context reset: saves kept items, then you type `/clear` (§6) |
 | `/interrogate` | Two-model adversarial review with a lead verdict; gated step of /orchestrate or on request |
 | `/benchmark-checklist` | Vet a measured perf number before reporting it |
-| agent `dryas:executor` | Sonnet, tools Read/Edit/Write/Bash, one task section, locked scope. Ends with CHANGED / TESTS / DONE-CRITERIA / CONFIDENCE / UNRESOLVED |
+| agent `dryas:executor` | `standard` tier (`model: sonnet`), tools Read/Edit/Write/Bash, one task section, locked scope. Ends with CHANGED / TESTS / DONE-CRITERIA / CONFIDENCE / UNRESOLVED |
 | skills `stack-nextjs-ts`, `stack-supabase-postgres`, `stack-swift-ios`, `stack-python` | Conventions, test commands and pitfalls, scanned from the real projects |
 | plugin `typesafe@typesafe-ai` | Official Jev/TypeSafe docs skill |
 | skills `impeccable`, `ui-ux-pro-max` | Design pair, required for any task that involves design (§4 step 1) |
@@ -286,7 +295,7 @@ An optional, separate observer app (closed source). The workflow runs fully with
 
 ## 14. Harnesses (main agent)
 
-The main agent (orchestrator) does not have to be Claude Code. Claude Code on Opus is the default, but another harness such as Codex (or any agent CLI that can follow these rules) may run the session.
+The main agent (orchestrator) does not have to be Claude Code. Claude Code on the `strong` tier is the default, but another harness such as Codex (or any agent CLI that can follow these rules) may run the session.
 
 - **Always applies, any harness:** the ground rules (§1), brainstorm first, worktree per multi-step task, one agent (orchestrator session) per worktree, plan-as-a-file format, TDD gate, design rule (§4 step 1), `/wreview`-style two-stage review, verification before completion, commit only after review, never push without asking.
 - Codex: rules, skills, MCP and the scope-lock / Jev gate / Jev route hooks are installed by `--harness codex`. Details: [harnesses.md](harnesses.md).

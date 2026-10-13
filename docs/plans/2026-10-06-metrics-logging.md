@@ -1,8 +1,8 @@
 # Metrics Logging and /tune Calibration Fixes Implementation Plan
 
-> **For agentic workers:** this plan is executed by `/orchestrate` (Opus orchestrator, Sonnet executors, scope lock). Each executor receives only its own task section. Steps use checkbox (`- [ ]`) syntax.
+> **For agentic workers:** this plan is executed by `/orchestrate` (strong orchestrator, standard executors, scope lock). Each executor receives only its own task section. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Make GOV-M4, ESC-M1, REV-M1 and EXE-M3 measurable from logs, and fix `/tune`'s no-op proposals, scattered question names and unfiltered Sonnet→Opus count.
+**Goal:** Make GOV-M4, ESC-M1, REV-M1 and EXE-M3 measurable from logs, and fix `/tune`'s no-op proposals, scattered question names and unfiltered standard→strong count.
 
 **Architecture:** The scope-lock hook appends a `scope` record on every deny. Three new MCP tools in `jev_mcp.py` (`log_dispatch`, `log_review`, `log_merge`) validate and append records, following `log_escalation`. `tune.py` reads the new logs, adds report lines, groups questions by `canonical()`, and drops no-op proposals. Skill texts in both editions call the new tools.
 
@@ -479,7 +479,7 @@ Then split the existing `lines = [...]` literal right after the `"- Fable withou
 - [ ] **Step 4: Run the tune tests and the whole Jev suite**
 
 Run: `python3 -m pytest -q claude/jev/tests`
-Expected: all pass (existing `test_report_numbers` still passes: its escalations come from Sonnet).
+Expected: all pass (existing `test_report_numbers` still passes: its escalations come from standard).
 
 - [ ] **Step 5: Commit**
 

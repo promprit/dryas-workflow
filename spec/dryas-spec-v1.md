@@ -15,7 +15,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are used as in RFC 2119
 | **Orchestrator** | The main session: brainstorms, plans, dispatches, integrates. |
 | **Executor** | A sub-agent that does exactly one task. |
 | **Judge** | A small model that answers narrow, typed questions with a confidence. |
-| **Tier** | A rung on the escalation ladder (economy, cheap, strong, frontier). |
+| **Tier** | A rung on the escalation ladder (`fast`, `standard`, `strong`, `frontier`). |
 | **Loop** | One run of Brainstorm → Plan → Judge → Build → Escalate → Review → Ship, owning one worktree. |
 | **Plan file** | The task list for one loop, stored in the loop's worktree. |
 | **Scope** | The set of file globs a task may edit. |
@@ -69,6 +69,17 @@ Rules marked *(Core)* below are Core. All others are Full.
 - **EXE-8** Tasks with non-overlapping scopes MAY run in parallel.
 
 ## 7. Escalation (ESC)
+
+The ladder is `fast` → `standard` → `strong` → `frontier`, the same words in every harness. Editions bind tiers to models:
+
+| Tier | Role | Claude Code | Codex |
+| --- | --- | --- | --- |
+| `fast` | First-try executor | Haiku | configured in Codex (see `codex models`) |
+| `standard` | Default executor and reviewer | Sonnet | configured in Codex (see `codex models`) |
+| `strong` | Orchestrator; decides when the judge escalates | Opus | configured in Codex (see `codex models`) |
+| `frontier` | Last resort, only after a `strong` executor fails | Fable | GPT-6 Astra |
+
+Other harnesses (Pi, OpenCode, Roo, Cursor): to be decided.
 
 - **ESC-1** Executors SHOULD start on the cheapest tier. The judge MAY start a task one tier up. A task MUST NOT start on the top tier.
 - **ESC-2** A task MUST climb one tier after its configured failures or below its configured confidence.

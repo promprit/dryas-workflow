@@ -24,10 +24,10 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | Governance | Scope lock | `claude/jev/scope_lock.py` |
 | Governance | Hook order | `claude/jev/chain.py`, `chain.json`, local choices in `~/.dryas/chain.local.json` |
 | Execution | Process skills | [Superpowers](https://github.com/obra/superpowers) (brainstorming, worktrees, TDD, verification) |
-| Execution | Orchestrator | `/orchestrate` (`claude/skills/orchestrate/`) on Opus |
-| Execution | Executor | `claude/agents/executor.md` (`dryas:executor`) on Sonnet |
+| Execution | Orchestrator | `/orchestrate` (`claude/skills/orchestrate/`) on the `strong` tier |
+| Execution | Executor | `claude/agents/executor.md` (`dryas:executor`) on the `standard` tier |
 | Execution | Design specialists | [Impeccable](https://github.com/pbakaus/impeccable), [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) |
-| Escalation | Ladder and log | Haiku → Sonnet → Opus → Fable, `mcp__plugin_dryas_jev__log_escalation` |
+| Escalation | Ladder and log | fast → standard → strong → frontier, `mcp__plugin_dryas_jev__log_escalation` |
 | Review | Review and gates | `/wreview`, `/interrogate`, pstack cleanup, `/benchmark-checklist`, `/commit` |
 | Harness | Rules binding | SessionStart hook `claude/jev/rules_inject.py` (injects `claude/CLAUDE.md.template`); Codex: the same hook with `--harness codex` (injects `codex/AGENTS.md.template`) |
 | Harness | Hooks binding | Plugin `claude/hooks/hooks.json`; Codex: plugin `codex/hooks/hooks.json`, trusted by setup after consent (or in `/hooks`) |

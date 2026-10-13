@@ -1,10 +1,10 @@
-# Haiku Economy Executor Tier Implementation Plan
+# Fast Economy Executor Tier Implementation Plan
 
 > **For agentic workers:** run this plan with `/orchestrate` (Dryas Workflow). Each task's fenced header block (Goal, Scope, Done, Failing test first) is its `.orchestrate/PLAN.md` section; the Files, Interfaces and Steps below it are the detail the executor follows. Steps use checkbox (`- [ ]`) syntax. Executors do not commit; the orchestrator commits after review. `superpowers:subagent-driven-development` and `executing-plans` are denied in this workflow; do not use them.
 
-**Goal:** Make Haiku the default executor tier below Sonnet, with a Jev skip-up question, a one-failure climb rule, a `/tune` climb-rate metric and a kill switch.
+**Goal:** Make fast the default executor tier below standard, with a Jev skip-up question, a one-failure climb rule, a `/tune` climb-rate metric and a kill switch.
 
-**Architecture:** Three new threshold keys in `claude/jev/thresholds.py` drive everything. `claude/jev/tune.py` reads dispatch and escalation logs to report ESC-M3 (Haiku → Sonnet climb rate over Haiku-started tasks) and Haiku share, and proposes turning the kill switch off when the rate is too high. The dispatch rule itself is prose in the orchestrate skill (the orchestrator passes `model: haiku`); `claude/agents/executor.md` stays `model: sonnet`.
+**Architecture:** Three new threshold keys in `claude/jev/thresholds.py` drive everything. `claude/jev/tune.py` reads dispatch and escalation logs to report ESC-M3 (fast → standard climb rate over fast-started tasks) and fast share, and proposes turning the kill switch off when the rate is too high. The dispatch rule itself is prose in the orchestrate skill (the orchestrator passes `model: haiku`); `claude/agents/executor.md` stays `model: sonnet`.
 
 **Tech Stack:** Python 3 stdlib, unittest/pytest; Markdown.
 
@@ -12,10 +12,10 @@
 
 ## Global Constraints
 
-- Ladder: **Haiku → Sonnet → Opus → Fable → human**. Fable never starts a task. Haiku never reviews.
+- Ladder: **fast → standard → strong → frontier → human**. The frontier tier never starts a task. The fast tier never reviews.
 - `claude/agents/executor.md` is not changed (stays `model: sonnet`). Nothing under `claude/pstack/` is changed (`install/tests/test_pstack_content.py` forbids model names there).
 - New threshold keys, exact: `escalation.haiku_failures_before_sonnet = 1` (int in [1, 5]), `escalation.haiku_climb_max = 0.35` (float in [0.0, 1.0]), `dispatch.haiku_default = True` (bool).
-- Sonnet → Opus → Fable rules, thresholds (`sonnet_failures_before_opus 2`, `opus_failures_before_fable 1`, `executor_confidence_below 0.5`) and ESC-M1 are unchanged.
+- Standard → strong → frontier escalation rules, thresholds (`sonnet_failures_before_opus 2`, `opus_failures_before_fable 1`, `executor_confidence_below 0.5`) and ESC-M1 are unchanged.
 - `log_escalation` and `log_dispatch` schemas are unchanged.
 - `/tune` only proposes `dispatch.haiku_default: false`; it never applies it.
 - Python stdlib only. Files stay under 500 lines.
@@ -23,8 +23,8 @@
 
 ## Review Focus
 
-1. **Task id mismatch between logs.** ESC-M3 joins `escalations` to `dispatch` by `task`. If the orchestrator logs a climb with a bare id (`3`) but the dispatch with `worktree-x:3`, the climb silently counts as zero. Owner: Task 3 states that `log_escalation.task` uses the same id as `log_dispatch.task`; Task 2 pins that an escalation whose task has no Haiku attempt-1 dispatch is not counted (`test_haiku_climb_rate_excludes_skip_ups`).
-2. **A task re-dispatched on Sonnet after a Haiku failure** has two dispatch records (attempt 1 haiku, attempt 2 sonnet). It must count as Haiku-started. Owner: Task 2 (`test_haiku_climb_rate_excludes_skip_ups` includes the attempt-2 record).
+1. **Task id mismatch between logs.** ESC-M3 joins `escalations` to `dispatch` by `task`. If the orchestrator logs a climb with a bare id (`3`) but the dispatch with `worktree-x:3`, the climb silently counts as zero. Owner: Task 3 states that `log_escalation.task` uses the same id as `log_dispatch.task`; Task 2 pins that an escalation whose task has no fast attempt-1 dispatch is not counted (`test_haiku_climb_rate_excludes_skip_ups`).
+2. **A task re-dispatched on standard after a fast failure** has two dispatch records (attempt 1 fast, attempt 2 standard). It must count as fast-started. Owner: Task 2 (`test_haiku_climb_rate_excludes_skip_ups` includes the attempt-2 record).
 3. **Two climb records for one task** (orchestrator logged twice) must count once, or the rate can exceed 100%. Owner: Task 2 (`test_haiku_climb_counts_task_once`).
 4. **Kill switch already off.** `/tune` must not propose `haiku_default: false` when it is already false. Owner: Task 2 (`test_haiku_proposal_not_repeated_when_off`).
 5. **`/tune apply dispatch.haiku_default 0`** (int, not bool) must be rejected, or Python truthiness turns the switch into a number. Owner: Task 1 (`test_haiku_default_must_be_bool`).
@@ -41,11 +41,11 @@ Tasks 1, 3 and 4 have disjoint scopes and can run in parallel. Task 2 needs Task
 
 ## Follow-up outside this plan (raise with the user, do not do here)
 
-FlowObserve (`projects/flowobserve`) hardcodes the ladder: `server/src/reducer.ts:182` maps `model === "sonnet" ? "build" : "escalate"`, `:273` advances stage on `e.model === "sonnet"`, `:281` defaults pending models to `"sonnet"`, and `server/src/queries.ts:56` sets `build: "sonnet"`. After this change, Haiku executor dispatches would show as the Escalate stage. That needs its own change in the FlowObserve repo.
+FlowObserve (`projects/flowobserve`) hardcodes the ladder: `server/src/reducer.ts:182` maps `model === "sonnet" ? "build" : "escalate"`, `:273` advances stage on `e.model === "sonnet"`, `:281` defaults pending models to `"sonnet"`, and `server/src/queries.ts:56` sets `build: "sonnet"`. After this change, fast executor dispatches would show as the Escalate stage. That needs its own change in the FlowObserve repo.
 
 ---
 
-### Task 1: Threshold keys for the Haiku tier
+### Task 1: Threshold keys for the fast tier
 
 ```
 ## Task 1: Threshold keys for the Haiku tier
@@ -151,7 +151,7 @@ Expected: all pass.
 
 ---
 
-### Task 2: `/tune` ESC-M3, Haiku share, kill-switch proposal; `log_escalation` text
+### Task 2: `/tune` ESC-M3, fast share, kill-switch proposal; `log_escalation` text
 
 ```
 ## Task 2: /tune ESC-M3, Haiku share and kill-switch proposal
@@ -298,7 +298,7 @@ and add these entries to the returned dict, after `"climb_rate"`:
                                % (rate * 100, started, cap * 100, json.dumps(d.get("haiku_climb_reasons") or {}))})
 ```
 
-Order matters: the module-level `TH` dict and the hand-built reports at the bottom of `test_tune.py` have no `delivery` and no `escalation` section. With no Haiku data, `rate` is `None` and the thresholds are never read, so those tests keep passing unchanged. Do not edit `TH`.
+Order matters: the module-level `TH` dict and the hand-built reports at the bottom of `test_tune.py` have no `delivery` and no `escalation` section. With no fast data, `rate` is `None` and the thresholds are never read, so those tests keep passing unchanged. Do not edit `TH`.
 
 - [ ] **Step 6: Implement the report lines.** In `render()`, insert after the `"- Sonnet->Opus climb rate ..."` entry of `delivery_lines`:
 
@@ -439,7 +439,7 @@ Failing test first: none (docs)
 **Interfaces:**
 - Consumes: threshold names and values from Task 1; the ESC-M3 definition from Task 2.
 
-- [ ] **Step 1: `docs/workflow.md` §3.** Replace the bullets "Executors run on Sonnet by default." through the `needs_opus` sub-bullet with:
+- [ ] **Step 1: `docs/workflow.md` §3.** Replace the bullets "Executors run on standard by default." through the `needs_opus` sub-bullet with:
 
 ```markdown
 - **Executors start on Haiku by default.** `/orchestrate` passes `model: haiku`; `~/.claude/agents/executor.md` stays `model: sonnet`, so review dispatches never run on Haiku. Kill switch: `dispatch.haiku_default` (false = every task starts on Sonnet, as before).
@@ -476,7 +476,7 @@ Replace `the reference implementation binds them to Sonnet, Opus and Fable.` wit
 
 In the `dispatch` row of the log table, change the KPI column `GOV-M4, ESC-M1` to `GOV-M4, ESC-M1, ESC-M3`.
 
-- [ ] **Step 4: `docs/architecture.md`.** In the Execution row (line 25), replace `` `executor` agent on Sonnet, git worktrees `` with `` `executor` agent (Haiku first; Sonnet default for reviews), git worktrees ``. In the Escalation row (line 26), replace `Sonnet → Opus → Fable` with `Haiku → Sonnet → Opus → Fable`.
+- [ ] **Step 4: `docs/architecture.md`.** In the Execution row (line 25), replace `` `executor` agent on standard, git worktrees `` with `` `executor` agent (fast first; standard default for reviews), git worktrees ``. In the Escalation row (line 26), replace `Sonnet → Opus → Fable` with `Haiku → Sonnet → Opus → Fable`.
 
 - [ ] **Step 5: `README.md`.** Replace:
 - `- **Build**: Sonnet executors do each task inside a git worktree.` → `- **Build**: Haiku executors do each task inside a git worktree; harder tasks start on Sonnet or Opus.`
