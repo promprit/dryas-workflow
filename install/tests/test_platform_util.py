@@ -241,6 +241,24 @@ class ClaudeEnvTest(unittest.TestCase):
         self._jev(command="python3 %s" % missing)
         self.assertEqual(pu.stale_jev(self.default, {})[0], pu.fwd(missing))
 
+    def _spaced(self):
+        return self.home / "John Smith" / ".claude" / "jev" / "jev_mcp.py"
+
+    def test_stale_jev_spaced_path_existing_is_not_stale(self):
+        f = self._spaced()
+        f.parent.mkdir(parents=True)
+        f.write_text("", encoding="utf-8")
+        self._jev(args=[str(f)])
+        self.assertIsNone(pu.stale_jev(self.default, {}))
+
+    def test_stale_jev_spaced_path_missing_returns_full_path(self):
+        self._jev(args=[str(self._spaced())])
+        self.assertEqual(pu.stale_jev(self.default, {})[0], pu.fwd(self._spaced()))
+
+    def test_stale_jev_quoted_spaced_path_in_command_string(self):
+        self._jev(command='python3 "%s"' % self._spaced())
+        self.assertEqual(pu.stale_jev(self.default, {})[0], pu.fwd(self._spaced()))
+
 
 if __name__ == "__main__":
     unittest.main()
