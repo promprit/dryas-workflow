@@ -575,8 +575,10 @@ def other_accounts(cd: Path, cdx: Optional[Path] = None) -> List[str]:
     """Config dirs and Codex homes listed in accounts.json other than cd (and cdx, uninstalled in the same run)."""
     acc = _load_json(norm(data_root()) / "accounts.json", {})
     cd = norm(cd)
-    out = [d for d in _dirs(acc, "claude_dirs") if not pu.same_path(d, cd)]
-    out += [d for d in _dirs(acc, "codex_dirs") if not (cdx is not None and pu.same_path(d, norm(cdx)))]
+    # entries are stored resolved, but compare resolved anyway: a symlinked temp dir (macOS /var), an 8.3 short
+    # name (Windows) or a hand-edited entry must not count as another account forever
+    out = [d for d in _dirs(acc, "claude_dirs") if not pu.same_path(str(norm(d)), str(cd))]
+    out += [d for d in _dirs(acc, "codex_dirs") if not (cdx is not None and pu.same_path(str(norm(d)), str(norm(cdx))))]
     return out
 
 
