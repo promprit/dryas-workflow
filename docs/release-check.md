@@ -28,7 +28,7 @@ Then, for each `--claude-dir`, under a `Claude Code: <dir>` heading:
 - `Jev route`: with an OpenRouter key in this shell (`OPENROUTER_API_KEY`, `DRYAS_OPENROUTER_KEY` or `CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY`), a sample prompt must produce a `Jev ` line. Skipped without one. A key stored only as the plugin option is visible only inside Claude Code; manual step 1 covers it.
 - Ruflo (when setup installed it for that dir): the data folder (`DRYAS_DATA_ROOT` or `~/.dryas`) exists and is writable, `ruflo/helpers/hook-handler.cjs` is in it, and the plugin's Ruflo helper runner exits quietly (run against a temporary data folder). Skipped otherwise.
 - `jev MCP entry`: WARN when a user-scope `jev` MCP server, left by the old copy install, runs a `jev_mcp.py` that no longer exists. Re-run setup to remove it.
-- `stub config` (default dir only, when `CLAUDE_CONFIG_DIR` is not set): WARN when `~/.claude/.claude.json` exists. Claude Code reads `~/.claude.json`, so check that the stub holds nothing you need, then delete it.
+- `stub config` (default dir only, unless `CLAUDE_CONFIG_DIR` is exported for `~/.claude` itself): WARN when `~/.claude/.claude.json` exists. Claude Code reads `~/.claude.json`, so check that the stub holds nothing you need, then delete it.
 
 Then, for each `--codex-dir`, under a `Codex: <dir>` heading:
 
