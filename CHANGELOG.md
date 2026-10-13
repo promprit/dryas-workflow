@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## 1.0.1 - 2026-10-13
+
+### Fixed
+
+- **Default Claude config dir.** Setup, uninstall and `tools/release_check.py` no longer set `CLAUDE_CONFIG_DIR` when running `claude` for the default config dir `~/.claude` (unless you set it yourself). With it set, Claude Code reads `~/.claude/.claude.json` instead of `~/.claude.json`, so your user-scope MCP servers were invisible to the installer and a stub `~/.claude/.claude.json` was created.
+  - Setup now removes a user-scope `jev` MCP server left by the old copy install when the `jev_mcp.py` it runs no longer exists. Your own `jev` server is never touched.
+  - `release_check` warns (does not fail) about such a stale `jev` entry and about a stub `~/.claude/.claude.json` (safe to delete after checking it holds nothing you need).
+
 ## 1.0.0 - 2026-10-13
 
 ### Added
