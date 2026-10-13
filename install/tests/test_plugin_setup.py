@@ -31,7 +31,7 @@ class Env:
         self.epilogue = (
             "import os\n"
             "if sys.argv[1:3] == ['plugin', 'install'] and os.environ.get('FAKE_NO_RECORD') != '1':\n"
-            "    d = os.path.join(os.environ['CLAUDE_CONFIG_DIR'], 'plugins'); os.makedirs(d, exist_ok=True)\n"
+            "    d = os.path.join(os.environ.get('CLAUDE_CONFIG_DIR') or os.path.expanduser('~/.claude'), 'plugins'); os.makedirs(d, exist_ok=True)\n"
             "    p = os.path.join(d, 'installed_plugins.json')\n"
             "    rec = json.load(open(p)) if os.path.exists(p) else %r\n"
             "    rec['plugins']['dryas@dryas-workflow'][0]['installPath'] = %r\n"
@@ -744,6 +744,83 @@ class UninstallTest(unittest.TestCase):
         ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
         ps.uninstall(e.a, purge=False)
         self.assertEqual(json.loads((e.a / "settings.json").read_text()), {"theme": "dark"})
+
+
+class StaleJevMcpTest(unittest.TestCase):
+    """The old copy install registered user-scope MCP `jev` on <config dir>/jev/jev_mcp.py; migration deleted that file."""
+    REMOVE = ["claude", "mcp", "remove", "--scope", "user", "jev"]
+
+    def _cfg(self, e, entry):
+        (e.home / ".claude.json").write_text(json.dumps({"mcpServers": {"jev": entry}}), encoding="utf-8")
+
+    def _stale(self, e):
+        return {"command": "/usr/bin/python3", "args": ["-X", "utf8", str(e.home / ".claude" / "jev" / "jev_mcp.py")]}
+
+    def _default_dir_env(self):
+        _patch_env(self, {k: v for k, v in os.environ.items() if k != "CLAUDE_CONFIG_DIR"}, clear=True)
+
+    def _removes(self, e):
+        return [i for i, c in enumerate(e.calls()) if c[:6] == self.REMOVE]
+
+    def test_setup_removes_stale_copy_install_jev_mcp(self):
+        e = Env(self)
+        self._default_dir_env()
+        self._cfg(e, self._stale(e))
+        cd = e.home / ".claude"
+        self.assertEqual(ps.setup(REPO, cd, COMPS, yes=True, key="", flowobserve=False), 0)
+        rm = self._removes(e)
+        self.assertEqual(len(rm), 1, e.calls())
+        self.assertIsNone(e.envs()[rm[0]])  # default dir: no CLAUDE_CONFIG_DIR in the child env
+
+    def test_setup_removes_stale_jev_for_custom_dir(self):
+        e = Env(self)
+        self._default_dir_env()
+        cd = e.home / ".claude-team"
+        self._cfg(e, {"command": "/usr/bin/python3", "args": [str(cd / "jev" / "jev_mcp.py")]})
+        self.assertEqual(ps.setup(REPO, cd, COMPS, yes=True, key="", flowobserve=False), 0)
+        rm = self._removes(e)
+        self.assertEqual(len(rm), 1, e.calls())
+        self.assertIsNone(e.envs()[rm[0]])  # the entry is in ~/.claude.json: run without CLAUDE_CONFIG_DIR
+
+    def test_other_dirs_jev_is_kept_for_custom_dir(self):
+        e = Env(self)
+        self._default_dir_env()
+        self._cfg(e, {"command": "python3", "args": [str(e.home / ".claude-other" / "jev" / "jev_mcp.py")]})
+        self.assertEqual(ps.setup(REPO, e.home / ".claude-team", COMPS, yes=True, key="", flowobserve=False), 0)
+        self.assertEqual(self._removes(e), [])
+
+    def test_live_jev_mcp_file_is_kept(self):
+        e = Env(self)
+        self._default_dir_env()
+        entry = self._stale(e)
+        script = Path(entry["args"][-1])
+        script.parent.mkdir(parents=True)
+        script.write_text("", encoding="utf-8")
+        self._cfg(e, entry)
+        self.assertEqual(ps.setup(REPO, e.home / ".claude", COMPS, yes=True, key="", flowobserve=False), 0)
+        self.assertEqual(self._removes(e), [])
+
+    def test_users_own_jev_server_is_kept(self):
+        e = Env(self)
+        self._default_dir_env()
+        self._cfg(e, {"command": "node", "args": ["/opt/my-jev/server.js"]})
+        self.assertEqual(ps.setup(REPO, e.home / ".claude", COMPS, yes=True, key="", flowobserve=False), 0)
+        self.assertEqual(self._removes(e), [])
+
+    def test_no_global_config_is_fine(self):
+        e = Env(self)
+        self._default_dir_env()
+        self.assertFalse((e.home / ".claude.json").exists())
+        self.assertEqual(ps.setup(REPO, e.home / ".claude", COMPS, yes=True, key="", flowobserve=False), 0)
+        self.assertEqual(self._removes(e), [])
+
+    def test_dry_run_prints_remove_without_calling(self):
+        e = Env(self)
+        self._default_dir_env()
+        self._cfg(e, self._stale(e))
+        out = _out(lambda: ps.setup(REPO, e.home / ".claude", COMPS, yes=True, key="", flowobserve=False, dry=True))
+        self.assertIn("claude mcp remove --scope user jev", out)
+        self.assertEqual(self._removes(e), [])
 
 
 if __name__ == "__main__":

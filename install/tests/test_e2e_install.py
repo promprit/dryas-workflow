@@ -13,7 +13,7 @@ INSTALLED = {"version": 2, "plugins": {"dryas@dryas-workflow": [{"scope": "user"
 # fake `claude plugin install` lists the plugin in $CLAUDE_CONFIG_DIR, as the real one does
 EPILOGUE = ("import os\n"
             "if sys.argv[1:3] == ['plugin', 'install']:\n"
-            "    d = os.path.join(os.environ['CLAUDE_CONFIG_DIR'], 'plugins'); os.makedirs(d, exist_ok=True)\n"
+            "    d = os.path.join(os.environ.get('CLAUDE_CONFIG_DIR') or os.path.expanduser('~/.claude'), 'plugins'); os.makedirs(d, exist_ok=True)\n"
             "    open(os.path.join(d, 'installed_plugins.json'), 'w').write(json.dumps(%r))\n"
             "with open(%r, 'a') as f: f.write(json.dumps([sys.argv[1:3], os.environ.get('CLAUDE_CONFIG_DIR')]) + '\\n')\n")
 EVENTS = {
@@ -53,8 +53,8 @@ class E2ETest(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         cd = (self.home / ".claude").resolve()
         envs = [json.loads(l) for l in (self.tmp / "envs.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertIn([["plugin", "marketplace"], str(cd)], envs)
-        self.assertIn([["plugin", "install"], str(cd)], envs)
+        self.assertIn([["plugin", "marketplace"], None], envs)
+        self.assertIn([["plugin", "install"], None], envs)
         settings = json.loads((cd / "settings.json").read_text(encoding="utf-8"))
         self.assertNotIn("hooks", settings)
         py = settings["env"]["DRYAS_PY"]

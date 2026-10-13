@@ -25,7 +25,7 @@ PLUGIN_LIST = '''
 import os as _os
 if sys.argv[1:3] == ["plugin", "list"] and "plugin list" not in %(fail)r:
     try:
-        with open(_os.path.join(_os.environ.get("CLAUDE_CONFIG_DIR", ""), "plugins", "installed_plugins.json"),
+        with open(_os.path.join(_os.environ.get("CLAUDE_CONFIG_DIR") or _os.path.expanduser("~/.claude"), "plugins", "installed_plugins.json"),
                   encoding="utf-8") as _f:
             _d = json.load(_f)
     except (OSError, ValueError):

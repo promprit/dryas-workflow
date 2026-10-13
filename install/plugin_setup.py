@@ -43,7 +43,12 @@ def data_root() -> Path:
 
 
 def child_env(cd: Path) -> Dict[str, str]:
-    return dict(os.environ, CLAUDE_CONFIG_DIR=str(cd))
+    return pu.claude_env(cd)
+
+
+def env_prefix(cd: Path) -> str:
+    """"CLAUDE_CONFIG_DIR=<cd> " for printed commands, empty when the default dir leaves it unset."""
+    return "CLAUDE_CONFIG_DIR=%s " % cd if "CLAUDE_CONFIG_DIR" in child_env(cd) else ""
 
 
 def plugin_entry(cd: Path) -> Optional[dict]:
@@ -273,6 +278,22 @@ def _ruflo_files(repo: Path, root: Path, mapping: Dict[str, str], yes: bool) -> 
     return ruflo_runtime.install(repo, root, helpers, mapping.get("RUFLO_CLI_DIST", ""))
 
 
+def repair_stale_jev(cd: Path, env: Dict[str, str], dry: bool) -> None:
+    """Remove the user-scope `jev` MCP server of the old copy install once its jev_mcp.py is gone."""
+    found = pu.stale_jev(cd, env)
+    if not found:
+        return
+    path, env = found
+    argv = ["claude", "mcp", "remove", "--scope", "user", "jev"]
+    print("note: removing the jev MCP server left by the old copy install (%s no longer exists)" % path)
+    print("%s%s" % ("CLAUDE_CONFIG_DIR=%s " % env["CLAUDE_CONFIG_DIR"] if env.get("CLAUDE_CONFIG_DIR") else "", " ".join(argv)))
+    if dry:
+        return
+    rc = di.run(argv, env=env)
+    if rc != 0:
+        print("warning: `%s` failed (exit %d); remove the stale jev MCP server by hand" % (" ".join(argv), rc))
+
+
 def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: Optional[bool] = None, dry: bool = False) -> int:
     repo, cd, root = Path(repo).resolve(), norm(cd), data_root()
     try:
@@ -301,7 +322,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
              ["claude", "plugin", "install", ID, "--scope", "user", "-y"] + (["--config", "openrouter_key=" + key] if key else [])]
     for argv in steps:
         shown = [a if not a.startswith("openrouter_key=") else "openrouter_key=***" for a in argv]
-        print("CLAUDE_CONFIG_DIR=%s %s" % (cd, " ".join(shown)))
+        print("%s%s" % (env_prefix(cd), " ".join(shown)))
         if dry:
             continue
         rc = di.run(argv, env=env)
@@ -309,6 +330,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
             print("error: `%s` failed (exit %d); %s not changed" % (" ".join(shown[:4]), rc, cd))
             return rc
     if dry:
+        repair_stale_jev(cd, env, dry)
         return 0
     entry = plugin_entry(cd)
     # an earlier install whose dependency never resolved: re-installing dryas does not retry it, so install it here
@@ -316,7 +338,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
             if isinstance(d, dict) and d.get("type") == "dependency-unsatisfied" and d.get("dependency")]
     for dep in deps:
         argv = ["claude", "plugin", "install", dep, "--scope", "user", "-y"]
-        print("CLAUDE_CONFIG_DIR=%s %s" % (cd, " ".join(argv)))
+        print("%s%s" % (env_prefix(cd), " ".join(argv)))
         di.run(argv, env=env)
     if deps:
         entry = plugin_entry(cd)
@@ -328,6 +350,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     if errs:
         print("error: %s does not load in %s: %s; settings not changed" % (ID, cd, "; ".join(errs)))
         return 1
+    repair_stale_jev(cd, env, dry)
     rc = run_cmd.thirdparty([c for c in comps if c in ("ruflo", "design", "superpowers")], yes, cd, env)
     if rc:
         return rc
@@ -507,7 +530,7 @@ def uninstall(cd: Path, purge: bool) -> int:
         print("error: %s is not a JSON object; nothing removed" % spath)
         return 1
     argv = ["claude", "plugin", "uninstall", ID, "--scope", "user", "--keep-data"]
-    print("CLAUDE_CONFIG_DIR=%s %s" % (cd, " ".join(argv)))
+    print("%s%s" % (env_prefix(cd), " ".join(argv)))
     rc = di.run(argv, env=child_env(cd))
     if rc != 0:  # settings cleanup still runs
         print("warning: `claude plugin uninstall` failed (exit %d); remove %s by hand with /plugin" % (rc, ID))

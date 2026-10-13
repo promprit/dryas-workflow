@@ -30,6 +30,7 @@ KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "install"))
 import codex_appserver as ca  # noqa: E402  (stdlib only; tools never import tests)
+import platform_util as pu  # noqa: E402
 PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 MANUAL = """Manual checks (needs the app open):
   1. In Claude Code, send any prompt; the reply context shows a "Jev route:" line (when an OpenRouter key is set).
@@ -84,7 +85,7 @@ def _plugin_entry(cd, claude):
         return None
     try:
         r = subprocess.run([claude, "plugin", "list", "--json"], capture_output=True, universal_newlines=True,
-                           encoding="utf-8", errors="replace", timeout=120, env=dict(os.environ, CLAUDE_CONFIG_DIR=str(cd)))
+                           encoding="utf-8", errors="replace", timeout=120, env=pu.claude_env(cd))
         data = json.loads(r.stdout) if r.returncode == 0 else None
     except (OSError, subprocess.TimeoutExpired, ValueError):
         data = None
@@ -416,6 +417,25 @@ def main(argv=None):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def claude_config(rep, cd, env):
+    """Warn (never write) about leftovers of older installers: a jev MCP entry whose script is gone, and the stub
+    ~/.claude/.claude.json that Claude Code ignores unless CLAUDE_CONFIG_DIR is set."""
+    stale = pu.stale_jev(cd, env)
+    if stale:
+        rep.say("WARN", "jev MCP entry", "%s is missing; re-run the Dryas setup to remove the entry" % stale[0])
+    else:
+        rep.say("PASS", "jev MCP entry")
+    default = Path.home() / ".claude"
+    if "CLAUDE_CONFIG_DIR" in pu.claude_env(cd, env) or Path(cd).expanduser().resolve() != default.resolve():
+        return
+    stub = default / ".claude.json"
+    if stub.exists():
+        rep.say("WARN", "stub config", "%s may have been created by an older Dryas installer (or a run with "
+                "CLAUDE_CONFIG_DIR=~/.claude); Claude Code reads %s; check it holds nothing you need before deleting" % (stub, Path.home() / ".claude.json"))
+    else:
+        rep.say("PASS", "stub config")
+
+
 def _checks(rep, cds, cdxs, env, bash, tmp):
     hook_env = sandbox(env, tmp)
     claude = shutil.which("claude")
@@ -435,6 +455,7 @@ def _checks(rep, cds, cdxs, env, bash, tmp):
                 [str(e) for e in entry.get("errors") or []] + ([] if entry.get("enabled") else ["not enabled"])
             rep.say("FAIL" if errs else "PASS", "dryas loads without errors", "; ".join(errs))
         plugin_hooks(rep, root, cd, bash, hook_env)
+        claude_config(rep, cd, env)
         penv = dict(env, CLAUDE_PLUGIN_ROOT=fwd(root), DRYAS_PY=fwd(sys.executable), CLAUDE_CONFIG_DIR=str(cd))
         chain = Path(root) / "jev" / "chain.py"
         scope_lock(rep, chain, "claude", penv)
