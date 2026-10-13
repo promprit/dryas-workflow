@@ -1,6 +1,6 @@
 # Dryas manifest for this repository's editions (spec: ../spec/dryas-spec-v1.md).
 # Descriptive in spec v1: the installer still reads its flags and install/components.json.
-dryas: "1.0-draft"
+dryas: "1.0-draft"  # spec version 1.0 while it is a draft; "1.0" once the spec is final
 edition: dryas-reference
 harness: [claude-code, codex]
 conformance: {level: full, table: README.md}

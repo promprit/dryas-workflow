@@ -74,8 +74,80 @@ class ScopeLockTest(unittest.TestCase):
         self.assertEqual(self.decision(scope_lock.run(self.ev(os.path.join(self.wt, "src/feature/a.ts")))), "deny")
 
     def test_non_edit_tools_ignored(self):
-        self.assertIsNone(scope_lock.run({"tool_name": "Bash", "tool_input": {"command": "rm x"}, "cwd": self.wt}))
         self.assertIsNone(scope_lock.run({"tool_name": "Read", "tool_input": {"file_path": "/etc/hosts"}, "cwd": self.wt}))
+        self.assertIsNone(scope_lock.run({"tool_name": "Grep", "tool_input": {"pattern": "rm x"}, "cwd": self.wt}))
+
+    def bash(self, cmd, cwd=None, **extra):
+        return dict({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": cwd or self.wt}, **extra)
+
+    def test_bash_write_like_asks_never_denies(self):
+        for cmd in ("rm x", "echo hi > out.txt", "cat a >> b", "sed -i 's/a/b/' f", "git checkout -- f", "git restore f",
+                    "mv a b", "cp a b", "tee f", "truncate -s0 f", "dd if=a of=b", "git stash", "npm install left-pad"):
+            out = scope_lock.run(self.bash(cmd))
+            self.assertEqual(self.decision(out), "ask", cmd)
+            self.assertIn("shell writes are not covered by the file scope", out["hookSpecificOutput"]["permissionDecisionReason"])
+        recs = self.scope_records()
+        self.assertTrue(recs and all(r["decision"] == "ask" and r["tool"] == "Bash" and r["task"] == ["1"] for r in recs))
+
+    def test_bash_read_only_allowed(self):
+        for cmd in ("ls -la", "git status", "grep -rn foo src", "cat a 2>/dev/null", "python3 -m pytest -q", "echo '>' done"):
+            self.assertIsNone(scope_lock.run(self.bash(cmd)), cmd)
+        self.assertEqual(self.scope_records(), [])
+
+    def test_bash_without_active_task_allowed(self):
+        self.set_active([])
+        self.assertIsNone(scope_lock.run(self.bash("rm -rf x")))
+        os.remove(os.path.join(self.wt, ".orchestrate", "active.json"))
+        self.assertIsNone(scope_lock.run(self.bash("rm -rf x")))
+
+    def test_bash_unusable_active_json_asks_not_denies(self):
+        with open(os.path.join(self.wt, ".orchestrate", "active.json"), "w") as f:
+            f.write("{not json")
+        self.assertEqual(self.decision(scope_lock.run(self.bash("rm x"))), "ask")
+        self.assertIsNone(scope_lock.run(self.bash("ls")))
+
+    def test_bash_broken_prescreen_asks_for_every_command(self):
+        old = scope_lock.prescreen
+        scope_lock.prescreen = None
+        try:
+            self.assertEqual(self.decision(scope_lock.run(self.bash("ls"))), "ask")
+        finally:
+            scope_lock.prescreen = old
+
+    def test_non_dict_tool_input_no_crash(self):
+        self.assertIsNone(scope_lock.run({"tool_name": "Write", "tool_input": ["x"], "cwd": self.wt}))
+        self.assertIsNone(scope_lock.run({"tool_name": "Bash", "tool_input": "rm x", "cwd": self.wt}))
+
+    def test_task_active(self):
+        self.assertTrue(scope_lock.task_active(self.wt))
+        self.assertTrue(scope_lock.task_active(os.path.join(self.wt, "src", "deep")))
+        self.set_active([])
+        self.assertFalse(scope_lock.task_active(self.wt))
+        self.assertFalse(scope_lock.task_active(tempfile.mkdtemp()))
+
+    def _main(self, stdin, cwd):
+        import subprocess
+        script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scope_lock.py")
+        return subprocess.run([sys.executable, script], input=stdin, capture_output=True, text=True, cwd=cwd, env=dict(os.environ))
+
+    def test_main_malformed_stdin_fails_closed_while_active(self):
+        for bad in ("not json", "[1, 2]", "\"str\"", "42"):
+            p = self._main(bad, self.wt)
+            self.assertEqual(p.returncode, 2, bad)
+            self.assertIn("scope lock: malformed hook input", p.stderr)
+
+    def test_main_malformed_stdin_silent_without_task(self):
+        self.set_active([])
+        for bad in ("not json", "[1, 2]"):
+            p = self._main(bad, self.wt)
+            self.assertEqual((p.returncode, p.stdout, p.stderr), (0, "", ""), bad)
+        p = self._main("[1]", tempfile.mkdtemp())
+        self.assertEqual((p.returncode, p.stdout), (0, ""))
+
+    def test_main_well_formed_event_still_decides(self):
+        p = self._main(json.dumps(self.ev(os.path.join(self.wt, "src/other.ts"))), self.wt)
+        self.assertEqual(p.returncode, 0)
+        self.assertEqual(json.loads(p.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
 
     def test_edit_tool_checked(self):
         e = {"tool_name": "Edit", "tool_input": {"file_path": os.path.join(self.wt, "src/x.ts")}, "cwd": self.wt}

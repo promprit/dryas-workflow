@@ -165,3 +165,47 @@ def test_mysql_redaction_is_linear():
         t0 = time.time()
         redact(payload)
         assert time.time() - t0 < 0.5, payload[:20]
+
+
+# (text, secret that must be gone or None, substring that must survive or None)
+REDACT_TABLE = [
+    ("PGPASSWORD=x", "=x", "PGPASSWORD=[REDACTED]"),
+    ("PGPASSWORD=hunter2 psql db", "hunter2", "PGPASSWORD=[REDACTED] psql db"),
+    ("DB_PASS='a b' && ls", "a b", "DB_PASS=[REDACTED] && ls"),
+    ('"secret": "abc"', "abc", '"secret": [REDACTED]'),
+    ("token: s3cr3t", "s3cr3t", "token: [REDACTED]"),
+    ("secret=topsecret", "topsecret", "secret=[REDACTED]"),
+    ("access_token: aaa.bbb", "aaa.bbb", "access_token: [REDACTED]"),
+    ("ghp_" + "A1" * 12, "A1A1A1", "[REDACTED_TOKEN]"),
+    ("gho_" + "B2" * 12, "B2B2B2", "[REDACTED_TOKEN]"),
+    ("ghu_" + "C3" * 12, "C3C3C3", "[REDACTED_TOKEN]"),
+    ("ghs_" + "D4" * 12, "D4D4D4", "[REDACTED_TOKEN]"),
+    ("ghr_" + "E5" * 12, "E5E5E5", "[REDACTED_TOKEN]"),
+    ("sk_live_" + "f6" * 8, "f6f6f6", "[REDACTED_TOKEN]"),
+    ("sk_test_" + "g7" * 8, "g7g7g7", "[REDACTED_TOKEN]"),
+    ("glpat-" + "h8" * 11, "h8h8h8", "[REDACTED_TOKEN]"),
+    ("hf_" + "i9" * 12, "i9i9i9", "[REDACTED_TOKEN]"),
+    ("npm_" + "j0" * 12, "j0j0j0", "[REDACTED_TOKEN]"),
+    ("export STRIPE_KEY=sk_live_" + "k1" * 8, "k1k1k1", "STRIPE_KEY=[REDACTED]"),
+    # negatives: must come back unchanged
+    ("token", None, "token"),
+    ("secretary", None, "secretary"),
+    ("the secretary: Ms Smith", None, "the secretary: Ms Smith"),
+    ("tokenizer: fast", None, "tokenizer: fast"),
+    ("git commit -m 'add token parser'", None, "git commit -m 'add token parser'"),
+    ("a secret is a secret", None, "a secret is a secret"),
+    ("ghp_short", None, "ghp_short"),
+    ("hf_model_name", None, "hf_model_name"),
+    ("npm_config_cache", None, "npm_config_cache"),
+]
+
+
+def test_redact_table():
+    for text, secret, keep in REDACT_TABLE:
+        out = redact(text)
+        if secret is not None:
+            assert secret not in out, (text, out)
+        else:
+            assert out == text, (text, out)
+        if keep is not None:
+            assert keep in out, (text, out)

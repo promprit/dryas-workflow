@@ -25,7 +25,7 @@ def judge_keeping(pred, calls=None):
         ans = {}
         for name in questions:
             i = name.split("_", 1)[1]
-            text = state["items"]["i" + i]["text"]
+            text = state["untrusted_items"]["i" + i]["text"]
             ans[name] = {"type": "noul", "value": 0.9 if pred(text) else 0.1, "confidence": 0.9}
         return {"answers": ans, "latency_ms": 1, "input_tokens": 5, "cost": 0.001}
     return j
@@ -119,7 +119,7 @@ class SaveTest(HandoffBase):
         seen = []
 
         def j(state, q):
-            seen.extend(v["text"] for v in state["items"].values())
+            seen.extend(v["text"] for v in state["untrusted_items"].values())
             return {"answers": {}, "latency_ms": 1, "input_tokens": 1, "cost": 0.0}
         handoff.run(self.cwd, self.tp, j)
         self.assertEqual(seen, ["x"])

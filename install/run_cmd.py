@@ -1,13 +1,16 @@
 """Installer entry used by install.sh and install.ps1: flags, preflight, then codex -> migrate -> setup -> verify.
 
   dryas_install.py run [--repo PATH] [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
-                       [--yes] [--force] [--dry-run] [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
-                       [--claude-dir DIR] [--codex-dir DIR] [--flowobserve|--no-flowobserve] [--openrouter-key KEY]
+                       [--yes] [--force] [--dry-run] [--uninstall] [--purge] [--keep-extras] [--preflight-only]
+                       [--harness claude|codex|both] [--claude-dir DIR] [--codex-dir DIR]
+                       [--flowobserve|--no-flowobserve] [--openrouter-key KEY]
 
 Claude Code: the dryas plugin in one config dir (--claude-dir, else $CLAUDE_CONFIG_DIR, else ~/.claude); a copy
 install found there is migrated first. Codex: the dryas plugin in one CODEX_HOME (--codex-dir, else $CODEX_HOME,
 else ~/.codex); a Codex copy install found there is migrated.
 --uninstall touches only that config dir / CODEX_HOME; --purge also removes the data root once no account uses it.
+Both list what they will remove and ask first; --yes answers every question. The third-party plugins setup installed
+are offered for removal too (--keep-extras leaves them, --yes removes them).
 """
 import argparse
 import json
@@ -28,6 +31,10 @@ LEGACY_REFUSAL = ("A Codex copy install (%s) uses %s; run install.sh --harness b
                   "Claude Code and Codex to their plugins. If you no longer use Codex, remove its copy install first "
                   "with install.sh --uninstall --harness codex (Claude Code is not touched), then re-run. Nothing changed.")
 NO_PYTHON3 = "Codex runs the Dryas hooks with python3: install Python 3.9+ as python3 and re-run."
+NO_RUFLO_EFFECT = {"claude": "Claude Code then runs without Ruflo's orchestration, memory and hooks",
+                   "codex": "Codex then runs without the Ruflo MCP server",
+                   "both": "Claude Code then runs without Ruflo's orchestration, memory and hooks, Codex without "
+                           "the Ruflo MCP server"}
 NO_PYTHON_WIN = ("warning: `python` is not on PATH; on Windows Codex runs the Dryas hooks with `python` "
                  "(install Python 3.9+ from python.org and tick \"Add python.exe to PATH\").")
 
@@ -37,7 +44,7 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--repo", default=str(HERE.parent))
     for c in OPTIONAL:
         ap.add_argument("--no-" + c, action="store_true")
-    for f in ("yes", "force", "dry-run", "uninstall", "preflight-only", "purge"):
+    for f in ("yes", "force", "dry-run", "uninstall", "preflight-only", "purge", "keep-extras"):
         ap.add_argument("--" + f, action="store_true")
     fo = ap.add_mutually_exclusive_group()  # tri-state: None keeps the setting, True on, False off
     fo.add_argument("--flowobserve", dest="flowobserve", action="store_const", const=True, default=None)
@@ -73,10 +80,14 @@ def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Seq
         missing.append("claude(Claude Code CLI)")
     if harness in ("codex", "both") and not pu.which("codex"):
         missing.append("codex(Codex CLI)")
-    if "ruflo" in comps:
-        missing += [t for t in ("node", "npm") if not pu.which(t)]
+    node = [t for t in ("node", "npm") if not pu.which(t)] if "ruflo" in comps else []
+    missing += node
     probs = []
-    if missing:
+    if missing and len(node) == len(missing):  # only Ruflo needs Node: say so and name the way around it
+        probs.append("Missing: %s. Only Ruflo needs them: install Node.js (node and npm) and re-run, or re-run with "
+                     "--no-ruflo to skip Ruflo (%s). This installer never installs system packages."
+                     % (" ".join(node), NO_RUFLO_EFFECT[harness]))
+    elif missing:
         probs.append("Missing: %s. Install them and re-run (this installer never installs system packages)."
                      % " ".join(missing))
     if "ruflo" in comps:
@@ -106,9 +117,10 @@ def _vtuple(v) -> Optional[tuple]:
 
 
 def thirdparty(comps: List[str], yes: bool, claude_dir: Path, env: Optional[dict] = None,
-               table_path: Optional[Path] = None) -> int:
+               table_path: Optional[Path] = None, ran: Optional[List[List[str]]] = None) -> int:
     """Install third-party tools into `claude_dir` (env carries its CLAUDE_CONFIG_DIR); warn on untested versions.
-    superpowers is a plugin dependency now: no commands, only the version check."""
+    superpowers is a plugin dependency now: no commands, only the version check.
+    ran: when given, every command that ran and succeeded is appended (setup records them for uninstall)."""
     import dryas_install as di
     table = json.loads(Path(table_path or HERE / "components.json").read_text(encoding="utf-8"))
     sel = [c for c in comps if c in table]
@@ -123,6 +135,8 @@ def thirdparty(comps: List[str], yes: bool, claude_dir: Path, env: Optional[dict
                 if rc != 0:
                     print("failed (exit %d): %s" % (rc, " ".join(argv)))
                     return rc
+                if ran is not None:
+                    ran.append(list(argv))
         else:
             print("skipped third-party installs")
     p = Path(claude_dir) / "plugins" / "installed_plugins.json"
@@ -162,11 +176,38 @@ def main(argv: Optional[List[str]] = None) -> int:
     if a.harness == "codex" and not a.uninstall and ("superpowers" in comps or "design" in comps):
         print("note: superpowers and design are Claude Code plugins; skipped for Codex.")
     if a.uninstall:  # Codex first: Claude's --purge then sees whether a CODEX_HOME still uses the data root
+        plan = []
+        if want_codex and (cdx / cps.RECORD).exists():
+            plan.append("Codex: `codex plugin remove %s` for %s, the Dryas block in its config.toml, the hook trust "
+                        "setup recorded, %s" % (cps.ID, cdx, cdx / cps.RECORD))
+        if want_claude:
+            plan += ps.uninstall_plan(cd, a.purge)
+        elif a.purge:
+            plan += ps.purge_plan()
+        if plan:
+            print("--uninstall will remove:")
+            for line in plan:
+                print("  " + line)
+            if not (a.yes or di.confirm("Proceed?")):
+                print("nothing removed")
+                return 1
+        extras = []
+        if want_claude:
+            others = ps.other_accounts(cd, cdx if want_codex else None)
+            extras = ps.extras_commands(ps._load_json(cd / ps.RECORD, {}), last_account=not others)
+            if extras and a.keep_extras:
+                extras = []
+            elif extras:
+                print("Third-party tools setup installed for %s (kept with --keep-extras):" % cd)
+                for argv in extras:
+                    print("  " + ps.shown(cd, argv))
+                if not (a.yes or di.confirm("Remove them too?")):
+                    extras = []
         rc = cps.uninstall(cdx) if want_codex else 0
         if rc:
             return rc
         if want_claude:
-            return ps.uninstall(cd, a.purge)
+            return ps.uninstall(cd, a.purge, extras=extras)
         if a.purge:
             ps.purge_shared()
         return 0

@@ -3,18 +3,40 @@
 Codex installs a plugin by copying it and drops symlinks, so these are real copies.
   python tools/sync_codex_plugin.py           write codex/jev and codex/pstack
   python tools/sync_codex_plugin.py --check   list drift, exit 1 if any (CI)
+The skills both editions ship (SKILLS) are hand-written per harness, so --check compares the names they share
+instead of bytes: pstack files, Jev and Ruflo tools, Jev questions, threshold keys and plan-file conventions must be
+named by both, except the harness-specific ones listed in SKILL_ALLOW. sync never rewrites a skill.
 """
 import argparse
+import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 REPO = Path(__file__).resolve().parents[1]
 TREES = (("claude/jev", "codex/jev"), ("claude/pstack", "codex/pstack"))
 CACHE_DIRS = {"__pycache__", ".pytest_cache"}
 SKIP_DIRS = {"tests", "logs", "compact"} | CACHE_DIRS  # logs/compact are gitignored runtime dirs
 SKIP_FILES = {".gitignore"}
+SKILLS = ("orchestrate", "interrogate", "benchmark-checklist")
+# a token is a name both skill editions must share; the file's prose around it may differ freely
+SHARED = re.compile(r"pstack/[A-Za-z0-9_./-]+\.md"                        # shipped pstack files
+                    r"|\.orchestrate/[A-Za-z0-9_]+\.[a-z]+"               # plan-file conventions
+                    r"|none \((?:review|cleanup)\)"
+                    r"|\b(?:jev_judge|log_(?:escalation|override|dispatch|review|merge)|memory_search|memory_store|swarm_init)\b"
+                    r"|\b(?:commit|interrogate|dispatch|escalation)\.[a-z_]+\b"  # threshold keys
+                    r"|\b(?:needs_[a-z_]+|safe_to_commit|failing_test_exists|specific)\b")  # Jev questions
+# harness-specific names: which edition may name each one alone (claude: tiers and the Agent tool; codex: one ladder)
+SKILL_ALLOW: Dict[str, Dict[str, Set[str]]] = {
+    "orchestrate": {
+        "claude": {"needs_opus", "needs_sonnet", "dispatch.haiku_default", "escalation.haiku_failures_before_sonnet",
+                   "escalation.sonnet_failures_before_opus", "escalation.opus_failures_before_fable",
+                   "escalation.executor_confidence_below", "swarm_init",
+                   "pstack/principles/guard-the-context-window.md", "pstack/principles/prove-it-works.md"},
+        "codex": {"needs_stronger_model"},
+    },
+}
 
 
 def _files(base: Path) -> Iterator[Tuple[Path, Path]]:
@@ -68,6 +90,30 @@ def drift(repo: Path) -> List[str]:
     return sorted(out)
 
 
+_MCP = re.compile(r"mcp__plugin_[A-Za-z0-9_-]+?__")  # Claude names MCP tools with the plugin prefix
+
+
+def _tokens(path: Path) -> Set[str]:
+    return set(SHARED.findall(_MCP.sub("", path.read_text(encoding="utf-8")))) if path.is_file() else set()
+
+
+def skill_drift(repo: Path) -> List[str]:
+    """One line per shared name only one edition names (unless allowed) and per allowance no longer needed."""
+    out = []
+    for name in SKILLS:
+        files = {h: Path(repo) / h / "skills" / name / "SKILL.md" for h in ("claude", "codex")}
+        if not any(f.is_file() for f in files.values()):
+            continue  # a tree without the skill (tests, partial checkouts) has nothing to compare
+        tok = {h: _tokens(f) for h, f in files.items()}
+        allow = SKILL_ALLOW.get(name, {})
+        for mine, other in (("claude", "codex"), ("codex", "claude")):
+            only = tok[mine] - tok[other]
+            ok = allow.get(mine, set())
+            out += ["skill %s: %s names %s but %s does not" % (name, mine, t, other) for t in sorted(only - ok)]
+            out += ["skill %s: SKILL_ALLOW[%r] lists %s, which no longer differs" % (name, mine, t) for t in sorted(ok - only)]
+    return sorted(out)
+
+
 def sync(repo: Path) -> List[str]:
     """Make codex/ match claude/; return the changed rel paths."""
     want, changed = plan(repo), []
@@ -95,7 +141,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(line)
         if bad:
             print("codex/ is out of date: run python tools/sync_codex_plugin.py and commit the result")
-        return 1 if bad else 0
+        skills = skill_drift(repo)
+        for line in skills:
+            print(line)
+        if skills:
+            print("codex/skills drifted from claude/skills: edit the Codex skill by hand, or list a harness-specific "
+                  "name in SKILL_ALLOW in tools/sync_codex_plugin.py")
+        return 1 if bad or skills else 0
     for rel in sync(repo):
         print("synced " + rel)
     return 0

@@ -1,6 +1,7 @@
 ---
 name: orchestrate
-description: Run a multi-step coding task as Opus orchestrator with Haiku-first executors (Sonnet, Opus, Fable on escalation), Jev routing/gates, Ruflo memory and Superpowers process. Use for /orchestrate or any multi-file task. Not for single-file fixes.
+description: Run a multi-step coding task as strong-tier orchestrator with fast-first executors (standard, strong, frontier on escalation), Jev routing/gates, Ruflo memory and Superpowers process. Use when the user runs /orchestrate, asks to orchestrate or dispatch executors, or has approved a multi-step plan to execute. Not for single-file fixes or ordinary edits that do not ask for orchestration.
+allowed-tools: Read, Edit, Write, Glob, Grep, Agent, ToolSearch, Skill(superpowers:brainstorming), Skill(superpowers:using-git-worktrees), Skill(superpowers:systematic-debugging), Skill(superpowers:verification-before-completion), Bash(git worktree:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git merge:*), Bash(git merge-base:*), Bash("${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section:*), mcp__plugin_dryas_jev__jev_judge, mcp__plugin_dryas_jev__log_override, mcp__plugin_dryas_jev__log_escalation, mcp__plugin_dryas_jev__log_dispatch, mcp__plugin_dryas_jev__log_merge, mcp__plugin_ruflo-core_ruflo__memory_search, mcp__plugin_ruflo-core_ruflo__memory_store, mcp__plugin_ruflo-core_ruflo__swarm_init
 ---
 
 # Orchestrate
@@ -10,7 +11,7 @@ Ruflo and Jev MCP tools may be deferred — load them with ToolSearch (e.g. `sel
 ## 0. Brainstorm first (always)
 Unless the request points at an already-approved design/spec, invoke superpowers:brainstorming first and finish its gates (design approved by the user) before step 1. Orchestration plans from the approved design, never from the raw request.
 
-You (Opus) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.claude/jev/thresholds.json` (defaults in `~/.claude/jev/thresholds.py`). Ruflo tool names: `~/.claude/skills/orchestrate/ruflo-tools.md`.
+You (the strong tier) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.dryas/jev/thresholds.json` (defaults in `${CLAUDE_PLUGIN_ROOT}/jev/thresholds.py`). Ruflo tool names: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/ruflo-tools.md`. Exact Jev call shapes and question rules: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/jev-questions.md`.
 
 ## 1. Memory first
 Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project folder name) for tasks similar to the request. Take the top 3 outcomes and write them down as `Past: <what worked> / <what failed>` before planning. None found → say so.
@@ -33,31 +34,18 @@ Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project fold
 3. `.orchestrate/` is ignored globally (~/.config/git/ignore); never commit it.
 
 ## 3. Per-task Jev call (one call per task; batch when >5 tasks to triage)
-`mcp__jev__jev_judge` with state `{task_section, test_file_exists: bool, last_test_run_tail, past_outcomes}` and questions:
+`mcp__plugin_dryas_jev__jev_judge` with state `{task_section, test_file_exists: bool, last_test_run_tail, past_outcomes}` and questions:
 - `executor` choice: `{coder, tester, reviewer, docs, none_of_these}`
 - `specific` noul: "Is this task specific enough for an executor to finish without asking questions?"
 - `failing_test_exists` noul: "Does a failing test for this task already exist?"
 - `needs_opus` noul: "Does this task need a model stronger than Sonnet (cross-cutting refactor, or concurrency- or security-sensitive code)?"
 - `needs_sonnet` noul (only when `dispatch.haiku_default` is true): "Does this task need a model stronger than Haiku (touches more than one file, non-mechanical logic, or test design beyond a single assertion)?"
 
-Exact shape (criteria for `choice` is a map option -> description; `noul` criteria is {"true": ..., "false": ...}; `score` criteria is an ordered list of 2–10 level descriptions):
-```json
-{"state": {"task_section": "...", "test_file_exists": false, "last_test_run_tail": "", "past_outcomes": []},
- "questions": {
-  "executor": {"type": "choice", "instructions": "Which kind of executor should take this .orchestrate/PLAN.md task (see `task_section`)?",
-               "criteria": {"coder": "Writes or changes production code", "tester": "Writes the failing test first", "reviewer": "Reviews existing changes only", "docs": "Documentation only", "none_of_these": "None of these fits"}},
-  "specific": {"type": "noul", "instructions": "Is the task in `task_section` specific enough for an executor to finish without asking questions?",
-               "criteria": {"true": "Goal, scope and done-criteria are concrete", "false": "Something essential is missing or ambiguous"}},
-  "failing_test_exists": {"type": "noul", "instructions": "Does a failing test for the task in `task_section` already exist (see `test_file_exists`, `last_test_run_tail`)?"},
-  "needs_opus": {"type": "noul", "instructions": "Does the task in `task_section` need a model stronger than Sonnet (cross-cutting refactor, concurrency- or security-sensitive code)?"},
-  "needs_sonnet": {"type": "noul", "instructions": "Does the task in `task_section` need a model stronger than Haiku (touches more than one file, non-mechanical logic, or test design beyond a single assertion)?"}}}
-```
-Omit `needs_sonnet` from the call when `dispatch.haiku_default` is false.
-Question names are never sent to Jev, so each `instructions` must be self-contained and reference state by backticked field names.
+Exact call shape: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/jev-questions.md` (omit `needs_sonnet` when `dispatch.haiku_default` is false).
 
 Run tests with paths relative to the worktree when possible; if the project's venv lives only in the main checkout, use its absolute path.
 
-Any name in `escalate`, or Jev unavailable → you decide that item. Whenever your decision differs from Jev's answer, call `mcp__jev__log_override`.
+Any name in `escalate`, or Jev unavailable → you decide that item. Whenever your decision differs from Jev's answer, call `mcp__plugin_dryas_jev__log_override`.
 
 ## 4. TDD gate
 If `failing_test_exists` is not confidently true: dispatch a **tester** executor first for that task, confirm the test fails for the right reason, then dispatch the coder.
@@ -65,38 +53,36 @@ If `failing_test_exists` is not confidently true: dispatch a **tester** executor
 ## 5. Dispatch
 1. Initialise the Ruflo swarm once (swarm_init from ruflo-tools.md). Call it with topology "hierarchical" (the plugin default is hierarchical-mesh).
 2. Write `.orchestrate/active.json` = `{"active": [<task ids being dispatched now>]}` before dispatching; this arms the scope lock. On EVERY exit path — success, failure handed to the user (§7.3/§7.4), user abort, or any error — delete `.orchestrate/active.json` before stopping; the scope lock stays armed while it exists.
-3. Give each executor ONLY its section: `"{{PY}}" -X utf8 "{{CD}}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
-4. Dispatch with the Agent tool, `subagent_type: executor`. Pick the start tier per task, first match wins:
-   1. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus`, after `mcp__jev__log_escalation` (from_model sonnet, to_model opus, reason "skip-up: <why>", whatever `dispatch.haiku_default` says, so ESC-M1 counts it the same way as before Haiku; the skip-up reason tells observers it is a start tier, not a climb).
-   2. `dispatch.haiku_default` false → no `model` (Sonnet from the agent's frontmatter). Do not ask `needs_sonnet`.
-   3. `needs_sonnet` true at confidence ≥ threshold, or your own judgment → no `model` (Sonnet), after `mcp__jev__log_escalation` (from_model haiku, to_model sonnet, reason "skip-up: <why>").
+3. Give each executor ONLY its section: `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
+4. Dispatch with the Agent tool, `subagent_type: dryas:executor`. Pick the start tier per task, first match wins:
+   1. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus`, after `mcp__plugin_dryas_jev__log_escalation` (from_model sonnet, to_model opus, reason "skip-up: <why>", whatever `dispatch.haiku_default` says, so ESC-M1 counts it the same way as before the fast tier; the skip-up reason tells observers it is a start tier, not a climb).
+   2. `dispatch.haiku_default` false → no `model` (standard tier from the agent's frontmatter). Do not ask `needs_sonnet`.
+   3. `needs_sonnet` true at confidence ≥ threshold, or your own judgment → no `model` (standard tier), after `mcp__plugin_dryas_jev__log_escalation` (from_model haiku, to_model sonnet, reason "skip-up: <why>").
    4. Otherwise → `model: haiku`.
-   Independent tasks go out in one message, in parallel. Never dispatch Fable here: Fable is only reached through §7. Review, interrogate and cleanup dispatches (§7b) never use Haiku: they start on Sonnet (no `model`) and log no skip-up.
+   Independent tasks go out in one message, in parallel. Never dispatch the frontier tier here: it is only reached through §7. Review, interrogate and cleanup dispatches (§7b) never use the fast tier: they start on the standard tier (no `model`) and log no skip-up.
 5. Every `log_dispatch` and `log_escalation` call for a task uses the same task id: "<worktree branch>:<PLAN.md task id>", e.g. worktree-feat:3. `/tune` joins the two logs on it.
-6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__jev__log_dispatch` with task (the §5.5 id), tier (haiku, sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
+6. Right after every dispatch (first or re-dispatch, any tier) call `mcp__plugin_dryas_jev__log_dispatch` with task (the §5.5 id), tier (haiku, sonnet, opus or fable), role (coder, tester, reviewer or docs) and attempt (1 for the first dispatch of that task, then +1 per re-dispatch).
 
 ## 6. On return
 For each report, one `jev_judge` call with state `{task_section, executor_report}`:
 - `done` noul: "Are all done-criteria met according to the report?"
 - `risk` score: `["routine", "worth a look", "incident"]`
 
-Note: `risk` is a score question whose criteria is the list ["routine", "worth a look", "incident"]. Question names are never sent to Jev, so each `instructions` must be self-contained and reference state by backticked field names.
-
 Only an incident, a failure or an escalation reaches you in full; otherwise log one summary line per task. Remove a task id from `active.json` only when that task is finished or handed to the user; a task being re-dispatched stays active. If an executor reports `SCOPE: need <path> because <reason>`, you (main thread) decide; if justified, add the glob to that task's Scope in .orchestrate/PLAN.md (the scope lock lets only the main thread edit .orchestrate/PLAN.md), then re-dispatch. Store the outcome in Ruflo memory (memory_store, same namespace): task title, what worked, what failed.
 
 ## 7. Escalation
-Ladder: **Haiku → Sonnet → Opus → Fable**. Fable is used only when Opus also could not do the task.
-Every `mcp__jev__log_escalation` call passes all five fields: task, reason, decided_by ("jev" or "opus"), from_model, to_model.
-First Sonnet failure: re-dispatch once more on Sonnet with the failure details; the second Sonnet failure escalates to Opus.
-Each re-dispatch is logged with `mcp__jev__log_dispatch` (§5.6).
-1. A Haiku executor that fails done-criteria `escalation.haiku_failures_before_sonnet` times (1), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with no `model` (Sonnet). Call `mcp__jev__log_escalation` first (from haiku, to sonnet, with the reason). From there the Sonnet rules below apply, starting at zero Sonnet failures.
-2. A Sonnet executor that fails done-criteria `escalation.sonnet_failures_before_opus` times (2), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with `model: opus`. Call `mcp__jev__log_escalation` first (from sonnet, to opus, with the reason).
-3. If the Opus executor succeeds, stop: no Fable.
-4. Only if the Opus executor fails `escalation.opus_failures_before_fable` times (1), or reports CONFIDENCE below the threshold, re-dispatch once with `model: fable`, after `mcp__jev__log_escalation` (from opus, to fable, reason naming what Opus could not resolve). If Fable is unavailable, stop and report to the user.
-5. A Fable failure comes to the user with every tier's report.
+Ladder: **fast → standard → strong → frontier**. The frontier tier is used only when the strong tier also could not do the task.
+Every `mcp__plugin_dryas_jev__log_escalation` call passes all five fields: task, reason, decided_by ("jev" or "opus"), from_model, to_model.
+First standard-tier failure: re-dispatch once more on standard with the failure details; the second standard failure escalates to strong.
+Each re-dispatch is logged with `mcp__plugin_dryas_jev__log_dispatch` (§5.6).
+1. A fast-tier executor that fails done-criteria `escalation.haiku_failures_before_sonnet` times (1), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with no `model` (standard tier). Call `mcp__plugin_dryas_jev__log_escalation` first (from haiku, to sonnet, with the reason). From there the standard-tier rules below apply, starting at zero standard failures.
+2. A standard-tier executor that fails done-criteria `escalation.sonnet_failures_before_opus` times (2), or reports CONFIDENCE below `escalation.executor_confidence_below`, is re-dispatched with `model: opus`. Call `mcp__plugin_dryas_jev__log_escalation` first (from sonnet, to opus, with the reason).
+3. If the strong executor succeeds, stop: no frontier.
+4. Only if the strong executor fails `escalation.opus_failures_before_fable` times (1), or reports CONFIDENCE below the threshold, re-dispatch once with `model: fable`, after `mcp__plugin_dryas_jev__log_escalation` (from opus, to fable, reason naming what the strong tier could not resolve). If the frontier tier is unavailable, stop and report to the user.
+5. A frontier failure comes to the user with every tier's report.
 
 ## 8. Finish
-Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then call `mcp__jev__log_merge` with task and branch (the worktree branch name), tasks_merged (the number of task sections in .orchestrate/PLAN.md) and cost_usd when you have the session cost from /cost or a cost notice; if `log_merge` replies with a warning (no review recorded for the branch), tell the user; then remove the worktree.
+Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then call `mcp__plugin_dryas_jev__log_merge` with task and branch (the worktree branch name), tasks_merged (the number of task sections in .orchestrate/PLAN.md) and cost_usd when you have the session cost from /cost or a cost notice; if `log_merge` replies with a warning (no review recorded for the branch), tell the user; then remove the worktree.
 
-## Question rules (typesafe skill)
-One narrow judgment per question; named JSON fields in state; every choice has `none_of_these`; batch independent questions into one call; never ask Jev to write code or plans. When one call covers several tasks, name each question `<question>.<task>` (for example `needs_opus.t3`); /tune groups calls by the part before the dot.
+## Question rules
+Full rules in `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/jev-questions.md`: one narrow judgment per question, named JSON fields in state, every choice has `none_of_these`, batch independent questions into one call. When one call covers several tasks, name each question `<question>.<task>` (for example `needs_opus.t3`); /tune groups calls by the part before the dot.

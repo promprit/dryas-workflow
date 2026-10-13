@@ -2,6 +2,7 @@
 name: interrogate
 description: Adversarial review of a finished change by two reviewers on different models, then a lead verdict. Runs from the orchestrate skill's gated interrogate step or when the user types /interrogate. Not for routine review; /wreview covers that.
 disable-model-invocation: true
+allowed-tools: Read, Edit, Write, Agent, Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git merge-base:*)
 ---
 
 # Interrogate

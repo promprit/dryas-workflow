@@ -314,7 +314,7 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
         if proto not in SUPPORTED_PROTOCOLS:
             proto = PROTOCOL
         return _ok(mid, {"protocolVersion": proto, "capabilities": {"tools": {}},
-                         "serverInfo": {"name": "jev", "version": "1.0.0"}})
+                         "serverInfo": {"name": "jev", "version": "1.0.2"}})
     if method == "ping":
         return _ok(mid, {})
     if method == "tools/list":

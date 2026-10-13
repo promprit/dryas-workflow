@@ -1,6 +1,6 @@
 {
   "name": "dryas",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Dryas Workflow for Claude Code: rules, scope lock, Jev chain, agents, commands and skills.",
   "author": {
     "name": "Promprit"
@@ -8,6 +8,15 @@
   "homepage": "https://github.com/promprit/dryas-workflow",
   "repository": "https://github.com/promprit/dryas-workflow",
   "license": "MIT",
+  "keywords": [
+    "workflow",
+    "orchestration",
+    "scope-lock",
+    "code-review",
+    "escalation",
+    "jev",
+    "codex"
+  ],
   "dependencies": [
     {
       "name": "superpowers",

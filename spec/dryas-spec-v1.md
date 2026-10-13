@@ -1,6 +1,6 @@
 # Dryas Workflow Framework Specification v1
 
-- **Status:** Draft 0.1. Rules and manifest fields may still change before 1.0.
+- **Status:** Version 1.0, draft (manifests name it as `dryas: "1.0-draft"`). Rules and manifest fields may still change before 1.0 is final.
 - **Scope:** what any implementation ("edition") of Dryas must do, on any agent harness.
 - **Not in scope:** which tools, models or vendors an edition uses. Those are bindings, declared in the manifest.
 

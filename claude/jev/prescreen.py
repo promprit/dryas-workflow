@@ -166,6 +166,35 @@ def _scan(text):
     return _writes(text) or _sed(text) or any(rx.search(text) for rx in _RX)
 
 
+# Shell commands that write, move or delete files (scope lock: shell writes are not covered by file globs).
+_WRITE_WORDS = (
+    "rm rmdir mv cp dd ln install unlink truncate shred tee patch mkdir touch chmod chown chflags "
+    "rsync scp ditto split csplit cpio tar unzip zip gzip gunzip bzip2 xz unxz 7z mkfifo"
+).split()
+_WRITE_GIT = "checkout switch restore reset clean stash rm mv apply am rebase merge pull cherry-pick revert".split()
+_WRITE_PM = "install add remove uninstall update upgrade i ci link unlink".split()
+_WRITE_PATTERNS = [
+    _B + "(?:" + _alt(_WRITE_WORDS) + ")" + _A,
+    _B + "git" + _GIT_PRE + r"\s+(?:" + _alt(_WRITE_GIT) + ")" + _A,
+    _B + r"(?:pip3?|uv|cargo|gem|poetry|pnpm|npm|yarn)(?:\s+-\S+)*\s+(?:" + _alt(_WRITE_PM) + ")" + _A,
+]
+_WRITE_RX = [re.compile(p, re.M) for p in _WRITE_PATTERNS]
+
+
+def writes(cmd):
+    """True when cmd looks like it writes to the file system: file-writing commands, sed -i, redirects
+    (outside quotes), mutating git subcommands and package installs. Narrower than risky(); exception -> True."""
+    try:
+        if not cmd.strip():
+            return False
+        norm = _NORM.sub("", cmd)  # quoting must not hide a command word
+        if _writes(_mask(cmd)):
+            return True
+        return any(_sed(t) or any(rx.search(t) for rx in _WRITE_RX) for t in (cmd, norm))
+    except Exception:
+        return True
+
+
 def risky(cmd):
     """True when cmd must go to the judge; False only if no risky token found."""
     try:

@@ -60,6 +60,23 @@ class PluginShapeTest(unittest.TestCase):
         self.assertTrue(any("compact_restore.py" in c for c in ss["compact"]))
         self.assertTrue(any("handoff_restore.py" in c for c in ss["clear"]))
 
+    def test_pretool_matcher_covers_enabled_chain_stages(self):
+        """PreToolUse spawns Python only for the tools an enabled pretool stage matches (flowobserve, shipped
+        off, has no match; its own installer adds hooks for the other events and tools)."""
+        h = load(PLUGIN / "hooks" / "hooks.json")["hooks"]
+        pre = h["PreToolUse"]
+        self.assertEqual(len(pre), 1)
+        matcher = pre[0]["matcher"]
+        self.assertNotEqual(matcher, "*")
+        self.assertEqual(matcher, "Bash|Edit|Write|MultiEdit|NotebookEdit")
+        tools = set(matcher.split("|"))
+        chain = load(PLUGIN / "jev" / "chain.json")["pretool"]
+        for st in chain:
+            if st.get("enabled") is False:
+                continue
+            self.assertIn("match", st, st["name"])
+            self.assertTrue(set(st["match"].split("|")) <= tools, st["name"])
+
     def test_mcp(self):
         m = load(PLUGIN / ".mcp.json")["mcpServers"]["jev"]
         self.assertEqual(m["env"]["DRYAS_OPENROUTER_KEY"], "${user_config.openrouter_key}")
