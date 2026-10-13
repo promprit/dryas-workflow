@@ -31,6 +31,7 @@ def append(name: str, record: Dict[str, Any]) -> None:
         d = log_dir()
         if not os.path.isdir(d):
             os.makedirs(d, mode=0o700, exist_ok=True)
+        if os.stat(d).st_mode & 0o077:  # a dir an older version created with the default mode gets tightened too
             os.chmod(d, 0o700)  # portable-ok: POSIX file privacy; no-op on Windows
         rec = dict(record)
         rec.setdefault("ts", time.strftime("%Y-%m-%dT%H:%M:%S%z"))

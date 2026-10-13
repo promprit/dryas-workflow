@@ -177,13 +177,19 @@ _WRITE_PATTERNS = [
     _B + "(?:" + _alt(_WRITE_WORDS) + ")" + _A,
     _B + "git" + _GIT_PRE + r"\s+(?:" + _alt(_WRITE_GIT) + ")" + _A,
     _B + r"(?:pip3?|uv|cargo|gem|poetry|pnpm|npm|yarn)(?:\s+-\S+)*\s+(?:" + _alt(_WRITE_PM) + ")" + _A,
+    # inline interpreter code (python -c, node -e, perl -e, ruby -e, php -r) can write anything
+    _B + r"(?:python3?|pypy3?|node|nodejs|deno|bun|ruby|perl|php)(?:\s+-[^ce\s]\S*)*\s+-(?:c|e|E|r)" + _A,
+    # running a local script or executable: ./build.sh, sh gen.sh, bash -x x.sh
+    r"(?:^|[;|&(`\n])\s*\.{1,2}/\S+",
+    _B + r"(?:sh|bash|zsh|dash|ksh)(?:\s+-\S+)*\s+\S+\.(?:sh|bash|zsh)" + _A,
 ]
 _WRITE_RX = [re.compile(p, re.M) for p in _WRITE_PATTERNS]
 
 
 def writes(cmd):
     """True when cmd looks like it writes to the file system: file-writing commands, sed -i, redirects
-    (outside quotes), mutating git subcommands and package installs. Narrower than risky(); exception -> True."""
+    (outside quotes), mutating git subcommands, package installs, inline interpreter code and local scripts.
+    Test and build runners (pytest, make, npm run) are not writes. Narrower than risky(); exception -> True."""
     try:
         if not cmd.strip():
             return False

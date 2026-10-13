@@ -12,13 +12,18 @@ _RULES: List[Tuple[Pattern[str], str]] = [
     (re.compile(r"\b(?:sk-[A-Za-z0-9_-]{16,}|sk_(?:live|test)_[A-Za-z0-9]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
                 r"|glpat-[A-Za-z0-9_-]{20,}|hf_[A-Za-z0-9]{20,}|npm_[A-Za-z0-9]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}"
                 r"|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,})"), "[REDACTED_TOKEN]"),
-    (re.compile(r"(?i)\b([A-Z0-9_]{0,64}(?:PASS|KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD|CREDENTIAL)[A-Z0-9_]{0,64})\s*=\s*(\"[^\"]*\"|'[^']*'|\S+)"), r"\1=[REDACTED]"),
+    # env-var style NAME=value; not after `-` so an option count like --max-token=5 stays (--token= is the rule below)
+    (re.compile(r"(?i)(?<!-)\b([A-Z0-9_]{0,64}(?:PASS|KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD|CREDENTIAL)[A-Z0-9_]{0,64})\s*=\s*(\"[^\"]*\"|'[^']*'|\S+)"), r"\1=[REDACTED]"),
     (re.compile(r"(?i)(--(?:token|password|api-key|secret)[= ])\S+"), r"\1[REDACTED]"),
     (re.compile(r"(://[^/\s:@]+:)[^@\s/]+@"), r"\1[REDACTED]@"),
     # YAML/JSON `key: value` / `key=value` forms. The lookbehind keeps PGPASSWORD=... (rule above) from firing
     # twice as PG[REDACTED]; the lookahead skips values already redacted.
     (re.compile(r"(?i)(?<![A-Za-z0-9_])([\"']?(?:password|passwd|api_?key|client_?secret|auth_?token|access_?token"
-                r"|refresh_?token|secret|token)[\"']?\s*[:=]\s*)(?!\[REDACTED)(\"[^\"]*\"|'[^']*'|[^\s,\n]+)"), r"\1[REDACTED]"),
+                r"|refresh_?token)[\"']?\s*[:=]\s*)(?!\[REDACTED)(\"[^\"]*\"|'[^']*'|[^\s,\n]+)"), r"\1[REDACTED]"),
+    # Bare `token:` / `secret:` also appear in prose ("fix token: refresh flow", --max-token=5), so they redact
+    # only a credential-shaped value: quoted, or 8+ chars with a digit, or 20+ chars.
+    (re.compile(r"(?i)(?<![A-Za-z0-9_-])([\"']?(?:secret|token)[\"']?\s*[:=]\s*)(?!\[REDACTED)"
+                r"(\"[^\"\s]{8,}\"|'[^'\s]{8,}'|(?=[^\s,\n]*\d)[^\s,\n]{8,}|[^\s,\n]{20,})"), r"\1[REDACTED]"),
     (re.compile(r"(?i)(?:curl\s+)?(?:--?u|--user|--auth)\s+[^\s:]+:(\S+)"), r"--user [REDACTED]:[REDACTED]"),
 ]
 

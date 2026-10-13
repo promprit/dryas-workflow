@@ -272,6 +272,15 @@ class TestWrites(unittest.TestCase):
         for c in WRITES:
             self.assertTrue(prescreen.writes(c), c)
 
+    def test_inline_code_and_local_scripts_are_writes(self):
+        for c in ("python -c \"open('x','w').write('a')\"", "python3 -I -c 'import os'", "node -e 'fs.writeFileSync(1)'",
+                  "perl -e 'unlink shift'", "ruby -e 'File.delete(1)'", "php -r 'unlink(1);'", "./build.sh",
+                  "cd src && ./gen", "sh gen.sh", "bash -x scripts/x.sh", "../tools/run.sh --fast"):
+            self.assertTrue(prescreen.writes(c), c)
+        for c in ("python3 x.py", "python3 -m pytest -q", "node index.js", "npm run build", "make", "go build ./...",
+                  "echo ./x", "ls ./", "cat ./README.md"):
+            self.assertFalse(prescreen.writes(c), c)
+
     def test_read_only_commands(self):
         for c in NOT_WRITES:
             self.assertFalse(prescreen.writes(c), c)

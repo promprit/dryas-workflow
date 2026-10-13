@@ -233,7 +233,8 @@ def pretool_codex(event: Dict[str, Any], stages: List[Dict[str, Any]]) -> Option
     rest = [s for s in stages if not is_pf(s)]
     combined = {k: v for k, v in event.items() if k not in ("tool_name", "tool_input")}
     combined["tool_name"] = "Write"
-    combined["tool_input"] = {"file_path": events[0]["tool_input"]["file_path"], "content": patch}
+    combined["tool_input"] = {"file_path": events[0]["tool_input"]["file_path"], "content": patch,
+                              "paths": [e["tool_input"]["file_path"] for e in events]}  # gate checks them all
     best = None
     for ev in events:
         best = _stricter(best, pretool(ev, json.dumps(ev), per_file))

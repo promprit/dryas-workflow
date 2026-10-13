@@ -391,10 +391,21 @@ class GateFileToolsTest(unittest.TestCase):
 
     def test_sensitive_local_files_are_judged(self):
         for rel in (".git/config", ".github/workflows/ci.yml", ".env", ".env.local", ".claude/settings.json", "Makefile",
-                    "package.json", "pyproject.toml", "setup.py", "scripts/deploy.sh", "certs/server.key", "a/.hidden/x.py"):
+                    "package.json", "pyproject.toml", "setup.py", "scripts/deploy.sh", "certs/server.key", "a/.hidden/x.py",
+                    "Dockerfile.dev", "docker-compose.override.yml", "requirements-dev.txt", "build.gradle.kts", "PACKAGE.JSON"):
             j = FakeJudge(answers(0.9))
             gate.run(self.ev("Write", os.path.join(self.tmp, rel), content="x"), j)
             self.assertEqual(len(j.calls), 1, rel)
+
+    def test_combined_event_is_judged_when_any_listed_path_is_sensitive(self):
+        j = FakeJudge(answers(0.9))
+        ev = self.ev("Write", os.path.join(self.tmp, "src/a.py"), content="x")
+        ev["tool_input"]["paths"] = ["src/a.py", ".github/workflows/ci.yml"]
+        gate.run(ev, j)
+        self.assertEqual(len(j.calls), 1)
+        ev["tool_input"]["paths"] = ["src/a.py", "src/b.py"]
+        self.assertIsNone(gate.run(ev, j))
+        self.assertEqual(len(j.calls), 1)
 
     def test_outside_cwd_and_missing_cwd_are_judged(self):
         j = FakeJudge(answers(0.9))

@@ -15,11 +15,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
 import planfile
 
-try:
-    import prescreen
-except Exception:  # broken prescreen: every Bash command counts as a write while a task is active
-    prescreen = None
-
 TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"}
 
 
@@ -107,8 +102,11 @@ def _log_deny(root: str, path: str) -> None:
 
 
 def _shell_writes(cmd: str) -> bool:
+    """prescreen is imported here, not at module load: only Bash needs its regexes, and most events are file edits.
+    A broken or missing prescreen counts every command as a write while a task is active."""
     try:
-        return prescreen is None or prescreen.writes(cmd)
+        import prescreen
+        return prescreen.writes(cmd)
     except Exception:
         return True
 
@@ -144,6 +142,9 @@ def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return _bash(ti, str(cwd))
     target = ti.get("file_path") or ti.get("notebook_path")
     if not target:
+        if task_active(str(cwd)):  # fail closed: a file tool with no path cannot be checked against the scope
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                           "permissionDecisionReason": "scope lock: %s call has no file path" % tool}}
         return None
     path = os.path.realpath(os.path.join(cwd, str(target)))
     has_agent_id = "agent_id" in event

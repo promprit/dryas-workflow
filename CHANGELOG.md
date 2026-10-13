@@ -14,6 +14,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - **Uninstall** offers to remove the third-party plugins setup installed (Ruflo plugins, Impeccable, UI UX Pro Max) and the global `ruflo` npm package when no other account uses it; `--keep-extras` keeps them. Marketplaces are never removed; the commands are printed.
 - A missing Node.js now says only Ruflo needs it and suggests `--no-ruflo`.
 - `claude/bin/dryas-py` falls back to `python` when `python3` is absent (Windows Git Bash).
+- A Codex `apply_patch` touching several files reaches the Jev gate with every path, so a sensitive file in the patch is still judged. Build and packaging file names match case-insensitively and by prefix (`Dockerfile.dev`, `requirements-dev.txt`, `build.gradle.kts`). The log directory is made private on upgrade too, not only when created. A file tool call with no path is denied while a task is active.
 
 ### Changed
 

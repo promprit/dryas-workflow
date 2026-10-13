@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import scope_lock
@@ -107,16 +108,16 @@ class ScopeLockTest(unittest.TestCase):
         self.assertIsNone(scope_lock.run(self.bash("ls")))
 
     def test_bash_broken_prescreen_asks_for_every_command(self):
-        old = scope_lock.prescreen
-        scope_lock.prescreen = None
-        try:
+        with mock.patch.dict(sys.modules, {"prescreen": None}):  # import fails -> every command counts as a write
             self.assertEqual(self.decision(scope_lock.run(self.bash("ls"))), "ask")
-        finally:
-            scope_lock.prescreen = old
 
     def test_non_dict_tool_input_no_crash(self):
-        self.assertIsNone(scope_lock.run({"tool_name": "Write", "tool_input": ["x"], "cwd": self.wt}))
+        # a file tool with no path cannot be checked: denied while a task is active, ignored otherwise
+        out = scope_lock.run({"tool_name": "Write", "tool_input": ["x"], "cwd": self.wt})
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertIsNone(scope_lock.run({"tool_name": "Bash", "tool_input": "rm x", "cwd": self.wt}))
+        self.set_active([])
+        self.assertIsNone(scope_lock.run({"tool_name": "Write", "tool_input": {}, "cwd": self.wt}))
 
     def test_task_active(self):
         self.assertTrue(scope_lock.task_active(self.wt))

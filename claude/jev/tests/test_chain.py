@@ -158,7 +158,7 @@ class ChainTest(unittest.TestCase):
         with open(seen) as f:
             e = json.load(f)
         self.assertEqual(e["tool_name"], "Write")
-        self.assertEqual(e["tool_input"], {"file_path": "a.py", "content": patch})
+        self.assertEqual(e["tool_input"], {"file_path": "a.py", "content": patch, "paths": ["a.py", "b.py", "c.py"]})
         self.assertEqual(e["cwd"], self.tmp)
 
     def test_codex_strictest_decision_across_passes(self):
