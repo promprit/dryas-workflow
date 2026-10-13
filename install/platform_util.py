@@ -1,7 +1,7 @@
 """Cross-platform helpers for the installer: paths, tool lookup, directory links (symlink or Windows junction)."""
 import json
 import os
-import re
+import shlex
 import shutil
 import sys
 from pathlib import Path
@@ -40,12 +40,28 @@ def claude_global_config(cd, base=None) -> Path:
     return Path.home() / ".claude.json"
 
 
+def _is_managed(c: str, managed) -> bool:
+    if not (c.startswith("/") or c[1:3] == ":/"):  # "python3 /x/jev_mcp.py" is a command line, not a path
+        return False
+    n = os.path.normcase(c)
+    return n.endswith(os.path.normcase("/.claude/jev/jev_mcp.py")) or n in managed
+
+
+def _tokens(parts: List[str]) -> List[str]:
+    """Shell-style tokens of the command string, quotes removed; [] when it cannot be split."""
+    try:
+        toks = shlex.split(" ".join(parts), posix=not IS_WINDOWS)
+    except ValueError:
+        return []
+    return [t.strip("\"'") if IS_WINDOWS else t for t in toks]
+
+
 def stale_jev(cd, base=None) -> Optional[Tuple[str, Dict[str, str]]]:
     """(missing jev_mcp.py path, env for `claude mcp remove --scope user jev`) for a user-scope `jev` MCP server of the
     old copy install whose script is gone, else None. Installer-managed script = <a .claude dir>/jev/jev_mcp.py or
     <cd>/jev/jev_mcp.py. Looked up in cd's CLI config and, if that differs, in ~/.claude.json (where the old install
     registered it when CLAUDE_CONFIG_DIR was not exported); the env matches the config the entry was found in."""
-    managed = {fwd(cd) + "/jev/jev_mcp.py", fwd(_resolved(cd)) + "/jev/jev_mcp.py"}
+    managed = {os.path.normcase(fwd(x) + "/jev/jev_mcp.py") for x in (cd, _resolved(cd))}
     home_cfg = Path.home() / ".claude.json"
     places = [(claude_global_config(cd, base), claude_env(cd, base))]
     if places[0][0] != home_cfg:
@@ -57,12 +73,14 @@ def stale_jev(cd, base=None) -> Optional[Tuple[str, Dict[str, str]]]:
             parts = [fwd(srv.get("command", ""))] + [fwd(x) for x in srv.get("args") or []]
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             continue
-        # an argument is a path; a command given as one string ("python3 <path>") needs the path picked out of it
-        cands = [p.strip() for p in parts] + re.findall(r"\S*/jev/jev_mcp\.py(?=\s|$)", " ".join(parts))
-        cands = [c for c in cands if " " not in c]
-        for c in cands:
-            if (c.endswith("/.claude/jev/jev_mcp.py") or c in managed) and not os.path.exists(c):
-                return c, env
+        # each part is a whole path; a command given as one string ("python3 <path>") is split into tokens instead
+        parts = [p.strip() for p in parts]
+        for group in (parts, _tokens(parts)):
+            script = next((c for c in group if _is_managed(c, managed)), None)
+            if script is not None:
+                if not os.path.exists(script):
+                    return script, env
+                break
     return None
 
 
