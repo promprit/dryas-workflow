@@ -278,6 +278,21 @@ def _ruflo_files(repo: Path, root: Path, mapping: Dict[str, str], yes: bool) -> 
     return ruflo_runtime.install(repo, root, helpers, mapping.get("RUFLO_CLI_DIST", ""))
 
 
+def repair_stale_jev(cd: Path, env: Dict[str, str], dry: bool) -> None:
+    """Remove the user-scope `jev` MCP server of the old copy install once its jev_mcp.py is gone."""
+    path = pu.stale_jev(cd, env)
+    if not path:
+        return
+    argv = ["claude", "mcp", "remove", "--scope", "user", "jev"]
+    print("note: removing the jev MCP server left by the old copy install (%s no longer exists)" % path)
+    print("%s%s" % (env_prefix(cd), " ".join(argv)))
+    if dry:
+        return
+    rc = di.run(argv, env=env)
+    if rc != 0:
+        print("warning: `%s` failed (exit %d); remove the stale jev MCP server by hand" % (" ".join(argv), rc))
+
+
 def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: Optional[bool] = None, dry: bool = False) -> int:
     repo, cd, root = Path(repo).resolve(), norm(cd), data_root()
     try:
@@ -314,6 +329,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
             print("error: `%s` failed (exit %d); %s not changed" % (" ".join(shown[:4]), rc, cd))
             return rc
     if dry:
+        repair_stale_jev(cd, env, dry)
         return 0
     entry = plugin_entry(cd)
     # an earlier install whose dependency never resolved: re-installing dryas does not retry it, so install it here
@@ -333,6 +349,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     if errs:
         print("error: %s does not load in %s: %s; settings not changed" % (ID, cd, "; ".join(errs)))
         return 1
+    repair_stale_jev(cd, env, dry)
     rc = run_cmd.thirdparty([c for c in comps if c in ("ruflo", "design", "superpowers")], yes, cd, env)
     if rc:
         return rc
