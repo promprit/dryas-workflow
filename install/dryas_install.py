@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -23,7 +23,7 @@ from hookcheck import hook_problems  # noqa: E402
 from claude_md_block import START, END, claude_md, remove_claude_md  # noqa: E402,F401
 
 RECORD = ".dryas-installed.json"
-SKIP = {"settings.fragment.json", "CLAUDE.md.template"}
+SKIP = {"settings.fragment.json", "CLAUDE.md.template", "hooks/hooks.json", ".mcp.json", ".claude-plugin/plugin.json"}
 COMPONENT_DIRS = {"ruflo": ("ruflo/",), "pstack-picks": ("pstack/", "skills/interrogate/", "skills/benchmark-checklist/")}
 PY = pu.python_exe()
 PYX = [PY, "-X", "utf8"]
@@ -33,9 +33,9 @@ KEY_LINE = ("Jev needs OPENROUTER_API_KEY in your shell profile: export OPENROUT
             "(not stored by this installer)")
 
 
-def run(argv: List[str], cwd=None) -> int:
+def run(argv: List[str], cwd=None, env: Optional[dict] = None) -> int:
     try:
-        return subprocess.call(pu.resolve_argv(argv), cwd=cwd)
+        return subprocess.call(pu.resolve_argv(argv), cwd=cwd, env=env)
     except OSError:
         return 127
 
@@ -195,9 +195,12 @@ def _remove_stale_files(repo: Path, cd: Path, comps_all: List[str], rec: dict, d
 
 
 def _mapping(comps: List[str], home: Path, cd: Path) -> Dict[str, str]:
-    m = {"HOME": pu.fwd(home), "DRYAS_DATA_ROOT": pu.fwd(os.environ.get("DRYAS_DATA_ROOT", str(Path(home) / ".dryas"))),
+    m = {"HOME": pu.fwd(home),
+         "DRYAS_DATA_ROOT": pu.fwd(os.path.expanduser(os.environ.get("DRYAS_DATA_ROOT", str(Path(home) / ".dryas")))),
          "PY": PY, "CD": pu.fwd(cd),
          "PY_SAFE": pu.fwd(pu.space_free(sys.executable) or ""), "CD_SAFE": pu.fwd(pu.space_free(cd) or "")}
+    root, default = m["DRYAS_DATA_ROOT"], str(Path(home) / ".dryas")
+    m["DATA_RULE"] = "~/.dryas" if pu.same_path(root, default) else pu.read_rule_path(root)  # Read() rule: ~ or //abs
     if "ruflo" in comps:
         m.update(detect())
     return m
@@ -235,10 +238,12 @@ def _unique(p: Path) -> Path:
 
 def apply_settings(repo: Path, cd: Path, comps: List[str], rec: dict, home: Path, ts: str = "",
                    mapping: Optional[Dict[str, str]] = None, dry: bool = False, yes: bool = False,
-                   comps_all: Optional[List[str]] = None) -> bool:
+                   comps_all: Optional[List[str]] = None, post: Optional[Callable[[dict], dict]] = None) -> bool:
+    """post: applied to each rendered fragment (plugin setup adds the Windows native-path rules there)."""
     mapping = mapping if mapping is not None else _mapping(comps, home, cd)
-    frag = _fragment(repo, comps, mapping)
-    stale = upgrade.stale_settings(rec.get("settings", {}), _fragment(repo, comps_all or comps, mapping))
+    post = post or (lambda f: f)
+    frag = post(_fragment(repo, comps, mapping))
+    stale = upgrade.stale_settings(rec.get("settings", {}), post(_fragment(repo, comps_all or comps, mapping)))
     path = cd / "settings.json"
     orig = sm.load_settings(path)
     base = sm.unmerge(orig, stale) if upgrade.has_any(stale) else orig
@@ -322,7 +327,7 @@ def _ruflo_fallback(err: "ruflo_helpers.PatchError", mapping: Dict[str, str], ye
 
 
 def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = False, dry: bool = False,
-            yes: bool = False, claude: bool = True) -> int:
+            yes: bool = False) -> int:
     repo, cd, home, ts = Path(repo), Path(cd), Path(home), _ts()
     if sys.prefix != sys.base_prefix:
         print("warning: installing with a virtual-environment Python (%s); hooks will break if that environment is "
@@ -331,7 +336,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
     rec = load_record(cd)
     comps_all = sorted(set(rec.get("components", [])) | set(comps))
     mapping = _mapping(comps_all, home, cd)
-    _prevalidate(repo, comps, mapping, cd)  # unmapped placeholders or tokens abort here, before any write
+    _prevalidate(repo, comps, mapping, cd)  # unmapped placeholders abort here, before any write
     helpers = {}
     if "ruflo" in comps:
         if dry:
@@ -361,11 +366,11 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
                 print("would add: %s" % rel)
             for rel in rep["replace"]:
                 print("would replace: %s" % rel)
-            if claude and tpl.exists():
+            if tpl.exists():
                 print("would add or update the Dryas block in CLAUDE.md")
-        elif claude and tpl.exists():
+        elif tpl.exists():
             claude_md(cd, gate_blocks(tpl.read_text(encoding="utf-8"), comps_all), rec)
-        if not claude or apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes, comps_all=comps_all):
+        if apply_settings(repo, cd, comps, rec, home, ts, mapping, dry, yes=yes, comps_all=comps_all):
             _remove_stale_files(repo, cd, comps_all, rec, dry)
         if "ruflo" in comps:
             root = Path(mapping["DRYAS_DATA_ROOT"])
@@ -375,7 +380,7 @@ def install(repo: Path, cd: Path, comps: List[str], home: Path, force: bool = Fa
                 root.mkdir(parents=True)
                 rec["data_root_created"] = True
                 rec["data_root"] = str(root)
-        if claude and "jev" in comps:
+        if "jev" in comps:
             claude_mcp.ensure_jev(cd, PYX, rec, run, capture, dry)
         for rel in rep["skipped"]:
             print("kept your file: %s (use --force to replace, original is backed up)" % rel)
@@ -396,7 +401,9 @@ def mapping_for(comps: List[str], home: Path, cd: Path) -> Dict[str, str]:
 
 
 def ruflo_env(repo: Path, mapping: Dict[str, str]) -> Dict[str, str]:
-    return _fragment(repo, ["ruflo"], mapping).get("env", {})
+    env = dict(_fragment(repo, ["ruflo"], mapping).get("env", {}))
+    env.setdefault("DRYAS_DATA_ROOT", mapping["DRYAS_DATA_ROOT"])  # lives in core env now; Codex servers still need it
+    return env
 
 
 def _prune(d: Path) -> None:
@@ -442,7 +449,7 @@ def uninstall(cd: Path) -> int:
         elif root.exists():
             print("kept data root (not empty): %s" % root)
     if "jev" in rec.get("mcp", []):
-        run(["claude", "mcp", "remove", "--scope", "user", "jev"])
+        run(["claude", "mcp", "remove", "--scope", "user", "jev"], env=dict(os.environ, CLAUDE_CONFIG_DIR=str(cd)))
     (cd / RECORD).unlink()
     if rec.get("claude_dir_created") and cd.is_dir() and not cd.is_symlink() and not os.listdir(str(cd)):
         cd.rmdir()
@@ -455,6 +462,43 @@ def uninstall(cd: Path) -> int:
 SMOKE_PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 
 
+def scope_smoke(chain_py: Path, env_extra: Dict[str, str], harness: str = "claude") -> bool:
+    """Run `chain.py pretool` on an out-of-scope Write (Codex: an apply_patch adding a file) in a temp worktree;
+    True when it denies. Logs and chain.local.json point into that temp dir, so the user's own files are never touched."""
+    wt = Path(tempfile.mkdtemp())
+    try:
+        (wt / ".orchestrate").mkdir()
+        (wt / ".orchestrate" / "PLAN.md").write_text(SMOKE_PLAN, encoding="utf-8")
+        (wt / ".orchestrate" / "active.json").write_text(json.dumps({"active": ["1"]}), encoding="utf-8")
+        if harness == "codex":
+            patch = "*** Begin Patch\n*** Add File: src/other.ts\n+x\n*** End Patch\n"
+            event = {"tool_name": "apply_patch", "tool_input": {"command": patch}, "cwd": str(wt)}
+        else:
+            event = {"tool_name": "Write", "tool_input": {"file_path": str(wt / "src/other.ts"), "content": "x"},
+                     "cwd": str(wt)}
+        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
+        env.update(JEV_LOG_DIR=str(wt / "logs"), JEV_CHAIN_LOCAL=str(wt / "none.json"))
+        env.update(env_extra)
+        argv = PYX + [str(chain_py), "pretool"] + (["--harness", "codex"] if harness == "codex" else [])
+        rc, out = capture(argv, json.dumps(event), env)
+        try:
+            return json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        except (ValueError, KeyError, TypeError):
+            return False
+    finally:
+        shutil.rmtree(str(wt), ignore_errors=True)
+
+
+def jev_tests(tdir: Path) -> Tuple[str, str, str]:
+    """(status, name, detail) for the Jev test suite in tdir."""
+    if not tdir.is_dir():
+        return "SKIP", "Jev tests", "no jev/tests folder"
+    if run(PYX + ["-c", "import pytest"]) != 0:
+        return "SKIP", "Jev tests", "install pytest to run the Jev tests"
+    rc = run(PYX + ["-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(tdir), str(tdir)], cwd=str(tdir))
+    return "PASS" if rc == 0 else "FAIL", "Jev tests", ""
+
+
 def verify(cd: Path, comps: List[str]) -> int:
     cd, fails = Path(cd), 0
 
@@ -462,13 +506,7 @@ def verify(cd: Path, comps: List[str]) -> int:
         print("%s  %s%s" % (status, name, ("  (" + detail + ")") if detail else ""))
         return 1 if status == "FAIL" else 0
 
-    tdir = cd / "jev" / "tests"
-    if not tdir.is_dir():
-        fails += say("SKIP", "Jev tests", "no jev/tests folder")
-    elif run(PYX + ["-c", "import pytest"]) != 0:
-        fails += say("SKIP", "Jev tests", "install pytest to run the Jev tests")
-    else:
-        fails += say("PASS" if run(PYX + ["-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(tdir), str(tdir)], cwd=str(tdir)) == 0 else "FAIL", "Jev tests")
+    fails += say(*jev_tests(cd / "jev" / "tests"))
     if "jev" in comps:
         rc, out = capture(["claude", "mcp", "list"])
         fails += say("PASS" if "jev:" in out else "FAIL", "jev MCP server registered")
@@ -477,23 +515,8 @@ def verify(cd: Path, comps: List[str]) -> int:
         fails += say("FAIL" if probs else "PASS", "Ruflo helpers patched", "; ".join(probs))
     probs = hook_problems(load_record(cd).get("settings", {}).get("hooks", []))
     fails += say("FAIL" if probs else "PASS", "hook commands point at existing files", "; ".join(probs))
-    wt = Path(tempfile.mkdtemp())
-    try:
-        (wt / ".orchestrate").mkdir()
-        (wt / ".orchestrate" / "PLAN.md").write_text(SMOKE_PLAN, encoding="utf-8")
-        (wt / ".orchestrate" / "active.json").write_text(json.dumps({"active": ["1"]}), encoding="utf-8")
-        event = {"tool_name": "Write", "tool_input": {"file_path": str(wt / "src/other.ts"), "content": "x"}, "cwd": str(wt)}
-        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
-        env["HOME"] = str(cd.parent)
-        env["JEV_LOG_DIR"] = str(wt / "logs")
-        rc, out = capture(PYX + [str(cd / "jev" / "chain.py"), "pretool"], json.dumps(event), env)
-        try:
-            ok = json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
-        except (ValueError, KeyError, TypeError):
-            ok = False
-        fails += say("PASS" if ok else "FAIL", "scope lock blocks an out-of-scope write")
-    finally:
-        shutil.rmtree(str(wt), ignore_errors=True)
+    env = {"HOME": str(cd.parent)}
+    fails += say("PASS" if scope_smoke(cd / "jev" / "chain.py", env) else "FAIL", "scope lock blocks an out-of-scope write")
     print("verify: %d failed" % fails)
     return fails
 

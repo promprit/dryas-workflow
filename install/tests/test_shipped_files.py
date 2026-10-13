@@ -41,16 +41,16 @@ class ShippedFilesTest(unittest.TestCase):
     def test_ruflo_overrides(self):
         env = self.frag["ruflo"]["env"]
         self.assertEqual(env["RUFLO_HOOK_CLI_OVERRIDE"], "$PY_SAFE -X utf8 $CD_SAFE/ruflo/run.py cli")
-        self.assertEqual(env["RUFLO_MCP_CLI_OVERRIDE"], "$CD/ruflo/mcp-shim/bin/cli.js")
+        self.assertEqual(env["RUFLO_MCP_CLI_OVERRIDE"], "$DRYAS_DATA_ROOT/ruflo/mcp-shim/bin/cli.js")
 
     def test_md_files_use_tokens(self):
         for p in list((CLAUDE / "commands").glob("*.md")) + list((CLAUDE / "skills").rglob("*.md")):
             self.assertNotIn("/usr/bin/python3", p.read_text(encoding="utf-8"), p)
-        self.assertIn('"{{PY}}" -X utf8 "{{CD}}/jev/handoff.py" save --cwd "$PWD"',
+        self.assertIn('"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/handoff.py" save --cwd "$PWD"',
                       (CLAUDE / "commands" / "handoff.md").read_text(encoding="utf-8"))
 
     def test_shims_gone(self):
-        self.assertFalse((CLAUDE / "hooks").exists())
+        self.assertEqual(sorted(x.name for x in (CLAUDE / "hooks").iterdir()), ["hooks.json"])  # plugin hooks only, no shims
         self.assertFalse((CLAUDE / "jev" / "hooks").exists())
 
 

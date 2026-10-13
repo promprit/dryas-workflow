@@ -12,7 +12,7 @@ class PublicDocsTest(unittest.TestCase):
         t = read("docs/workflow.md")
         for s in ("on this Mac", "Canonical copy", "DryasWorkflow.md"):
             self.assertNotIn(s, t, s)
-        for s in ("~/.claude/docs/dryas-workflow.md", "claude/CLAUDE.md.template", "example layout"):
+        for s in ("~/.dryas/docs/dryas-workflow.md", "claude/CLAUDE.md.template", "example layout"):
             self.assertIn(s, t, s)
 
     def test_readme_use_it_yourself(self):

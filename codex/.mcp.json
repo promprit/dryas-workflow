@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "jev": {
+      "command": "python3",
+      "args": ["-X", "utf8", "jev/jev_mcp.py"],
+      "cwd": ".",
+      "env_vars": ["OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "DRYAS_DATA_ROOT"]
+    }
+  }
+}

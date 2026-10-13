@@ -29,6 +29,14 @@ def fixture_repo():
     os.chmod(r / "claude/ruflo/run.sh", 0o755)
     return r
 
+class ScopeSmokeTest(unittest.TestCase):
+    def test_scope_smoke_claude_write(self):
+        self.assertTrue(di.scope_smoke(REPO_INSTALL.parent / "claude" / "jev" / "chain.py", {}))
+
+    def test_scope_smoke_codex_apply_patch(self):
+        self.assertTrue(di.scope_smoke(REPO_INSTALL.parent / "codex" / "jev" / "chain.py", {}, harness="codex"))
+
+
 class InstallTest(unittest.TestCase):
     def setUp(self):
         self.repo = fixture_repo()
@@ -41,7 +49,7 @@ class InstallTest(unittest.TestCase):
         self.calls = []
         self.dist = Path(tempfile.mkdtemp()) / "cli-dist"
         self.dist.mkdir()
-        di.run = lambda argv, cwd=None: self.calls.append(argv) or 0
+        di.run = lambda argv, cwd=None, env=None: self.calls.append(argv) or 0
         di.detect = lambda: {"RUFLO_BIN": "/b/ruflo", "RUFLO_JS": "/b/ruflo.js", "RUFLO_NODE_FALLBACK": "/b/node", "RUFLO_NODE_MODULES": "/b/nm",
                              "RUFLO_CLI_DIST": str(self.dist)}
         di.confirm = lambda prompt: True
@@ -389,6 +397,29 @@ class InstallTest(unittest.TestCase):
         self.assertIn("warning: installing with a virtual-environment Python", buf.getvalue())
 
 
+class PluginRootRenderTest(unittest.TestCase):
+    """Copied markdown has ${CLAUDE_PLUGIN_ROOT} rendered to the copy dir. The Codex runtime-only copy (claude=False)
+    is gone: codex_plugin_setup.migrate_legacy removes it (test_codex_plugin_setup.MigrationTest)."""
+
+    def setUp(self):
+        InstallTest.setUp(self)
+        (self.repo / "claude/jev/notes.md").write_text("see ${CLAUDE_PLUGIN_ROOT}/jev/x.py\n")
+
+    def test_markdown_plugin_root_rendered_to_copy_dir(self):
+        self.assertEqual(di.install(self.repo, self.cd, ["core", "jev"], home=self.home, yes=True), 0)
+        self.assertEqual((self.cd / "jev/notes.md").read_text(), "see %s/jev/x.py\n" % di.pu.fwd(self.cd))
+
+    def test_render_substitutes_plugin_root(self):
+        f = self.repo / "claude/jev/notes.md"
+        self.assertEqual(di._rendered("jev/notes.md", f, ["core"], {"CD": "C:/Users/a/.claude"}),
+                         b"see C:/Users/a/.claude/jev/x.py\n")
+
+    def test_runtime_only_path_removed(self):
+        import inspect
+        self.assertNotIn("claude", inspect.signature(di.install).parameters)
+        self.assertFalse(hasattr(di, "RUNTIME"))
+
+
 class FallbackTest(unittest.TestCase):
     install = InstallTest.install
 
@@ -507,7 +538,7 @@ class FallbackTest(unittest.TestCase):
 
     def test_npm_failure_returns_1(self):
         rh.patched_helpers = self.fail_first
-        di.run = lambda argv, cwd=None: self.calls.append(argv) or 7
+        di.run = lambda argv, cwd=None, env=None: self.calls.append(argv) or 7
         rc, out = self.printed(yes=True)
         self.assertEqual(rc, 1)
         self.assertIn("npm install -g ruflo@%s failed (exit 7)" % self.tested, out)

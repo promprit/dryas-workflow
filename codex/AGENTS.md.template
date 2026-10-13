@@ -1,5 +1,5 @@
 # Dryas Workflow (Codex)
-Process rules for coding sessions on this machine. Full reference: `{{CD}}/docs/dryas-workflow.md`.
+Process rules for coding sessions on this machine. Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: `~/.dryas/docs/dryas-local.md`).
 
 ## Always
 - Brainstorm first: before new work, clarify intent and get the user's approval of a design (use Superpowers' brainstorming skill if it is installed).
@@ -7,14 +7,14 @@ Process rules for coding sessions on this machine. Full reference: `{{CD}}/docs/
 - One agent per worktree: never run two sessions in the same worktree. Parallel loops on one project each get their own worktree and branch.
 - Plans are files: `.orchestrate/PLAN.md` in the worktree, sections `## Task N:` with Goal, Scope (globs), Done and Failing test first. Never commit `.orchestrate/`.
 - Test first. Never claim a pass you did not see.
-- Review before merge: spec compliance first, then code quality (`$wreview`).
+- Review before merge: spec compliance first, then code quality (`$dryas:wreview`).
 - Commit only after review, as Conventional Commits; never push without asking.
 - Do what was asked, nothing more. Read a file before editing it. Never commit secrets or `.env` files.
 
 ## Skills
-`$orchestrate` (multi-step tasks), `$wplan` (write a plan), `$wreview` (two-stage review), `$commit` (Jev-gated commit), `$tune` (weekly Jev calibration).
+`$dryas:orchestrate` (multi-step tasks), `$dryas:wplan` (write a plan), `$dryas:wreview` (two-stage review), `$dryas:commit` (Jev-gated commit), `$dryas:tune` (weekly Jev calibration).
 <!-- pstack-picks -->
-`$interrogate` (gated two-model review), `$benchmark-checklist` (vet a measured performance number). Shared references: `{{CD}}/pstack/`.
+`$dryas:interrogate` (gated two-model review), `$dryas:benchmark-checklist` (vet a measured performance number). Shared references: `{{CD}}/pstack/`.
 <!-- /pstack-picks -->
 
 ## Jev and Ruflo (MCP servers `jev` and `ruflo`)

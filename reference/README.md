@@ -8,10 +8,11 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 
 | Path | What |
 | --- | --- |
-| `claude/` | Claude Code edition: rules template, commands, skills, `executor` agent, Jev and Ruflo hooks |
-| `codex/` | Codex edition: `AGENTS.md` template, skills, hooks fragment |
+| `claude/` | Claude Code edition, packaged as the plugin `dryas@dryas-workflow`: rules template, `hooks/hooks.json`, `.mcp.json`, commands, skills, `dryas:executor` agent, Jev and Ruflo hooks |
+| `codex/` | Codex edition, packaged as the Codex plugin `dryas@dryas-workflow` (marketplace `.agents/plugins/marketplace.json`): rules template (`AGENTS.md.template`), `hooks/hooks.json`, `.mcp.json`, skills; `codex/jev` and `codex/pstack` are generated from `claude/` by `tools/sync_codex_plugin.py` |
 | `claude/jev/` | Harness-agnostic Python shared by both editions: scope lock, gate, route, plan-file tools, handoff, logs |
-| `install/` | Installer for both editions (`--harness claude|codex|both`) |
+| `install/` | Installer for both editions (`--harness claude|codex|both`): plugin setup per Claude config dir and per Codex home (`CODEX_HOME`) |
+| `~/.dryas` | Shared state for every account (`$DRYAS_DATA_ROOT`): Jev logs, thresholds, handoffs, `chain.local.json`, `accounts.json`, Ruflo runtime |
 
 ## Bindings
 
@@ -21,13 +22,18 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | Memory | Session memory | `claude/jev/handoff.py`, `compact_keep.py`, `compact_restore.py` |
 | Governance | Judge and gate | [Jev](https://github.com/typesafe-ai/skills) via OpenRouter (`gate.py`, `route.py`, `jev_mcp.py`) |
 | Governance | Scope lock | `claude/jev/scope_lock.py` |
-| Governance | Hook order | `claude/jev/chain.py`, `chain.json` |
+| Governance | Hook order | `claude/jev/chain.py`, `chain.json`, local choices in `~/.dryas/chain.local.json` |
 | Execution | Process skills | [Superpowers](https://github.com/obra/superpowers) (brainstorming, worktrees, TDD, verification) |
 | Execution | Orchestrator | `/orchestrate` (`claude/skills/orchestrate/`) on Opus |
-| Execution | Executor | `claude/agents/executor.md` on Sonnet |
+| Execution | Executor | `claude/agents/executor.md` (`dryas:executor`) on Sonnet |
 | Execution | Design specialists | [Impeccable](https://github.com/pbakaus/impeccable), [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) |
-| Escalation | Ladder and log | Haiku → Sonnet → Opus → Fable, `mcp__jev__log_escalation` |
+| Escalation | Ladder and log | Haiku → Sonnet → Opus → Fable, `mcp__plugin_dryas_jev__log_escalation` |
 | Review | Review and gates | `/wreview`, `/interrogate`, pstack cleanup, `/benchmark-checklist`, `/commit` |
+| Harness | Rules binding | SessionStart hook `claude/jev/rules_inject.py` (injects `claude/CLAUDE.md.template`); Codex: the same hook with `--harness codex` (injects `codex/AGENTS.md.template`) |
+| Harness | Hooks binding | Plugin `claude/hooks/hooks.json`; Codex: plugin `codex/hooks/hooks.json`, trusted by setup after consent (or in `/hooks`) |
+| Harness | MCP binding | Plugin `claude/.mcp.json` (Jev MCP server); Codex: plugin `codex/.mcp.json`, plus setup's `config.toml` block for Ruflo and the `python3` fallback |
+| Harness | Skills binding | Plugin `claude/skills/` and `claude/commands/`; Codex: plugin `codex/skills/` (`$dryas:<name>`) |
+| Harness | State | `~/.dryas` (`$DRYAS_DATA_ROOT`), shared by every Claude config dir and Codex |
 
 ## Conformance
 
@@ -35,11 +41,11 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 
 | Rule | CC | CX | How |
 | --- | --- | --- | --- |
-| WF-1 | met | met | `/orchestrate` skill; `$orchestrate` in Codex |
+| WF-1 | met | met | `/orchestrate` skill; `$dryas:orchestrate` in Codex |
 | WF-2 | met | met | Brainstorm-first rule in the always-loaded rules; Superpowers brainstorming |
 | WF-3 | met | met | Superpowers brainstorming writes the design doc before orchestration |
 | WF-4 | met | met | Rules: single-file fix runs plainly; review still applies |
-| WF-5 | met | met | `claude/CLAUDE.md.template`, `codex/AGENTS.md.template`, rendered by the installer |
+| WF-5 | met | met | `claude/CLAUDE.md.template`, injected by the plugin's SessionStart hook; `codex/AGENTS.md.template`, injected by the Codex plugin's SessionStart hook |
 | MEM-1 | met | met | Ruflo is the only memory layer |
 | MEM-2 | met | met | Namespace = main repo folder name |
 | MEM-3 | met | met | Orchestrate skill: `memory_search` first, `memory_store` on return |
@@ -51,11 +57,11 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | GOV-3 | met | met | Rule in always-loaded rules |
 | GOV-4 | met | met | Rule in always-loaded rules; installer dry-runs and backs up |
 | GOV-5 | met | met | `/commit` never pushes |
-| GOV-6 | met | met | Jev MCP answers only; thresholds in `thresholds.json` |
+| GOV-6 | met | met | Jev MCP answers only; thresholds in `~/.dryas/jev/thresholds.json` |
 | GOV-7 | met | met | `gate.py` never allows; fails to no decision |
-| GOV-8 | met | met | `mcp__jev__log_override` |
+| GOV-8 | met | met | Jev MCP `log_override` (`mcp__plugin_dryas_jev__log_override` in Claude Code) |
 | GOV-9 | met | met | `/tune` proposes; human approves each change |
-| GOV-10 | met | met | Only `OPENROUTER_API_KEY`, from the environment; `redact.py` |
+| GOV-10 | met | met | Only the OpenRouter key, from `OPENROUTER_API_KEY` or the plugin option (Claude Code secure storage), never written by Dryas; `redact.py` |
 | GOV-11 | met | met | `chain.py` runs `chain.json` stages in order |
 | EXE-1 | met | met | Superpowers using-git-worktrees |
 | EXE-2 | met | met | `.orchestrate/PLAN.md`, globally git-ignored |
@@ -69,7 +75,7 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | ESC-2 | met | met | `thresholds.json` `escalation` |
 | ESC-3 | met | met | Orchestrate skill |
 | ESC-4 | met | met | pstack picks: systematic-debugging before each climb |
-| ESC-5 | met | met | `mcp__jev__log_escalation` |
+| ESC-5 | met | met | Jev MCP `log_escalation` (`mcp__plugin_dryas_jev__log_escalation` in Claude Code) |
 | ESC-6 | met | met | Orchestrate skill |
 | REV-1 | met | met | `/wreview` / `$wreview` |
 | REV-2 | met | met | Two-stage review |

@@ -7,7 +7,7 @@
 The method is the asset; the tools are replaceable. This repo holds both:
 
 - **The framework:** why it exists, five layers, one loop, and a draft specification any harness can implement.
-- **A reference implementation** for Claude Code and Codex, built on Superpowers, Ruflo, Jev and a few design skills.
+- **A reference implementation**: a Claude Code plugin (`dryas@dryas-workflow`) and a Codex plugin, built on Superpowers, Ruflo, Jev and a few design skills.
 
 This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
 
@@ -61,24 +61,59 @@ Brainstorm → Plan → Judge → Build → Escalate → Review → Ship
 ## How the reference implementation works
 
 - **Escalation ladder.** Haiku, then Sonnet, then Opus, then Fable. Each step is logged with a reason.
-- **Scope lock.** An executor can only edit the files its task names. A hook blocks other edits.
+- **Scope lock.** An executor can only edit the files its task names. A hook blocks edits to other files made with the file-edit tools; writes from shell commands are not covered.
 - **Parallel loops.** One project can run many loops at once. The rule is one agent per git worktree: each loop has its own worktree and branch, so loops never collide, and each merges only after its own review.
 - **Jev gating.** Jev is a small model that answers narrow, typed questions. It never writes code or plans. If it is unsure, the main model decides.
 - **Design rule.** UI work goes through Impeccable and UI UX Pro Max.
-- **One source for the rules.** The always-loaded rules in `~/.claude/CLAUDE.md` come from `claude/CLAUDE.md.template`, and the full reference from `docs/workflow.md`. Change them here and re-run the installer; every machine's copy then matches the repo.
+- **One source for the rules.** The always-loaded rules come from `claude/CLAUDE.md.template`; the Dryas plugin injects them at session start. The full reference comes from `docs/workflow.md`. Change them here and re-run the installer; every machine and account then matches the repo.
 
 ## Install
+
+Dryas is a Claude Code plugin, `dryas@dryas-workflow`, served from its own marketplace: this repo. It is a community plugin, not an Anthropic-official one and not in `claude-plugins-official`.
 
 ```
 git clone https://github.com/promprit/dryas-workflow
 cd dryas-workflow
-./install/install.sh      # macOS, Linux, WSL
-.\install\install.ps1     # Windows (PowerShell)
+install/install.sh                              # macOS, Linux, WSL
+install\install.ps1                             # Windows (PowerShell)
+install/install.sh --claude-dir ~/.claude-team  # once more for each other Claude account
 ```
 
-Works on macOS, Linux, WSL and Windows, with Claude Code and Codex (`--harness codex|both`).
+Run it once per Claude config dir (`--claude-dir`). It adds the marketplace, installs the plugin and its Superpowers dependency, and merges model, env and permission rules into that dir's `settings.json`. All accounts share one state folder, `~/.dryas`.
 
-Details, flags and troubleshooting: [docs/install.md](docs/install.md). Other agent harnesses: [docs/harnesses.md](docs/harnesses.md).
+Manual route, inside Claude Code:
+
+```
+/plugin marketplace add promprit/dryas-workflow
+/plugin install dryas@dryas-workflow
+```
+
+(Shell form: `claude plugin install dryas --marketplace promprit/dryas-workflow`.) This gives you the plugin only. Superpowers must also be installed from `claude-plugins-official`, and you still need setup for the settings, permissions and shared state in `~/.dryas`.
+
+`--uninstall` removes Dryas from one config dir and keeps `~/.dryas`; adding `--purge` on the last account also deletes the logs, `/tune` thresholds and handoffs there, but keeps your notes in `~/.dryas/docs/dryas-local.md`.
+
+### Codex
+
+```
+install/install.sh --harness codex                            # ~/.codex (--harness both: Codex and Claude Code)
+install/install.sh --harness codex --codex-dir ~/.codex-work  # once more for each other Codex home
+```
+
+Codex 0.162.1 or newer. Setup adds the plugin to that Codex home, then lists the Dryas hooks and asks before it trusts them (`--yes` answers yes); untrusted hooks do not run. Set `OPENROUTER_API_KEY` in the shell Codex runs in. Codex runs a copy of the plugin, so re-run setup for each Codex home after `git pull`. `codex plugin marketplace add promprit/dryas-workflow` on its own is not enough: the hooks stay untrusted and setup does not run. Details: [docs/install.md](docs/install.md#codex-plugin-plus-setup).
+
+Details, flags and troubleshooting: [docs/install.md](docs/install.md).
+
+## Works with
+
+| Harness | Status |
+| --- | --- |
+| Claude Code | Plugin `dryas@dryas-workflow` |
+| Codex | Plugin `dryas@dryas-workflow` (`install/install.sh --harness codex`) |
+| Pi, OpenCode, Roo, Cursor | Later |
+
+Several accounts side by side (for example in T3 Code) share one `~/.dryas`. Details: [docs/harnesses.md](docs/harnesses.md).
+
+Platforms: macOS, Linux, WSL and Windows.
 
 ## Use it for yourself
 
@@ -86,9 +121,9 @@ Fork this repo and make the workflow yours:
 
 1. Fork it and clone your fork.
 2. Edit `claude/CLAUDE.md.template` (the rules every session loads) and `docs/workflow.md` (the full reference). If your method differs, change the layer docs and `reference/dryas.yaml` too ([adoption guide](docs/adoption-guide.md)).
-3. Run `./install/install.sh` (or `.\install\install.ps1` on Windows). Every re-install brings your `~/.claude` back in step with your fork.
+3. Run `./install/install.sh` (or `.\install\install.ps1` on Windows). Every re-install brings each account back in step with your fork.
 
-Keep notes that only fit your machine in `~/.claude/docs/dryas-local.md`. The installer never touches that file.
+Keep notes that only fit your machine in `~/.dryas/docs/dryas-local.md`. The installer never touches that file.
 
 ## Reference stack
 
@@ -99,7 +134,7 @@ These are the reference implementation's bindings, not part of the method; each 
 | [Claude Code](https://docs.claude.com/en/docs/claude-code) | The host: agents, hooks, commands | required |
 | [Jev (TypeSafe)](https://github.com/typesafe-ai/skills) | Decision support and gates | `--no-jev` |
 | [Ruflo](https://github.com/ruvnet/ruflo) | Orchestration and memory | `--no-ruflo` |
-| [Superpowers](https://github.com/obra/superpowers) | Process skills (brainstorming, worktrees, review) | `--no-superpowers` |
+| [Superpowers](https://github.com/obra/superpowers) | Process skills (brainstorming, worktrees, review) | required by the plugin (`--no-superpowers` drops only its deny rules) |
 | [Impeccable](https://github.com/pbakaus/impeccable) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Design skills | `--no-design` |
 | [pstack](https://github.com/michael-denyer/pstack-claude) picks | Interrogate review, cleanup, benchmark checklist, executor principles (vendored, adapted) | `--no-pstack-picks` |
 
@@ -107,8 +142,8 @@ Optional, installed separately: [FlowObserve](https://github.com/promprit/flowob
 
 ## Requirements
 
-- A Claude subscription with Claude Code, or the Codex CLI.
-- An OpenRouter API key for Jev. Without it Jev makes no decisions and everything else still works.
+- A Claude subscription with Claude Code, or the Codex CLI (0.162.1 or newer).
+- An OpenRouter API key for Jev. Jev is bring-your-own-key: set `OPENROUTER_API_KEY` in your shell, or pass `--openrouter-key` to setup (stored in Claude Code's secure storage; Codex reads the key from the shell only). Without a key, Jev checks are skipped and the workflow still runs.
 - macOS, Linux, WSL or Windows.
 - Python 3.9+, Node and npm (for Ruflo), git.
 

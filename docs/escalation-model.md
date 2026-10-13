@@ -42,4 +42,4 @@ Tiers are abstract; the reference implementation binds them to Haiku, Sonnet, Op
 
 ## Reference binding
 
-Executors start on Haiku (the orchestrate skill passes model: haiku; claude/agents/executor.md stays Sonnet for review dispatches); the orchestrate skill re-runs on Sonnet, Opus and then Fable; `mcp__jev__log_escalation` records each step; thresholds are in `thresholds.json` (`escalation` key). In Codex, the same ladder runs on Codex's own cheaper and stronger models. Details: [workflow.md §3](workflow.md), [harnesses.md](harnesses.md).
+Executors start on Haiku (the orchestrate skill passes model: haiku; claude/agents/executor.md (`dryas:executor`) stays Sonnet for review dispatches); the orchestrate skill re-runs on Sonnet, Opus and then Fable; the Jev MCP tool `log_escalation` (`mcp__plugin_dryas_jev__log_escalation` in Claude Code) records each step; thresholds are in `thresholds.json` (`escalation` key). In Codex, the same ladder runs on Codex's own cheaper and stronger models. Details: [workflow.md §3](workflow.md), [harnesses.md](harnesses.md).

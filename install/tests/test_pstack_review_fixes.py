@@ -28,7 +28,7 @@ class ReviewFixesTest(unittest.TestCase):
 
     def test_codex_orchestrate_parity(self):
         t = on("codex/skills/orchestrate/SKILL.md")
-        for s in ("none (cleanup)", "none (review)", "skip the test-first step", "{{CD}}/pstack/benchmark-checklist.md",
+        for s in ("none (cleanup)", "none (review)", "skip the test-first step", "<dryas-root>/pstack/benchmark-checklist.md",
                   "marked the change contested", "include the four principle lines", "at most once per model"):
             self.assertIn(s, t, s)
 

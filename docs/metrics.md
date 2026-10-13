@@ -5,7 +5,7 @@
 ## How to read this
 
 - **Status.** A **live** metric has a log today and is reported by `/tune` (or by `/cost` for Claude-side spend). A **partial** metric has part of its data logged and the rest planned or checked by hand. **Manual** means a person reads the number (for example from `/cost`); no tool computes it. A **planned** metric is defined here but needs a log record that does not exist yet. [Logging records](#logging-records) lists what writes each log.
-- **Source.** Logs are JSON Lines in `~/.claude/jev/logs/<name>.jsonl` (override with `JEV_LOG_DIR`). The source column names the file.
+- **Source.** Logs are JSON Lines in `~/.dryas/jev/logs/<name>.jsonl`, shared by every account (override with `JEV_LOG_DIR`). The source column names the file.
 - **Healthy range.** Starting values, calibrated by `/tune`. Where `/tune` already has a threshold, the range uses it.
 - **Cadence.** Weekly means the `/tune` run. Per task means the orchestrator checks it before merging.
 - **Out of range.** A metric outside its range is a prompt to look, not an automatic change. `/tune` proposes threshold changes; a human approves each one ([governance.md](governance.md)).

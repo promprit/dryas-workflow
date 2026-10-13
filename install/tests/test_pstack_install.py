@@ -4,7 +4,6 @@ from contextlib import redirect_stdout
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-import codex_target as ct
 import dryas_install as di
 import render
 import run_cmd
@@ -58,7 +57,7 @@ class _InstallBase(object):
         self.cd.mkdir()
         os.environ.pop("DRYAS_DATA_ROOT", None)
         self.saved = (di.run, di.confirm, di.capture)
-        di.run, di.confirm, di.capture = (lambda argv, cwd=None: 0), (lambda p: True), (lambda argv, *a, **k: (1, ""))
+        di.run, di.confirm, di.capture = (lambda argv, cwd=None, env=None: 0), (lambda p: True), (lambda argv, *a, **k: (1, ""))
 
     def tearDown(self):
         di.run, di.confirm, di.capture = self.saved
@@ -106,48 +105,44 @@ class InstallGatingTest(_InstallBase, unittest.TestCase):
 
 
 class CodexGatingTest(unittest.TestCase):
+    """The plugin always ships the pstack skills; the rules hook gates the AGENTS.md pstack text from chain.local.json."""
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
-        self.repo = self.tmp / "repo"
-        shutil.copytree(str(REPO / "codex"), str(self.repo / "codex"))
-        for n in ct.PSTACK_SKILLS:
-            p = self.repo / "codex" / "skills" / n / "SKILL.md"
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text("---\nname: %s\ndescription: d\n---\n" % n, encoding="utf-8")
-        t = self.repo / "codex" / "AGENTS.md.template"
+        self.root = self.tmp / "codex"
+        shutil.copytree(str(REPO / "codex"), str(self.root), ignore=shutil.ignore_patterns("__pycache__"))
+        t = self.root / "AGENTS.md.template"
         t.write_text(t.read_text(encoding="utf-8") + "<!-- pstack-picks -->\nPSTACKLINE\n<!-- /pstack-picks -->\n",
                      encoding="utf-8")
-        self.home = self.tmp / "home"
-        self.cdx = self.home / ".codex"
-        cd = (self.home / ".claude").as_posix()
-        self.mapping = {"PY": "/p", "CD": cd, "PY_SAFE": "/p", "CD_SAFE": cd, "HOME": self.home.as_posix(),
-                        "DRYAS_DATA_ROOT": "/d"}
 
     def tearDown(self):
         shutil.rmtree(str(self.tmp), ignore_errors=True)
 
-    def install(self, comps):
-        with redirect_stdout(io.StringIO()):
-            return ct.install_codex(self.repo, self.cdx, self.home, comps, self.mapping, {}, lambda argv: 0)
+    def rules(self, off):
+        import json, os, subprocess
+        local = self.tmp / "chain.local.json"
+        local.write_text(json.dumps({"off": off}), encoding="utf-8")
+        env = dict(os.environ, JEV_CHAIN_LOCAL=str(local), PLUGIN_ROOT=str(self.root), CLAUDE_PLUGIN_ROOT=str(self.root))
+        p = subprocess.run([sys.executable, "-X", "utf8", str(self.root / "jev" / "rules_inject.py"), "--harness", "codex"],
+                           input="{}", capture_output=True, text=True, encoding="utf-8", env=env, timeout=60)
+        return json.loads(p.stdout)["hookSpecificOutput"]["additionalContext"]
 
     def test_codex_skills_gated(self):
-        self.assertEqual(self.install(["core"]), 0)
-        self.assertFalse((ct.skills_dir(self.home) / "interrogate").exists())
-        self.assertNotIn("PSTACKLINE", (self.cdx / "AGENTS.md").read_text(encoding="utf-8"))
+        self.assertNotIn("PSTACKLINE", self.rules(["pstack-picks"]))
+        for n in ("interrogate", "benchmark-checklist"):  # shipped, and they stop themselves when pstack is off
+            self.assertIn("pstack-picks is not installed",
+                          (self.root / "skills" / n / "SKILL.md").read_text(encoding="utf-8"))
 
     def test_codex_skills_on(self):
-        self.assertEqual(self.install(["core", "pstack-picks"]), 0)
-        for n in ct.PSTACK_SKILLS:
-            self.assertTrue((ct.skills_dir(self.home) / n / "SKILL.md").is_file(), n)
-        agents = (self.cdx / "AGENTS.md").read_text(encoding="utf-8")
+        for n in ("interrogate", "benchmark-checklist"):
+            self.assertTrue((self.root / "skills" / n / "SKILL.md").is_file(), n)
+        agents = self.rules([])
         self.assertIn("PSTACKLINE", agents)
         self.assertNotIn("<!-- pstack-picks", agents)
 
-    def test_codex_reinstall_without_keeps_text(self):
-        self.install(["core", "pstack-picks"])
-        self.install(["core"])
-        self.assertIn("PSTACKLINE", (self.cdx / "AGENTS.md").read_text(encoding="utf-8"))
-        self.assertTrue((ct.skills_dir(self.home) / "interrogate").exists())
+    def test_codex_turned_off_drops_text(self):
+        self.assertIn("PSTACKLINE", self.rules([]))
+        self.assertNotIn("PSTACKLINE", self.rules(["pstack-picks"]))  # chain.local.json is the one switch
 
 
 class ChainKeepTest(_InstallBase, unittest.TestCase):

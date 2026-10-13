@@ -2,7 +2,7 @@
 
 This is the operational reference for the Dryas reference implementation (the method itself is in `architecture.md` and the spec in the repo): what each layer does, the order things run in, where files live, and the rules. Claude reads it before doing multi-step work, and when asked "how does our workflow work".
 
-- **Source of truth:** this file in the dryas-workflow repo. The installer copies it to `~/.claude/docs/dryas-workflow.md`; the always-loaded rules come from `claude/CLAUDE.md.template`. Change both in the repo (or your fork) and re-run the installer. Machine-specific notes can go in `~/.claude/docs/dryas-local.md`, which the installer never touches.
+- **Source of truth:** this file in the dryas-workflow repo. The installer copies it to `~/.dryas/docs/dryas-workflow.md`; the always-loaded rules come from `claude/CLAUDE.md.template`. Change both in the repo (or your fork) and re-run the installer. Machine-specific notes can go in `~/.dryas/docs/dryas-local.md`, which the installer never touches.
 
 Last updated: 2026-10-05.
 
@@ -14,17 +14,17 @@ Last updated: 2026-10-05.
   - Never set or use `ANTHROPIC_API_KEY`.
   - Executors spawn through Claude Code's own Agent/Task tool, never through Ruflo's provider layer.
 - **The only API key is `OPENROUTER_API_KEY`, and only Jev uses it.**
-  - It lives only in the shell environment (your shell profile, for example `~/.zshrc`). Never write it to any file, config, log or test.
+  - It lives only in the shell environment (your shell profile, for example `~/.zshrc`) or in the plugin option `openrouter_key`, which Claude Code keeps in its secure storage. Never write it to any file, config, log or test.
   - Claude Code passes the environment on to hooks and MCP servers, so never use `claude mcp add -e` with the key.
-- **User scope only.** Shared skills, agents, commands, hooks and MCP servers live in `~/.claude`. Nothing shared is copied into projects.
-- **Ask you before any install, move, delete or overwrite.** That includes any change to `~/.claude/settings.json` or `~/.zshrc`. Show a dry-run or diff first.
+- **User scope only.** Shared skills, agents, commands, hooks and MCP servers come from the `dryas` plugin, installed at user scope in each Claude config dir; shared state lives in `~/.dryas`. Nothing shared is copied into projects.
+- **Ask you before any install, move, delete or overwrite.** That includes any change to a Claude config dir's `settings.json` or `~/.zshrc`. Show a dry-run or diff first.
   - Settings edits go through `Dev/_tools/settings_merge.py`: dry-run by default, `--apply` makes a backup first.
 - Never use `--dangerously-skip-permissions`.
 - **`CLAUDE.md` files:**
   - Merge into `Dev/CLAUDE.md`; never overwrite it.
-  - `~/.claude/CLAUDE.md` only gets appended sections (model policy and the pointer to this file).
+  - Dryas does not write `~/.claude/CLAUDE.md`; it is yours.
   - Never touch a project's `CLAUDE.md`.
-  - The always-loaded workflow rules come from the repo's `claude/CLAUDE.md.template`; the installer writes them into a marked block of `~/.claude/CLAUDE.md`. Change them in the repo and re-install.
+  - The always-loaded workflow rules come from the repo's `claude/CLAUDE.md.template`; the plugin's SessionStart hook (`rules_inject.py`) injects them into every session. Change them in the repo and re-run setup.
 
 ## 2. The layers
 
@@ -39,8 +39,8 @@ Last updated: 2026-10-05.
 
 ## 3. Model policy and escalation ladder
 
-- **The orchestrator is Opus, always.** `"model": "opus"` is set in `~/.claude/settings.json`.
-- **Executors start on Haiku by default.** `/orchestrate` passes `model: haiku`; `~/.claude/agents/executor.md` stays `model: sonnet`, so review dispatches never run on Haiku. Kill switch: `dispatch.haiku_default` (false = every task starts on Sonnet, as before).
+- **The orchestrator is Opus, always.** `"model": "opus"` is set in each config dir's `settings.json` by setup.
+- **Executors start on Haiku by default.** `/orchestrate` passes `model: haiku`; the `dryas:executor` agent (`claude/agents/executor.md`) stays `model: sonnet`, so review dispatches never run on Haiku. Kill switch: `dispatch.haiku_default` (false = every task starts on Sonnet, as before).
 - **The ladder is Haiku → Sonnet → Opus → Fable.**
   1. A Haiku executor that fails done-criteria `haiku_failures_before_sonnet` times (default once), or reports confidence below 0.5, is re-run on **Sonnet**.
   2. A Sonnet executor that fails done-criteria twice, or reports confidence below 0.5, is re-run on **Opus**.
@@ -89,9 +89,9 @@ Last updated: 2026-10-05.
 6. **TDD gate.** If no failing test exists, a **tester** executor goes first, and the coder runs only after that test fails for the right reason.
 7. **Dispatch.**
    - Write `.orchestrate/active.json`, which arms the scope lock.
-   - Each executor receives **only its own section** (`"<python>" -X utf8 "~/.claude/jev/planfile.py" section .orchestrate/PLAN.md <N>`, where `<python>` is the interpreter the installer recorded; the allow rule is rendered with the same absolute paths) plus the worktree path, never the whole plan.
+   - Each executor receives **only its own section** (`"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>`; Claude Code substitutes the plugin path, and setup renders the allow rule with the same absolute paths) plus the worktree path, never the whole plan.
    - Independent tasks run in parallel through Ruflo's hierarchical swarm. Agents spawn via Claude Code's Agent tool, so they run on the subscription.
-   - Executors follow four principles (fix root causes, prove it works, test behavior, subtract before you add), full text in ~/.claude/pstack/principles/.
+   - Executors follow four principles (fix root causes, prove it works, test behavior, subtract before you add), full text in the plugin's `pstack/principles/`.
 8. **On return.** Jev checks `done` (done-criteria met?) and `risk` (routine / worth a look / incident).
    - Only incidents, failures and escalations reach Opus in full; everything else becomes one summary line.
    - The outcome is stored in Ruflo memory.
@@ -106,7 +106,7 @@ Last updated: 2026-10-05.
 
 ## 5. Hooks and their order
 
-Claude Code runs all matching hooks in parallel, so the order of our stages comes from one **chain script per event**. Each event's hook runs `~/.claude/jev/chain.py` (`pretool` or `prompt`) directly with the Python the installer was started with. `chain.py` runs the stages listed in `~/.claude/jev/chain.json` in sequence.
+Claude Code runs all matching hooks in parallel, so the order of our stages comes from one **chain script per event**. Each event's hook in the plugin's `hooks/hooks.json` runs `${CLAUDE_PLUGIN_ROOT}/jev/chain.py` (`pretool` or `prompt`) with `$DRYAS_PY`, else `python3`. `chain.py` runs the stages listed in the plugin's `jev/chain.json` in sequence, with your choices from `~/.dryas/chain.local.json` applied (which optional stages are on).
 
 **PreToolUse** (matcher `*`, 20 s):
 1. **Scope lock** (`scope_lock.py`). A pure path check with no model call.
@@ -145,11 +145,11 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
 ## 6. Jev details
 
-- **Code** lives in `~/.claude/jev/` (a local git repo on the Mac). Python 3.9 stdlib only; tests run with `cd ~/.claude/jev && python -m unittest discover -s tests`.
+- **Code** lives in the repo's `claude/jev/` and ships in the plugin. Python 3.9 stdlib only; tests run with `python -m pytest -q claude/jev/tests`.
   - `jev_client.py`: `POST https://openrouter.ai/api/v1/systemone`, model `typesafe/jev-1.13`, timeout 3 s. It redacts the state first.
   - `redact.py`: removes keys and tokens, `NAME=secret`, bearer/authorization headers, PEM blocks, URL passwords and `--token` flags.
   - `gate.py`, `route.py`, `scope_lock.py`, `planfile.py`, `chain.py`, `jevlog.py`, `compact_keep.py`, `compact_restore.py`, `transcript_items.py`, `handoff.py`, `handoff_paths.py`, `handoff_restore.py`, `context_watch.py`, `tune.py`.
-- **MCP server `jev`**, registered at user scope with `permissions.allow mcp__jev`:
+- **MCP server `jev`**, shipped by the plugin (`.mcp.json`); its tools are `mcp__plugin_dryas_jev__<tool>`, allowed in `permissions.allow`:
   - `jev_judge(state, questions)` returns answers plus an `escalate` list.
   - `log_escalation(task, reason, decided_by, from_model, to_model)`.
   - `log_override(question, jev_answer, jev_confidence, opus_decision, reason)`.
@@ -159,8 +159,8 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   - every choice includes a `none_of_these` option
   - independent questions batched into one call
 - Noul (yes/no) answers carry no confidence, so ours is computed as `max(p, 1-p)`.
-- The Jev MCP server normalizes question shapes and returns safe error causes. The permission allow-list now includes the 3 Ruflo memory/swarm tools (`memory_search`, `memory_store`, `swarm_init`), `Read(~/.claude/jev/**)` and the planfile command.
-- **Thresholds** live only in `~/.claude/jev/thresholds.json` (defaults in `thresholds.py`):
+- The Jev MCP server normalizes question shapes and returns safe error causes. The permission allow-list now includes the 3 Ruflo memory/swarm tools (`memory_search`, `memory_store`, `swarm_init`), `Read(~/.dryas/**)` and the planfile command.
+- **Thresholds** live only in `~/.dryas/jev/thresholds.json` (defaults in `thresholds.py`):
 
   | Area | Setting |
   |---|---|
@@ -174,12 +174,12 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   | context | warn_pct 0.65 |
   | interrogate | min_confidence 0.7 |
 
-- **Logs** go to `~/.claude/jev/logs/*.jsonl` (gate, route, mcp, calls, escalations, overrides, compact, compare). They hold decisions and confidences only, never payloads; a Bash call logs just the first word of the command.
+- **Logs** go to `~/.dryas/jev/logs/*.jsonl` (gate, route, mcp, calls, escalations, overrides, compact, compare). They hold decisions and confidences only, never payloads; a Bash call logs just the first word of the command.
 - **Compaction.**
   - `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75` starts auto-compaction at about 75%.
   - **Context warning** (`context_watch.py`, prompt chain stage): at 65% and again at 70% Claude tells you to run `/handoff` then `/clear`. Window = `JEV_CONTEXT_WINDOW`, else 1M if the model id contains `[1m]`, names a 1M-default model (Fable, Mythos, or Opus/Sonnet 4.6 and later, e.g. `claude-opus-5-5`; version read as 1-2 digits so dates never count), or usage went past 200k; else 200k (Haiku 4.5, Opus/Sonnet 4.5 and older, 3.x, unknown ids). Same rule as FlowObserve's `millionModel()`/`windowFor()` (`server/src/transcript.ts`); change both together. Tiers reset after a compaction.
-  - **Manual (preferred, no lossy summary): `/handoff` then `/clear`.** `handoff.py` reads the whole transcript (deduped by uuid) into items: real user messages, Claude replies, subagent hand-backs, and one line per tool call with a trimmed result. Always kept without Jev: last 10 user messages, files touched, latest result per test command, commits. Jev scores the newest 200 other items keep/drop (40 per call, 60 s deadline). Saved redacted to `~/.claude/jev/handoff/<project>-<hash>.md` (0600, keyed by the main repo root so worktrees match, pruned after 24 h). `/clear` fires `SessionStart(clear)` -> `handoff_restore.py` injects it (only if under 30 min old and same project) and deletes it.
-  - **Automatic (safety net):** at 75% Claude Code compacts and writes its own summary (kept short by the `~/.claude/CLAUDE.md` compact instructions). `PreCompact` runs the same handoff engine (`compact_keep.py`, 20 s deadline, hook timeout 30 s) and `SessionStart(compact)` re-injects the scored items word for word.
+  - **Manual (preferred, no lossy summary): `/handoff` then `/clear`.** `handoff.py` reads the whole transcript (deduped by uuid) into items: real user messages, Claude replies, subagent hand-backs, and one line per tool call with a trimmed result. Always kept without Jev: last 10 user messages, files touched, latest result per test command, commits. Jev scores the newest 200 other items keep/drop (40 per call, 60 s deadline). Saved redacted to `~/.dryas/jev/handoff/<project>-<hash>.md` (0600, keyed by the main repo root so worktrees match, pruned after 24 h). `/clear` fires `SessionStart(clear)` -> `handoff_restore.py` injects it (only if under 30 min old and same project) and deletes it.
+  - **Automatic (safety net):** at 75% Claude Code compacts and writes its own summary (kept short by the compact instructions in the injected rules). `PreCompact` runs the same handoff engine (`compact_keep.py`, 20 s deadline, hook timeout 30 s) and `SessionStart(compact)` re-injects the scored items word for word.
   - If Jev is down or the deadline passes, the newest 30 unscored items are kept instead, and the file says so.
   - This is our own code; **jev-use is not used** (it's unofficial).
 - **`/tune`** (weekly) reports:
@@ -200,7 +200,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - **Topology:** hierarchical, passed in `swarm_init` arguments (the plugin MCP defaults to hierarchical-mesh, so the orchestrator always passes it).
 - **MCP launch:** the Ruflo MCP runs through the `RUFLO_MCP_CLI_OVERRIDE` shim, with cwd `Dev/_caches/ruflo/<main repo name>`. `RUFLO_DAEMON_AUTOSTART=0`. The memory namespace is the main repo folder name.
 - **Memory MCP tools** (from the ruflo-core plugin, named `mcp__plugin_ruflo-core_ruflo__<tool>`): `memory_search`, `memory_store` and `swarm_init`. The namespace is the main repo folder name.
-- **Memory and data** go to `$DRYAS_DATA_ROOT/ruflo` (SSD), per project. Every lifted Ruflo hook is wrapped by `~/.claude/ruflo/run.py`, so it's a silent no-op when the SSD or a helper is missing.
+- **Memory and data** go to `$DRYAS_DATA_ROOT/ruflo` (SSD), per project. Every lifted Ruflo hook is wrapped by the plugin's `ruflo/run.py` (helpers and the MCP shim live in `~/.dryas/ruflo`), so it's a silent no-op when the SSD or a helper is missing.
 - **Hooks:**
   - **Lifted by us:** pre-bash (an observe-only chain stage), session-restore, auto-memory import (import only, no Stop sync), helper post-edit, helper session-end on SessionEnd and on PreCompact (manual and auto), and SubagentStop post-task.
   - **ruflo-core's own plugin hooks also run** (modify-bash, modify-file, post-command, post-edit, PreCompact guidance and Stop session-end), through the CLI override. pre-edit and post-bash had no handler when checked against Ruflo 3.51.0 (not re-checked on later versions).
@@ -221,11 +221,11 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - **Denied** in `permissions.deny`: subagent-driven-development, executing-plans, dispatching-parallel-agents, finishing-a-development-branch and diagnosing-superpowers. The orchestrate skill replaces the planning and orchestration ones. you can still type them by hand.
 - **Allowed: writing-skills** (un-denied 2026-10-02 at your request). Use it to create new user-scope skills in `~/.claude/skills/`.
 
-## 9. Commands, skills, agents (all in `~/.claude`)
+## 9. Commands, skills, agents (in the `dryas` plugin)
 
 | Name | What |
 |---|---|
-| `/orchestrate <task>` | The full flow in §4 (skill `~/.claude/skills/orchestrate/SKILL.md`) |
+| `/orchestrate <task>` | The full flow in §4 (skill `claude/skills/orchestrate/SKILL.md`) |
 | `/wplan` | Write a plan in writing-plans format (`/plan` is a Claude Code built-in) |
 | `/wreview` | Two-stage review (`/review` is a Claude Code built-in) |
 | `/commit` | Conventional commit, gated by Jev "safe to commit?", never pushes |
@@ -233,7 +233,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 | `/handoff` | Jev-scored context reset: saves kept items, then you type `/clear` (§6) |
 | `/interrogate` | Two-model adversarial review with a lead verdict; gated step of /orchestrate or on request |
 | `/benchmark-checklist` | Vet a measured perf number before reporting it |
-| agent `executor` | Sonnet, tools Read/Edit/Write/Bash, one task section, locked scope. Ends with CHANGED / TESTS / DONE-CRITERIA / CONFIDENCE / UNRESOLVED |
+| agent `dryas:executor` | Sonnet, tools Read/Edit/Write/Bash, one task section, locked scope. Ends with CHANGED / TESTS / DONE-CRITERIA / CONFIDENCE / UNRESOLVED |
 | skills `stack-nextjs-ts`, `stack-supabase-postgres`, `stack-swift-ios`, `stack-python` | Conventions, test commands and pitfalls, scanned from the real projects |
 | plugin `typesafe@typesafe-ai` | Official Jev/TypeSafe docs skill |
 | skills `impeccable`, `ui-ux-pro-max` | Design pair, required for any task that involves design (§4 step 1) |
@@ -241,12 +241,13 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
 ## 10. Where things live
 
-This is the maintainer's example layout (a Mac plus a dev SSD at `$DEV_ROOT`); only `~/.claude` is required, the rest is optional.
+This is the maintainer's example layout (a Mac plus a dev SSD at `$DEV_ROOT`); only `~/.claude` and `~/.dryas` are required, the rest is optional.
 
 | Mac (`~`) | SSD (`$DEV_ROOT`) |
 |---|---|
-| `~/.claude/` (settings, skills, agents, commands, hooks, jev code and logs, ruflo helpers, plugins, Claude memory per project) | `projects/<name>` |
-| `~/.claude/docs/dryas-workflow.md` (this file, installed) | `CLAUDE.md` (workspace rules, inherited by every project) |
+| `~/.claude/` (settings, plugins including `dryas`, Claude memory per project); one such dir per account | `projects/<name>` |
+| `~/.dryas/` (Jev logs, thresholds, handoffs, `chain.local.json`, `accounts.json`, Ruflo helpers and MCP shim) | |
+| `~/.dryas/docs/dryas-workflow.md` (this file, installed) | `CLAUDE.md` (workspace rules, inherited by every project) |
 | `ruflo` CLI (nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, **Ruflo memory**) |
 | `~/.zshrc` (`OPENROUTER_API_KEY`, guarded cache block, `dev` alias) | `_tools/` (settings_merge.py, relink_claude.py) |
 | `~/.claude/release/` (private export pipeline, never published) | `projects/dryas-workflow` (public repo clone; installer `install/install.sh` generates Ruflo helpers with `ruflo init` + pinned patches) |
@@ -255,7 +256,7 @@ This is the maintainer's example layout (a Mac plus a dev SSD at `$DEV_ROOT`); o
 
 **If the SSD is unplugged:**
 - **Breaks:** projects, `Dev/CLAUDE.md`, Ruflo memory, caches and the FlowObserve server.
-- **Keeps working:** Claude Code, everything in `~/.claude`, and Jev's code and logs.
+- **Keeps working:** Claude Code, everything in `~/.claude` and `~/.dryas`, and Jev's code and logs.
 - Ruflo hooks become silent no-ops, and the Jev gate makes no decision.
 
 ## 11. Orca

@@ -4,7 +4,6 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
-import codex_target as ct
 from test_pstack_content import LEAK
 REPO = HERE.parents[1]
 NAMES = ("interrogate", "benchmark-checklist")
@@ -13,7 +12,7 @@ SUPERPOWERS = {"brainstorming", "using-git-worktrees", "test-driven-development"
                "receiving-code-review", "verification-before-completion", "writing-plans", "systematic-debugging",
                "subagent-driven-development", "executing-plans", "dispatching-parallel-agents",
                "finishing-a-development-branch", "diagnosing-superpowers", "writing-skills", "using-superpowers"}
-CD_PATH = re.compile(r"\{\{CD\}\}/([A-Za-z0-9_./-]+)")
+CD_PATH = re.compile(r"(?:\{\{CD\}\}|<dryas-root>)/([A-Za-z0-9_./-]+)")
 
 
 def skill(h, n):
@@ -25,7 +24,9 @@ class PstackSkillsTest(unittest.TestCase):
         for h in ("claude", "codex"):
             for n in NAMES:
                 self.assertTrue(skill(h, n).startswith("---\nname: %s\ndescription: " % n), (h, n))
-        self.assertEqual(tuple(ct.PSTACK_SKILLS), NAMES)
+        # the plugin ships every Codex skill, pstack ones included (they stop when pstack-picks is off)
+        shipped = {d.name for d in (REPO / "codex" / "skills").iterdir() if (d / "SKILL.md").is_file()}
+        self.assertEqual(shipped, (OURS - {"handoff"}) | set(NAMES))
 
     def test_claude_skills_not_model_invoked(self):
         for n in NAMES:

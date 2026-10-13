@@ -20,18 +20,22 @@ class CodexTemplatesTest(unittest.TestCase):
     def test_agents_template_small(self):
         t = sm.render_tokens((CODEX / "AGENTS.md.template").read_text(encoding="utf-8"), M)
         self.assertLess(len(t.encode("utf-8")), 8 * 1024)
-        self.assertIn("$orchestrate", t)
+        self.assertIn("$dryas:orchestrate", t)
 
-    def test_hooks_fragment(self):
-        r = sm.render(json.loads((CODEX / "hooks.fragment.json").read_text(encoding="utf-8")), M)
+    def test_plugin_hooks(self):
+        # the copy install's hooks.fragment.json is gone; the plugin ships codex/hooks/hooks.json (frozen form)
+        r = json.loads((CODEX / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        self.assertFalse((CODEX / "hooks.fragment.json").exists())
         pre = r["hooks"]["PreToolUse"][0]
         self.assertEqual(pre["matcher"], "Bash|apply_patch|Edit|Write")
-        self.assertEqual(pre["hooks"][0]["command"], '"/p" -X utf8 "/c/jev/chain.py" pretool --harness codex')
-        self.assertEqual(pre["hooks"][0]["commandWindows"], "/ps -X utf8 /cs/jev/chain.py pretool --harness codex")
+        self.assertEqual(pre["hooks"][0]["command"],
+                         '"${DRYAS_PY:-python3}" -X utf8 "${PLUGIN_ROOT}/jev/chain.py" pretool --harness codex')
+        self.assertEqual(pre["hooks"][0]["commandWindows"],
+                         'python -X utf8 "%PLUGIN_ROOT%\\jev\\chain.py" pretool --harness codex')
         ups = r["hooks"]["UserPromptSubmit"][0]["hooks"][0]
-        self.assertEqual(ups["command"], '"/p" -X utf8 "/c/jev/chain.py" prompt --harness codex')
-        self.assertEqual(ups["commandWindows"], "/ps -X utf8 /cs/jev/chain.py prompt --harness codex")
-
+        self.assertEqual(ups["command"],
+                         '"${DRYAS_PY:-python3}" -X utf8 "${PLUGIN_ROOT}/jev/chain.py" prompt --harness codex')
+        self.assertEqual(ups["commandWindows"], 'python -X utf8 "%PLUGIN_ROOT%\\jev\\chain.py" prompt --harness codex')
 
 if __name__ == "__main__":
     unittest.main()

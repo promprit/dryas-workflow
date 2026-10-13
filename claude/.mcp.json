@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "jev": {
+      "command": "${DRYAS_PY:-python3}",
+      "args": ["-X", "utf8", "${CLAUDE_PLUGIN_ROOT}/jev/jev_mcp.py"],
+      "env": {"DRYAS_OPENROUTER_KEY": "${user_config.openrouter_key}"}
+    }
+  }
+}

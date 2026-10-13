@@ -13,12 +13,13 @@ from typing import Any, Dict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import handoff
 import jevlog
+import paths
 import thresholds
 from jev_client import judge
 
 
 def compact_dir() -> str:
-    return os.environ.get("JEV_COMPACT_DIR", os.path.expanduser("~/.claude/jev/compact"))
+    return paths.compact_dir()
 
 
 def safe_name(sid: str) -> str:

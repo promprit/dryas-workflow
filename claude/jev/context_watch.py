@@ -10,6 +10,7 @@ import sys
 from typing import Any, Dict, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths
 import thresholds
 
 TAIL_BYTES = 2 * 1024 * 1024
@@ -20,7 +21,7 @@ _VERSION = re.compile(r"(?:opus|sonnet)-(\d{1,2})(?!\d)(?:-(\d{1,2})(?!\d))?")
 
 
 def _state_dir() -> str:
-    return os.path.join(os.environ.get("JEV_HANDOFF_DIR", os.path.expanduser("~/.claude/jev/handoff")), ".warned")
+    return os.path.join(paths.handoff_dir(), ".warned")
 
 
 def _million_model(model: str) -> bool:

@@ -1,12 +1,16 @@
 """Append-only JSONL logs for Jev stages. One short line per record; never raises."""
 import json
 import os
+import sys
 import time
 from typing import Any, Dict
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import paths
+
 
 def log_dir() -> str:
-    return os.environ.get("JEV_LOG_DIR", os.path.expanduser("~/.claude/jev/logs"))
+    return paths.log_dir()
 
 
 def append(name: str, record: Dict[str, Any]) -> None:
