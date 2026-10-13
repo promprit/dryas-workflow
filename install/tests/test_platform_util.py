@@ -173,6 +173,43 @@ class ClaudeEnvTest(unittest.TestCase):
         cd = self.home / "other"
         self.assertEqual(pu.claude_global_config(cd, {}), cd / ".claude.json")
 
+    def _jev(self, command="python3", args=()):
+        import json
+        (self.home / ".claude.json").write_text(json.dumps({"mcpServers": {"jev": {"command": command, "args": list(args)}}}),
+                                                encoding="utf-8")
+
+    def test_stale_jev_returns_missing_path(self):
+        missing = self.default / "jev" / "jev_mcp.py"
+        self._jev(args=[str(missing)])
+        self.assertEqual(pu.stale_jev(self.default, {}), pu.fwd(missing))
+
+    def test_stale_jev_none_when_file_exists(self):
+        f = self.default / "jev" / "jev_mcp.py"
+        f.parent.mkdir(parents=True)
+        f.write_text("", encoding="utf-8")
+        self._jev(args=[str(f)])
+        self.assertIsNone(pu.stale_jev(self.default, {}))
+
+    def test_stale_jev_none_for_users_own_server(self):
+        self._jev(args=["/opt/mine/jev_mcp.py"])
+        self.assertIsNone(pu.stale_jev(self.default, {}))
+
+    def test_stale_jev_none_without_valid_config(self):
+        self.assertIsNone(pu.stale_jev(self.default, {}))
+        (self.home / ".claude.json").write_text("{not json", encoding="utf-8")
+        self.assertIsNone(pu.stale_jev(self.default, {}))
+        (self.home / ".claude.json").write_text("[]", encoding="utf-8")
+        self.assertIsNone(pu.stale_jev(self.default, {}))
+
+    def test_stale_jev_matches_windows_backslashes(self):
+        self._jev(args=["C:\\Users\\x\\.claude\\jev\\jev_mcp.py"])
+        self.assertEqual(pu.stale_jev(self.default, {}), "C:/Users/x/.claude/jev/jev_mcp.py")
+
+    def test_stale_jev_matches_custom_dir_named_dot_claude(self):
+        missing = self.home / "work" / ".claude" / "jev" / "jev_mcp.py"
+        self._jev(command=str(missing))
+        self.assertEqual(pu.stale_jev(self.default, {}), pu.fwd(missing))
+
 
 if __name__ == "__main__":
     unittest.main()
