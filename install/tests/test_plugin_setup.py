@@ -772,6 +772,23 @@ class StaleJevMcpTest(unittest.TestCase):
         self.assertEqual(len(rm), 1, e.calls())
         self.assertIsNone(e.envs()[rm[0]])  # default dir: no CLAUDE_CONFIG_DIR in the child env
 
+    def test_setup_removes_stale_jev_for_custom_dir(self):
+        e = Env(self)
+        self._default_dir_env()
+        cd = e.home / ".claude-team"
+        self._cfg(e, {"command": "/usr/bin/python3", "args": [str(cd / "jev" / "jev_mcp.py")]})
+        self.assertEqual(ps.setup(REPO, cd, COMPS, yes=True, key="", flowobserve=False), 0)
+        rm = self._removes(e)
+        self.assertEqual(len(rm), 1, e.calls())
+        self.assertIsNone(e.envs()[rm[0]])  # the entry is in ~/.claude.json: run without CLAUDE_CONFIG_DIR
+
+    def test_other_dirs_jev_is_kept_for_custom_dir(self):
+        e = Env(self)
+        self._default_dir_env()
+        self._cfg(e, {"command": "python3", "args": [str(e.home / ".claude-other" / "jev" / "jev_mcp.py")]})
+        self.assertEqual(ps.setup(REPO, e.home / ".claude-team", COMPS, yes=True, key="", flowobserve=False), 0)
+        self.assertEqual(self._removes(e), [])
+
     def test_live_jev_mcp_file_is_kept(self):
         e = Env(self)
         self._default_dir_env()

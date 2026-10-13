@@ -230,6 +230,20 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertIn("WARN  jev MCP entry", out)
         self.assertIn("WARN  stub config", out)
 
+    def test_warns_on_stale_jev_for_custom_dir(self):
+        d = self.home / ".claude-team"
+        self.plugin(d, REPO / "claude")
+        self.set_jev([str(d / "jev" / "jev_mcp.py")])
+        rc, out = self.run_check(d)
+        self.assertIn("WARN  jev MCP entry", out)
+
+    def test_stub_warning_wording(self):
+        d = self.default_dir()
+        (d / ".claude.json").write_text("{}", encoding="utf-8")
+        rc, out = self.run_check(d)
+        self.assertIn("older Dryas installer (or a run with CLAUDE_CONFIG_DIR=~/.claude)", out)
+        self.assertIn("check it holds nothing you need before deleting", out)
+
     def test_jev_entry_passes_when_not_stale(self):
         d = self.default_dir()
         rc, out = self.run_check(d)  # no ~/.claude.json at all

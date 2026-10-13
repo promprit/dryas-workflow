@@ -149,6 +149,10 @@ class ClaudeEnvTest(unittest.TestCase):
         base = {"CLAUDE_CONFIG_DIR": str(self.default)}
         self.assertEqual(pu.claude_env(self.default, base)["CLAUDE_CONFIG_DIR"], str(self.default))
 
+    def test_claude_env_exported_other_dir_dropped_for_default_dir(self):
+        base = {"CLAUDE_CONFIG_DIR": str(self.home / "elsewhere"), "PATH": "/bin"}
+        self.assertNotIn("CLAUDE_CONFIG_DIR", pu.claude_env(self.default, base))
+
     def test_claude_env_user_set_var_uses_cd(self):
         cd = self.home / "other"
         base = {"CLAUDE_CONFIG_DIR": str(self.home / "elsewhere")}
@@ -181,7 +185,7 @@ class ClaudeEnvTest(unittest.TestCase):
     def test_stale_jev_returns_missing_path(self):
         missing = self.default / "jev" / "jev_mcp.py"
         self._jev(args=[str(missing)])
-        self.assertEqual(pu.stale_jev(self.default, {}), pu.fwd(missing))
+        self.assertEqual(pu.stale_jev(self.default, {})[0], pu.fwd(missing))
 
     def test_stale_jev_none_when_file_exists(self):
         f = self.default / "jev" / "jev_mcp.py"
@@ -203,12 +207,39 @@ class ClaudeEnvTest(unittest.TestCase):
 
     def test_stale_jev_matches_windows_backslashes(self):
         self._jev(args=["C:\\Users\\x\\.claude\\jev\\jev_mcp.py"])
-        self.assertEqual(pu.stale_jev(self.default, {}), "C:/Users/x/.claude/jev/jev_mcp.py")
+        self.assertEqual(pu.stale_jev(self.default, {})[0], "C:/Users/x/.claude/jev/jev_mcp.py")
 
     def test_stale_jev_matches_custom_dir_named_dot_claude(self):
         missing = self.home / "work" / ".claude" / "jev" / "jev_mcp.py"
         self._jev(command=str(missing))
-        self.assertEqual(pu.stale_jev(self.default, {}), pu.fwd(missing))
+        self.assertEqual(pu.stale_jev(self.default, {})[0], pu.fwd(missing))
+
+    def test_stale_jev_custom_dir_entry_in_home_config(self):
+        cd = self.home / ".claude-team"
+        missing = cd / "jev" / "jev_mcp.py"
+        self._jev(args=[str(missing)])
+        path, env = pu.stale_jev(cd, {"PATH": "/bin"})
+        self.assertEqual(path, pu.fwd(missing))
+        self.assertNotIn("CLAUDE_CONFIG_DIR", env)  # the entry lives in ~/.claude.json
+
+    def test_stale_jev_custom_dir_entry_in_its_own_config(self):
+        import json
+        cd = self.home / ".claude-team"
+        cd.mkdir()
+        missing = cd / "jev" / "jev_mcp.py"
+        (cd / ".claude.json").write_text(json.dumps({"mcpServers": {"jev": {"command": str(missing)}}}), encoding="utf-8")
+        path, env = pu.stale_jev(cd, {})
+        self.assertEqual(path, pu.fwd(missing))
+        self.assertEqual(env["CLAUDE_CONFIG_DIR"], str(cd))
+
+    def test_stale_jev_none_for_other_dirs_script(self):
+        self._jev(args=[str(self.home / ".claude-other" / "jev" / "jev_mcp.py")])
+        self.assertIsNone(pu.stale_jev(self.home / ".claude-team", {}))
+
+    def test_stale_jev_regex_fallback_for_single_command_string(self):
+        missing = self.default / "jev" / "jev_mcp.py"
+        self._jev(command="python3 %s" % missing)
+        self.assertEqual(pu.stale_jev(self.default, {})[0], pu.fwd(missing))
 
 
 if __name__ == "__main__":
