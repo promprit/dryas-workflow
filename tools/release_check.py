@@ -422,7 +422,7 @@ def claude_config(rep, cd, env):
     ~/.claude/.claude.json that Claude Code ignores unless CLAUDE_CONFIG_DIR is set."""
     stale = pu.stale_jev(cd, env)
     if stale:
-        rep.say("WARN", "jev MCP entry", "%s is missing; re-run the Dryas setup to remove the entry" % stale)
+        rep.say("WARN", "jev MCP entry", "%s is missing; re-run the Dryas setup to remove the entry" % stale[0])
     else:
         rep.say("PASS", "jev MCP entry")
     default = Path.home() / ".claude"
@@ -430,8 +430,8 @@ def claude_config(rep, cd, env):
         return
     stub = default / ".claude.json"
     if stub.exists():
-        rep.say("WARN", "stub config", "%s was created by an older Dryas installer; Claude Code reads %s; "
-                "safe to delete after checking it holds nothing you need" % (stub, Path.home() / ".claude.json"))
+        rep.say("WARN", "stub config", "%s may have been created by an older Dryas installer (or a run with "
+                "CLAUDE_CONFIG_DIR=~/.claude); Claude Code reads %s; check it holds nothing you need before deleting" % (stub, Path.home() / ".claude.json"))
     else:
         rep.say("PASS", "stub config")
 

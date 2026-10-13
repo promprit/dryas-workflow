@@ -280,12 +280,13 @@ def _ruflo_files(repo: Path, root: Path, mapping: Dict[str, str], yes: bool) -> 
 
 def repair_stale_jev(cd: Path, env: Dict[str, str], dry: bool) -> None:
     """Remove the user-scope `jev` MCP server of the old copy install once its jev_mcp.py is gone."""
-    path = pu.stale_jev(cd, env)
-    if not path:
+    found = pu.stale_jev(cd, env)
+    if not found:
         return
+    path, env = found
     argv = ["claude", "mcp", "remove", "--scope", "user", "jev"]
     print("note: removing the jev MCP server left by the old copy install (%s no longer exists)" % path)
-    print("%s%s" % (env_prefix(cd), " ".join(argv)))
+    print("%s%s" % ("CLAUDE_CONFIG_DIR=%s " % env["CLAUDE_CONFIG_DIR"] if env.get("CLAUDE_CONFIG_DIR") else "", " ".join(argv)))
     if dry:
         return
     rc = di.run(argv, env=env)
