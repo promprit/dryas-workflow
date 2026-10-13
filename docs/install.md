@@ -14,7 +14,7 @@ The installer asks before it changes anything. Use `--dry-run` first to see what
 
 For Claude Code, Dryas is a plugin, `dryas@dryas-workflow`, served from your clone (the repo is its own marketplace). The installer runs setup for one Claude config dir:
 
-1. `claude plugin marketplace add <clone>` and `claude plugin install dryas@dryas-workflow`, both with `CLAUDE_CONFIG_DIR` set to that dir. The plugin brings the rules (injected at session start), the hooks, the scope lock, the Jev chain, the Jev MCP server, the agents, commands and skills.
+1. `claude plugin marketplace add <clone>` and `claude plugin install dryas@dryas-workflow`, run against that dir. `CLAUDE_CONFIG_DIR` is set only for a non-default dir. For `~/.claude`, leave it unset: setting it makes Claude Code read `~/.claude/.claude.json` instead of `~/.claude.json`, which hides your user-scope MCP servers. The plugin brings the rules (injected at session start), the hooks, the scope lock, the Jev chain, the Jev MCP server, the agents, commands and skills.
 2. The third-party components you selected (Ruflo, Superpowers, design skills).
 3. A merge into that dir's `settings.json`: model, env and permission rules only (plus the Ruflo hooks when Ruflo is on). It asks first.
 4. Shared state in `~/.dryas`: the workflow reference (`docs/dryas-workflow.md`), `chain.local.json` (which optional stages are on) and `accounts.json` (the config dirs set up so far).
@@ -66,7 +66,7 @@ If an old Codex copy install still runs from that dir's runtime files, a `--harn
 ./install/install.sh --uninstall --purge                      # last account: also remove ~/.dryas
 ```
 
-`--uninstall` works on one config dir: it runs `claude plugin uninstall dryas@dryas-workflow` there, removes only the settings entries setup added, and drops that dir from `~/.dryas/accounts.json`. It leaves the shared `~/.dryas` state (logs, thresholds, handoffs, the Ruflo runtime) in place by design, since other accounts or Codex may use it. Superpowers was installed as a dependency of the plugin; `claude plugin prune` (same `CLAUDE_CONFIG_DIR`) removes it when nothing else needs it. The `dryas-workflow` marketplace stays registered in that dir; that is harmless, and `claude plugin marketplace remove dryas-workflow` (same `CLAUDE_CONFIG_DIR`) removes it.
+`--uninstall` works on one config dir: it runs `claude plugin uninstall dryas@dryas-workflow` there, removes only the settings entries setup added, and drops that dir from `~/.dryas/accounts.json`. It leaves the shared `~/.dryas` state (logs, thresholds, handoffs, the Ruflo runtime) in place by design, since other accounts or Codex may use it. Superpowers was installed as a dependency of the plugin; `claude plugin prune` (same config dir, see step 1 above) removes it when nothing else needs it. The `dryas-workflow` marketplace stays registered in that dir; that is harmless, and `claude plugin marketplace remove dryas-workflow` (same config dir) removes it.
 
 `--purge` also removes the entries Dryas owns in `~/.dryas` (`accounts.json`, `chain.local.json`, `docs`, `jev`, `ruflo`), and only when `accounts.json` lists no other Claude config dir and no Codex home (`claude_dirs` and `codex_dirs`) and no old Codex copy install uses it (uninstall each Codex home first, or in the same run with `--harness both`). That deletes your Jev logs, your `/tune` thresholds, saved handoffs and Ruflo memory. It keeps your notes in `~/.dryas/docs/dryas-local.md`. It refuses when `accounts.json` is missing or unreadable or the dir's record cannot be read (that dir then stays listed), and it never removes files Dryas did not create.
 
@@ -249,7 +249,7 @@ Uninstall removes only settings values that still match what the installer wrote
 
 ## Troubleshooting
 
-- **dryas fails to load (`/plugin` shows an error).** Usually the `superpowers` dependency: run `claude plugin marketplace add anthropics/claude-plugins-official` and `claude plugin install superpowers@claude-plugins-official` with the same `CLAUDE_CONFIG_DIR`, then re-run setup.
+- **dryas fails to load (`/plugin` shows an error).** Usually the `superpowers` dependency: run `claude plugin marketplace add anthropics/claude-plugins-official` and `claude plugin install superpowers@claude-plugins-official` in the same config dir, then re-run setup.
 - **Jev shows `JevUnavailable`.** Apps launched from the GUI do not read your shell profile, so they do not see `OPENROUTER_API_KEY`. Launch Claude Code from a terminal, set the variable in the app's environment, or store the key as the plugin option (`--openrouter-key`).
 - **Hooks do not fire.** Run `/plugin` and check that dryas is enabled. If it is, look for `allowManagedHooksOnly` in managed settings ([Hooks blocked by policy](#hooks-blocked-by-policy)). On Windows, check that Git for Windows is installed.
 - **Permission prompts for `/tune` or `/handoff`.** The allow rules name the folder the plugin runs from (your clone's `claude/`). Re-run setup for that config dir after moving the clone.

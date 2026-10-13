@@ -21,7 +21,7 @@ Claude Code only: context-window warnings, compaction keep/restore, `/handoff`, 
 
 ## Several accounts (T3 Code, personal and team)
 
-You can run Dryas on several Claude Code accounts side by side, for example a personal and a Team account in T3 Code. Each account has its own config dir (`CLAUDE_CONFIG_DIR`, for example `~/.claude` and `~/.claude-team`). Run setup once for each:
+You can run Dryas on several Claude Code accounts side by side, for example a personal and a Team account in T3 Code. Each account has its own config dir. `~/.claude` needs no setting; for any other dir, such as `~/.claude-team`, set `CLAUDE_CONFIG_DIR` to that dir. Run setup once for each:
 
 ```
 ./install/install.sh

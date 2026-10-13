@@ -1,8 +1,11 @@
 """Cross-platform helpers for the installer: paths, tool lookup, directory links (symlink or Windows junction)."""
+import json
 import os
+import shlex
 import shutil
 import sys
-from typing import List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 IS_WINDOWS = os.name == "nt"
 
@@ -10,6 +13,75 @@ IS_WINDOWS = os.name == "nt"
 def fwd(p) -> str:
     """Path as a string with forward slashes (valid in bash, Git Bash, cmd and Python on every OS)."""
     return str(p).replace("\\", "/")
+
+
+def _resolved(p) -> Path:
+    return Path(p).expanduser().resolve()
+
+
+def claude_env(cd, base=None) -> Dict[str, str]:
+    """Env for running `claude` against config dir `cd`. The CLI reads its global config from
+    $CLAUDE_CONFIG_DIR/.claude.json when the variable is set (else ~/.claude.json), so the default dir leaves it
+    unset, unless the caller's env already sets it to that same dir. Any other dir sets it to `cd`."""
+    env = dict(os.environ if base is None else base)
+    exported = env.get("CLAUDE_CONFIG_DIR")
+    default = _resolved(Path.home() / ".claude")
+    if _resolved(cd) == default and not (exported and _resolved(exported) == default):
+        env.pop("CLAUDE_CONFIG_DIR", None)
+    else:
+        env["CLAUDE_CONFIG_DIR"] = str(cd)
+    return env
+
+
+def claude_global_config(cd, base=None) -> Path:
+    """The global config file (user-scope MCP servers) the CLI uses for `cd`."""
+    if "CLAUDE_CONFIG_DIR" in claude_env(cd, base):
+        return Path(cd) / ".claude.json"
+    return Path.home() / ".claude.json"
+
+
+def _is_managed(c: str, managed) -> bool:
+    if not (c.startswith("/") or c[1:3] == ":/"):  # "python3 /x/jev_mcp.py" is a command line, not a path
+        return False
+    n = os.path.normcase(c)
+    return n.endswith(os.path.normcase("/.claude/jev/jev_mcp.py")) or n in managed
+
+
+def _tokens(parts: List[str]) -> List[str]:
+    """Shell-style tokens of the command string, quotes removed; [] when it cannot be split."""
+    try:
+        toks = shlex.split(" ".join(parts), posix=not IS_WINDOWS)
+    except ValueError:
+        return []
+    return [t.strip("\"'") if IS_WINDOWS else t for t in toks]
+
+
+def stale_jev(cd, base=None) -> Optional[Tuple[str, Dict[str, str]]]:
+    """(missing jev_mcp.py path, env for `claude mcp remove --scope user jev`) for a user-scope `jev` MCP server of the
+    old copy install whose script is gone, else None. Installer-managed script = <a .claude dir>/jev/jev_mcp.py or
+    <cd>/jev/jev_mcp.py. Looked up in cd's CLI config and, if that differs, in ~/.claude.json (where the old install
+    registered it when CLAUDE_CONFIG_DIR was not exported); the env matches the config the entry was found in."""
+    managed = {os.path.normcase(fwd(x) + "/jev/jev_mcp.py") for x in (cd, _resolved(cd))}
+    home_cfg = Path.home() / ".claude.json"
+    places = [(claude_global_config(cd, base), claude_env(cd, base))]
+    if places[0][0] != home_cfg:
+        places.append((home_cfg, {k: v for k, v in (os.environ if base is None else base).items()
+                                  if k != "CLAUDE_CONFIG_DIR"}))
+    for cfg, env in places:
+        try:
+            srv = json.loads(cfg.read_text(encoding="utf-8"))["mcpServers"]["jev"]
+            parts = [fwd(srv.get("command", ""))] + [fwd(x) for x in srv.get("args") or []]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+        # each part is a whole path; a command given as one string ("python3 <path>") is split into tokens instead
+        parts = [p.strip() for p in parts]
+        for group in (parts, _tokens(parts)):
+            script = next((c for c in group if _is_managed(c, managed)), None)
+            if script is not None:
+                if not os.path.exists(script):
+                    return script, env
+                break
+    return None
 
 
 _PYTHON_EXE: Optional[str] = None
