@@ -5,7 +5,7 @@
 # Workflow rules
 - Brainstorm first, always (superpowers:brainstorming). Nothing is built or dispatched before the user approves the design.
 - Design work (UI/UX, layout, visual style, components, on-screen copy) uses both `ui-ux-pro-max` and `impeccable`.
-- Single-file fix: plain Claude on Opus. Anything multi-step: `/orchestrate <task>` on the approved design.
+- Single-file fix: plain Claude on the strong tier. Anything multi-step: `/orchestrate <task>` on the approved design.
 - Every multi-step task runs in its own git worktree. One agent per worktree: never two sessions in one worktree; parallel loops each get their own worktree and branch. Merge only after `/wreview` and superpowers:verification-before-completion.
 - Layers: Jev = decision support (gates, routing; never writes code or plans), Ruflo = orchestration and the only memory/learning layer, Superpowers = process.
 - Hook order per event: scope lock -> Jev -> Ruflo -> observer (observe-only, last). Stages: `jev/chain.json` in the Dryas plugin folder.
@@ -17,10 +17,10 @@
 <!-- /pstack-picks -->
 
 # Model policy (super workflow)
-- Orchestrator: Opus, always (`"model": "opus"`, set by setup in the account's settings.json (`$CLAUDE_CONFIG_DIR/settings.json`, default `~/.claude/settings.json`)).
-- Executors: Haiku first. `/orchestrate` passes `model: haiku` unless Jev's `needs_sonnet` or `needs_opus` (or Opus judgment) starts the task higher; the plugin's `dryas:executor` agent stays Sonnet so review dispatches never run on Haiku. Kill switch: `dispatch.haiku_default` in `~/.dryas/jev/thresholds.json`.
-- Escalation ladder: Haiku → Sonnet → Opus → Fable. A task Haiku fails `escalation.haiku_failures_before_sonnet` times (default 1) goes to Sonnet; a task Sonnet can't finish goes to an Opus executor; Fable is used only if the Opus executor also fails that task. Stop at the first success. Every step is logged with its reason via `mcp__plugin_dryas_jev__log_escalation`.
-- Jev (via the `jev` MCP server and hooks) answers narrow typed questions only; it never writes code or plans. Below threshold or escalate → Opus decides.
+- Orchestrator: strong tier, always (`"model": "opus"`, set by setup in the account's settings.json (`$CLAUDE_CONFIG_DIR/settings.json`, default `~/.claude/settings.json`)).
+- Executors: fast tier first. `/orchestrate` passes `model: haiku` unless Jev's `needs_sonnet` or `needs_opus` (or strong-tier judgment) starts the task higher; the plugin's `dryas:executor` agent stays on the standard tier so review dispatches never run on the fast tier. Kill switch: `dispatch.haiku_default` in `~/.dryas/jev/thresholds.json`.
+- Escalation ladder: fast → standard → strong → frontier (tier-to-model table in `~/.dryas/docs/dryas-workflow.md`). A task the fast tier fails `escalation.haiku_failures_before_sonnet` times (default 1) goes to the standard tier; a task the standard tier can't finish goes to a strong executor; the frontier tier is used only if the strong executor also fails that task. Stop at the first success. Every step is logged with its reason via `mcp__plugin_dryas_jev__log_escalation`.
+- Jev (via the `jev` MCP server and hooks) answers narrow typed questions only; it never writes code or plans. Below threshold or escalate → the strong tier decides.
 
 # Compact instructions
 - When compacting, keep the summary SHORT (aim under 300 words): current goal, open decisions, next step. A Jev-scored handoff of verbatim excerpts (user messages, files touched, test results, commits, key tool lines) is re-injected right after compaction, so do not repeat file lists, test output or tool logs in the summary.

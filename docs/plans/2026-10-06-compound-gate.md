@@ -1,6 +1,6 @@
 # Compound Commands in the Jev Gate Implementation Plan
 
-> **For agentic workers:** this plan is executed by `/orchestrate` (Opus orchestrator, Sonnet executors, scope lock). Each executor receives only its own task section. Steps use checkbox (`- [ ]`) syntax.
+> **For agentic workers:** this plan is executed by `/orchestrate` (strong orchestrator, standard executors, scope lock). Each executor receives only its own task section. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** Skip the judge for compound Bash commands whose every part is allowlisted and whose parts are joined only by `&&`, `||`, `;`, `|` (plus the redirects `2>&1`, `>/dev/null`, `2>/dev/null`), with a kill switch.
 

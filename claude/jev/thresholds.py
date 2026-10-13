@@ -28,7 +28,7 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     },
     "route": {"min_confidence": 0.7, "swarm_min": 0.7},
     "dispatch": {"min_confidence": 0.7, "haiku_default": True},
-    # Ladder: haiku -> sonnet -> opus -> fable. Fable only after the Opus executor also failed.
+    # Ladder: fast -> standard -> strong -> frontier. Frontier only after the strong executor also failed.
     "escalation": {"executor_confidence_below": 0.5, "haiku_failures_before_sonnet": 1,
                    "sonnet_failures_before_opus": 2, "opus_failures_before_fable": 1, "haiku_climb_max": 0.35},
     "commit": {"min_confidence": 0.7},

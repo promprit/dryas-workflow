@@ -36,7 +36,38 @@ def plugin_form(t):
                   "then re-run setup (`install/install.sh`, once per Claude config dir). Never hand-edit the plugin files, the copy in `~/.dryas/docs`, or these injected rules."),
                  ("`~/.claude/settings.json`. Show", SETTINGS + ". Show"),
                  ("(`\"model\": \"opus\"` in ~/.claude/settings.json)", "(`\"model\": \"opus\"`, set by setup in " + SETTINGS + ")"),
-                 ("`agents/executor.md` in the Dryas plugin folder stays", "the plugin's `dryas:executor` agent stays")):
+                 ("`agents/executor.md` in the Dryas plugin folder stays", "the plugin's `dryas:executor` agent stays"),
+                 ("plain Claude on Opus.", "plain Claude on the strong tier."),
+                 ("- Orchestrator: Opus, always", "- Orchestrator: strong tier, always"),
+                 ("- Executors: Haiku first.", "- Executors: fast tier first."),
+                 ("(or Opus judgment) starts", "(or strong-tier judgment) starts"),
+                 ("agent stays Sonnet so review dispatches never run on Haiku.", "agent stays on the standard tier so review dispatches never run on the fast tier."),
+                 ("Haiku → Sonnet → Opus → Fable. A task Haiku fails", "fast → standard → strong → frontier (tier-to-model table in `~/.dryas/docs/dryas-workflow.md`). A task the fast tier fails"),
+                 ("goes to Sonnet; a task Sonnet can't finish goes to an Opus executor; Fable is used only if the Opus executor also fails",
+                  "goes to the standard tier; a task the standard tier can't finish goes to a strong executor; the frontier tier is used only if the strong executor also fails"),
+                 ("escalate → Opus decides.", "escalate → the strong tier decides."),
+                 ("Fable dispatches", "frontier dispatches"),
+                 ("with the Opus orchestrator, Haiku-first executors", "with the strong-tier orchestrator, fast-first executors"),
+                 ("you (Opus) decide", "you (the strong tier) decide"),
+                 ("as Opus orchestrator with Haiku-first executors (Sonnet, Opus, Fable on escalation)", "as strong-tier orchestrator with fast-first executors (standard, strong, frontier on escalation)"),
+                 ("You (Opus) plan,", "You (the strong tier) plan,"),
+                 ("so ESC-M1 counts it the same way as before Haiku;", "so ESC-M1 counts it the same way as before the fast tier;"),
+                 ("no `model` (Sonnet from the agent's frontmatter)", "no `model` (standard tier from the agent's frontmatter)"),
+                 ("no `model` (Sonnet), after", "no `model` (standard tier), after"),
+                 ("Never dispatch Fable here: Fable is only reached through §7. Review, interrogate and cleanup dispatches (§7b) never use Haiku: they start on Sonnet (no `model`)",
+                  "Never dispatch the frontier tier here: it is only reached through §7. Review, interrogate and cleanup dispatches (§7b) never use the fast tier: they start on the standard tier (no `model`)"),
+                 ("Ladder: **Haiku → Sonnet → Opus → Fable**. Fable is used only when Opus also could not do the task.",
+                  "Ladder: **fast → standard → strong → frontier**. The frontier tier is used only when the strong tier also could not do the task."),
+                 ("First Sonnet failure: re-dispatch once more on Sonnet with the failure details; the second Sonnet failure escalates to Opus.",
+                  "First standard-tier failure: re-dispatch once more on standard with the failure details; the second standard failure escalates to strong."),
+                 ("1. A Haiku executor that fails", "1. A fast-tier executor that fails"),
+                 ("is re-dispatched with no `model` (Sonnet). Call", "is re-dispatched with no `model` (standard tier). Call"),
+                 ("From there the Sonnet rules below apply, starting at zero Sonnet failures.", "From there the standard-tier rules below apply, starting at zero standard failures."),
+                 ("2. A Sonnet executor that fails", "2. A standard-tier executor that fails"),
+                 ("3. If the Opus executor succeeds, stop: no Fable.", "3. If the strong executor succeeds, stop: no frontier."),
+                 ("4. Only if the Opus executor fails", "4. Only if the strong executor fails"),
+                 ("reason naming what Opus could not resolve). If Fable is unavailable", "reason naming what the strong tier could not resolve). If the frontier tier is unavailable"),
+                 ("5. A Fable failure comes", "5. A frontier failure comes")):
         t = t.replace(a, b)
     return t
 
@@ -80,6 +111,12 @@ class PstackLoopTest(unittest.TestCase):
             else:
                 want = codex_form(want, rel)
             self.assertEqual(render.gate_blocks(read(rel), []), want, rel)
+
+    def test_tier_words_in_rules(self):
+        t = read("claude/CLAUDE.md.template")
+        self.assertIn("fast → standard → strong → frontier", t)
+        prose = re.sub(r"`[^`]*`", "", t)
+        self.assertIsNone(re.search(r"Haiku|Sonnet|Opus|Fable", prose))
 
     def test_orchestrate_on_content(self):
         on = render.gate_blocks(read("claude/skills/orchestrate/SKILL.md"), ["pstack-picks"])

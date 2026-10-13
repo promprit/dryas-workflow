@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Chain stage on UserPromptSubmit: Jev suggests a route and whether work needs more than Sonnet (-> Opus).
-Advisory only. Never suggests Fable: Fable is reached only after an Opus executor fails.
+"""Chain stage on UserPromptSubmit: Jev suggests a route and whether work needs more than standard (-> strong).
+Advisory only. Never suggests frontier: frontier is reached only after a strong executor fails.
 
 Injects one line, e.g. 'Jev route: swarm (0.82); opus: no (0.91)'. Parts below the route
 confidence threshold are dropped; if nothing is confident, nothing is injected.

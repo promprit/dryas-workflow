@@ -47,6 +47,12 @@ class McpTest(unittest.TestCase):
         self.assertEqual(sorted(t["name"] for t in r["result"]["tools"]),
                          ["jev_judge", "log_dispatch", "log_escalation", "log_merge", "log_override", "log_review"])
 
+    def test_escalation_description_uses_tiers(self):
+        # Defect caught: the MCP description still advertises the old model-name ladder.
+        r = jev_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        desc = next(t["description"] for t in r["result"]["tools"] if t["name"] == "log_escalation")
+        self.assertIn("fast -> standard -> strong -> frontier", desc)
+
     def test_log_dispatch(self):
         r = call("log_dispatch", {"task": "t1", "tier": "sonnet", "role": "coder", "attempt": "1", "extra": "x"})
         self.assertFalse(r["result"]["isError"])
@@ -140,7 +146,7 @@ class McpTest(unittest.TestCase):
         r = call("jev_judge", {"state": {}, "questions": VALID_QUESTIONS}, boom)
         self.assertTrue(r["result"]["isError"])
         self.assertIn("HTTPError 400", r["result"]["content"][0]["text"])
-        self.assertIn("Opus decides", r["result"]["content"][0]["text"])
+        self.assertIn("The orchestrator decides", r["result"]["content"][0]["text"])
 
     def test_judge_missing_questions_is_tool_error(self):
         r = call("jev_judge", {"state": {}}, lambda s, q: RES)

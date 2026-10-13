@@ -40,12 +40,12 @@ The Task 2 executor tries to edit `src/ui/theme.ts` to add a warning colour. The
 
 ## 6. Escalate (Escalation: ESC-2, ESC-4, ESC-5)
 
-Task 1 fails twice on Sonnet: the counter resets on every request. Before climbing, the orchestrator debugs the reports and finds the root cause: the Redis key uses the request id. It is not a plan defect, so the task climbs to Opus with the root cause in its prompt, and the climb is logged ([escalations.jsonl](escalations.jsonl)). Opus fixes it. Fable is never used (ESC-3).
+Task 1 fails twice on the `standard` tier: the counter resets on every request. Before climbing, the orchestrator debugs the reports and finds the root cause: the Redis key uses the request id. It is not a plan defect, so the task climbs to the `strong` tier with the root cause in its prompt, and the climb is logged ([escalations.jsonl](escalations.jsonl)). The `strong` tier fixes it. The `frontier` tier is never used (ESC-3).
 
 ## 7. Review (Review: REV-1 to REV-5)
 
 - Jev's `needs_interrogate` is 0.42 (below 0.7), so no adversarial panel.
-- One Sonnet cleanup task removes a leftover debug log.
+- One `standard` cleanup task removes a leftover debug log.
 - `/wreview`: spec compliance passes; code quality flags a magic number, fixed.
 - Verification runs both test commands and sees them pass.
 
@@ -54,7 +54,7 @@ Task 1 fails twice on Sonnet: the counter resets on every request. Before climbi
 `active.json` is deleted. `/commit` asks Jev "safe to commit?" (0.91 yes) and commits. It does not push: you do. The outcome is stored:
 
 ```
-Login lockout: Redis per-account key worked. Sonnet failed twice on per-request key
+Login lockout: Redis per-account key worked. The standard tier failed twice on per-request key
 (same mistake as /reset-password) -> consider a shared rate-limit helper.
 ```
 

@@ -199,5 +199,5 @@ The installer does not install Superpowers for Codex. It checks whether Superpow
 
 - Codex context watch, compaction keep and restore, handoff restore and Ruflo hooks (need a Codex transcript reader and Codex-shaped Ruflo handlers; possible follow-up).
 - FlowObserve for Codex sessions.
-- The Sonnet → Opus → Fable ladder and the `executor` agent (Claude Code-specific).
+- The standard → strong → frontier ladder and the `executor` agent (Claude Code-specific).
 - Installing Superpowers, impeccable or ui-ux-pro-max for Codex.
