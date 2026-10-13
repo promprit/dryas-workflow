@@ -212,6 +212,49 @@ class ReleaseCheckTest(unittest.TestCase):
             release_check.manifests(rep, None)
         self.assertIn("FAIL  plugin manifests valid", buf.getvalue())
 
+    def default_dir(self):
+        d = self.home / ".claude"
+        self.plugin(d, REPO / "claude")
+        return d
+
+    def set_jev(self, args):
+        (self.home / ".claude.json").write_text(json.dumps({"mcpServers": {"jev": {"command": "python3", "args": args}}}),
+                                                encoding="utf-8")
+
+    def test_warns_on_stale_jev_and_stub_config(self):
+        d = self.default_dir()
+        self.set_jev([str(d / "jev" / "jev_mcp.py")])  # the old copy install's file, now gone
+        (d / ".claude.json").write_text("{}", encoding="utf-8")
+        rc, out = self.run_check(d)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("WARN  jev MCP entry", out)
+        self.assertIn("WARN  stub config", out)
+
+    def test_jev_entry_passes_when_not_stale(self):
+        d = self.default_dir()
+        rc, out = self.run_check(d)  # no ~/.claude.json at all
+        self.assertIn("PASS  jev MCP entry", out)
+        self.set_jev(["/opt/mine/jev_mcp.py"])  # the user's own jev
+        rc, out = self.run_check(d)
+        self.assertIn("PASS  jev MCP entry", out)
+        self.set_jev([str(d / "jev" / "jev_mcp.py")])
+        (d / "jev").mkdir()
+        (d / "jev" / "jev_mcp.py").write_text("", encoding="utf-8")  # the file exists
+        rc, out = self.run_check(d)
+        self.assertIn("PASS  jev MCP entry", out)
+        self.assertNotIn("WARN  jev MCP entry", out)
+
+    def test_stub_config_passes_without_stub(self):
+        d = self.default_dir()
+        rc, out = self.run_check(d)
+        self.assertIn("PASS  stub config", out)
+
+    def test_custom_dir_config_is_not_a_stub(self):
+        (self.cd / ".claude.json").write_text("{}", encoding="utf-8")
+        rc, out = self.run_check()
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("WARN  stub config", out)
+
     def test_help(self):
         with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(io.StringIO()):
             release_check.main(["--help"])
