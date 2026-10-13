@@ -1,5 +1,7 @@
 """Cross-platform helpers for the installer: paths, tool lookup, directory links (symlink or Windows junction)."""
+import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -35,18 +37,16 @@ def claude_global_config(cd, base=None) -> Path:
 def stale_jev(cd, base=None) -> Optional[str]:
     """Path of the deleted jev_mcp.py that a user-scope `jev` MCP server of the old copy install still runs, else None.
     Stale = its command/args name <a .claude dir>/jev/jev_mcp.py and that file is gone."""
-    import json
-    import re
     try:
         data = json.loads(claude_global_config(cd, base).read_text(encoding="utf-8"))
         srv = data["mcpServers"]["jev"]
         parts = [fwd(srv.get("command", ""))] + [fwd(x) for x in srv.get("args") or []]
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
-    for part in parts:  # one whole argument is a path that may hold spaces
-        if part.strip().endswith("/.claude/jev/jev_mcp.py"):
-            return None if os.path.exists(part.strip()) else part.strip()
-    m = re.search(r"\S*/\.claude/jev/jev_mcp\.py(?=\s|$)", " ".join(parts))  # e.g. a command line in `command`
+    for part in map(str.strip, parts):
+        if part.endswith("/.claude/jev/jev_mcp.py"):
+            return None if os.path.exists(part) else part
+    m = re.search(r"\S*/\.claude/jev/jev_mcp\.py(?=\s|$)", " ".join(parts))
     return m.group(0) if m and not os.path.exists(m.group(0)) else None
 
 
