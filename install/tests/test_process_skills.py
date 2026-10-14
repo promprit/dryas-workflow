@@ -20,6 +20,8 @@ SECTION = re.compile(r"^([a-z-]+/[A-Za-z0-9_.-]+\.md) § (.+)$")
 PHRASE = re.compile(r'^(template|executor|orchestrate): "(.+)"$')
 SP_NAME = re.compile(r"\bsuperpowers:[a-z]")
 CLAUDE_ONLY = ("${CLAUDE_PLUGIN_ROOT}", "mcp__plugin_", "Skill(", "subagent_type", "EnterWorktree")
+SHORT = {"brainstorm", "plan", "worktree", "verify"}
+TECHNIQUES = {"brainstorm": ("## Question rounds", "recommended answer", "look it up yourself")}
 CLAUDE_COMMAND = re.compile(r"(?<![\w$/.<-])/(orchestrate|wplan|wreview|commit|tune|interrogate)\b(?![/\w-]|\.\w)")
 
 
@@ -86,6 +88,24 @@ class ProcessSkillsTest(unittest.TestCase):
                 self.assertLess(len(f.read_text(encoding="utf-8").splitlines()), 500, f)
         for f in [UPSTREAM] + list(SKILLS.glob("*/UPSTREAM.md")):
             self.assertLess(len(f.read_text(encoding="utf-8").splitlines()), 500, f)
+
+    def test_skill_length(self):
+        for n in sorted(SHORT):
+            lines = len((SKILLS / n / "SKILL.md").read_text(encoding="utf-8").splitlines())
+            self.assertTrue(50 <= lines <= 150, "%s/SKILL.md is %d lines; target 50-150" % (n, lines))
+
+    def test_techniques(self):
+        for n, needles in TECHNIQUES.items():
+            text = (SKILLS / n / "SKILL.md").read_text(encoding="utf-8")
+            for s in needles:
+                self.assertIn(s, text, (n, s))
+
+    def test_model_invoked(self):
+        # process skills hold reusable discipline: the model may invoke them; their description names triggers
+        for n in present():
+            head = (SKILLS / n / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[1]
+            self.assertNotIn("disable-model-invocation", head, n)
+            self.assertRegex(head, r"\ndescription: Use (when|before|on) ", n)
 
     def test_no_superpowers_names(self):
         files = [UPSTREAM] + [f for n in scp.PROCESS_SKILLS for f in (SKILLS / n).glob("*.md")]

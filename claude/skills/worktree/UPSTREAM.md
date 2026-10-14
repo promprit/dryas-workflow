@@ -45,22 +45,22 @@ Upstream: `using-git-worktrees/`
 | Step 3: Verify Clean Baseline — tests pass: report ready | worktree/SKILL.md § Clean baseline |
 | Report | worktree/SKILL.md § Report |
 | Report — path, test count, ready to implement | worktree/SKILL.md § Report |
-| Quick Reference | worktree/SKILL.md § Quick reference |
-| Quick Reference — already in linked worktree | worktree/SKILL.md § Quick reference |
-| Quick Reference — in a submodule | worktree/SKILL.md § Quick reference |
-| Quick Reference — native worktree tool available | worktree/SKILL.md § Quick reference |
-| Quick Reference — no native tool | worktree/SKILL.md § Quick reference |
-| Quick Reference — .worktrees/ exists | worktree/SKILL.md § Quick reference |
-| Quick Reference — worktrees/ exists | worktree/SKILL.md § Quick reference |
-| Quick Reference — both exist | worktree/SKILL.md § Quick reference |
-| Quick Reference — neither exists | worktree/SKILL.md § Quick reference |
-| Quick Reference — directory not ignored | worktree/SKILL.md § Quick reference |
-| Quick Reference — permission error on create | worktree/SKILL.md § Quick reference |
-| Quick Reference — tests fail during baseline | worktree/SKILL.md § Quick reference |
-| Quick Reference — no package.json/Cargo.toml | worktree/SKILL.md § Quick reference |
-| Common Rationalizations | worktree/SKILL.md § Common rationalizations |
-| Common Rationalizations — "I'm obviously not in a worktree" | worktree/SKILL.md § Common rationalizations |
-| Common Rationalizations — "the git fallback is quicker than hunting for a native tool" | worktree/SKILL.md § Common rationalizations |
-| Common Rationalizations — "The worktree directory is surely ignored already" | worktree/SKILL.md § Common rationalizations |
-| Common Rationalizations — "Any directory name works" | worktree/SKILL.md § Common rationalizations |
-| Common Rationalizations — "The workspace is fresh, baseline tests can wait" | worktree/SKILL.md § Common rationalizations |
+| Quick Reference | worktree/reference.md § Quick reference |
+| Quick Reference — already in linked worktree | worktree/reference.md § Quick reference |
+| Quick Reference — in a submodule | worktree/reference.md § Quick reference |
+| Quick Reference — native worktree tool available | worktree/reference.md § Quick reference |
+| Quick Reference — no native tool | worktree/reference.md § Quick reference |
+| Quick Reference — .worktrees/ exists | worktree/reference.md § Quick reference |
+| Quick Reference — worktrees/ exists | worktree/reference.md § Quick reference |
+| Quick Reference — both exist | worktree/reference.md § Quick reference |
+| Quick Reference — neither exists | worktree/reference.md § Quick reference |
+| Quick Reference — directory not ignored | worktree/reference.md § Quick reference |
+| Quick Reference — permission error on create | worktree/reference.md § Quick reference |
+| Quick Reference — tests fail during baseline | worktree/reference.md § Quick reference |
+| Quick Reference — no package.json/Cargo.toml | worktree/reference.md § Quick reference |
+| Common Rationalizations | worktree/reference.md § Common rationalizations |
+| Common Rationalizations — "I'm obviously not in a worktree" | worktree/reference.md § Common rationalizations |
+| Common Rationalizations — "the git fallback is quicker than hunting for a native tool" | worktree/reference.md § Common rationalizations |
+| Common Rationalizations — "The worktree directory is surely ignored already" | worktree/reference.md § Common rationalizations |
+| Common Rationalizations — "Any directory name works" | worktree/reference.md § Common rationalizations |
+| Common Rationalizations — "The workspace is fresh, baseline tests can wait" | worktree/reference.md § Common rationalizations |

@@ -41,11 +41,11 @@ Before your first question, classify the request and say the classification out 
 - **Bounded**: a well-scoped change to code that already exists in this repo (a new flag, a small endpoint, a one-file fix). Understanding the kind of app is not enough: bounded means the flow you are changing is already here to read. No existing flow to change means not bounded. Ask the clarifying questions that matter, present a short design IN CHAT (a few sentences to a few short paragraphs), and STOP. Implementation starts only after your partner says yes to that design; a bounded approval is as hard a gate as an architectural one. No spec file, no plan document.
 - **Architectural**: new projects, new subsystems, changes that restructure how components fit together or alter interfaces others depend on. Full process: questions, approaches, sectioned design, written spec, then the `dryas:plan` skill.
 
-In doubt between two paths, take the heavier one. The ratchet is one-way: hidden complexity found mid-task upgrades the path (stop, say so, step up). Nothing downgrades mid-task.
+In doubt between two paths, take the heavier one. The ratchet is one-way: hidden complexity found mid-task upgrades the path (stop, say so, step up). Nothing downgrades mid-task. "Too simple to need approval" is an anti-pattern: scale the artifact to the path, never skip its approval (when tempted, read `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/reference.md` § Too simple to need approval).
 
-## Too simple to need approval
+## Question rounds
 
-Anti-pattern. Every path ends with your partner approving the required design before implementation. A bounded change may need only two sentences in chat. A new todo-list project is architectural and needs the written spec and the planning hand-offs. Scale the artifact to the path; complete that path's reviews before implementation.
+Ask in numbered rounds of at most five questions, one topic per question; a topic that needs more becomes several questions. Each question carries your recommended answer, phrased so that "yes" accepts it; offer choices where they help, open questions where they do not. When a question is a fact about the code, docs or history, look it up yourself and state what you found; bring only decisions to the user. A round ends when the user has answered it. The questioning ends when every open decision the selected path needs has an answer, listed before you present the design. The hard gate still applies.
 
 ## Red flags
 
@@ -61,145 +61,51 @@ Anti-pattern. Every path ends with your partner approving the required design be
 
 ## Checklist
 
-Classify first, announce the path, then create a task for each item on your path and complete them in order.
+Classify first, announce the path, then create a task for each item on your path and complete them in order. Each item ends where its bound says.
 
 **Spike:**
-1. Explore project context: enough to frame the probe.
+1. Explore project context: until you can name what the probe touches.
 2. Present question and probe plan: 2-3 sentences.
 3. Get approval: a nod is enough.
-4. Investigate: as cheaply as correctness allows.
-5. Report findings: a recommendation; label anything built as throwaway.
+4. Investigate: as cheaply as correctness allows, until the question has an answer.
+5. Report findings: one recommendation; anything built is labeled throwaway.
 
 **Bounded:**
-1. Explore project context: files, docs, recent commits.
-2. Ask clarifying questions: one at a time, the ones that matter.
+1. Explore project context: files, docs, recent commits; until you can name the files the change touches.
+2. Ask clarifying questions: question rounds, until every open decision has an answer.
 3. Present a short design in chat: approach, files touched, testing.
 4. Get approval: STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate.
 5. Implement: the normal development workflow (test first applies); no plan document.
 
 **Architectural:**
 1. Explore project context: files, docs, recent commits.
-2. Ask clarifying questions: one at a time; purpose, constraints, success criteria.
+2. Ask clarifying questions: question rounds on purpose, constraints and success criteria, until every open decision has an answer.
 3. Propose 2-3 approaches: trade-offs and your recommendation.
 4. Present the design: in sections scaled to their complexity; get approval after each section.
-5. Write the design doc: see "After the design"; commit it.
-6. Spec self-review: quick inline check for placeholders, contradictions, ambiguity, scope.
-7. User reviews the written spec: ask before proceeding.
+5. Write the design doc: see "After the design"; it is committed.
+6. Spec self-review: no placeholder, contradiction, ambiguity or scope problem left.
+7. User reviews the written spec: an explicit approval.
 8. Transition to implementation: invoke the `dryas:plan` skill to write the implementation plan.
-
-## Process flow
-
-```dot
-digraph brainstorm {
-    "Classify: spike / bounded / architectural" [shape=diamond];
-    "Present question + probe (2-3 sentences)" [shape=box];
-    "Ask clarifying questions (bounded)" [shape=box];
-    "Present short design in chat" [shape=box];
-    "Human approves?" [shape=diamond];
-    "Investigate; report recommendation" [shape=doublecircle];
-    "Implement via normal workflow (no plan doc)" [shape=doublecircle];
-    "Explore project context" [shape=box];
-    "Ask clarifying questions" [shape=box];
-    "Propose 2-3 approaches" [shape=box];
-    "Present design sections" [shape=box];
-    "User approves design?" [shape=diamond];
-    "Write design doc" [shape=box];
-    "Spec self-review\n(fix inline)" [shape=box];
-    "User reviews spec?" [shape=diamond];
-    "Invoke the plan skill" [shape=doublecircle];
-    "Hidden complexity? Upgrade path" [shape=box];
-
-    "Classify: spike / bounded / architectural" -> "Present question + probe (2-3 sentences)" [label="spike"];
-    "Classify: spike / bounded / architectural" -> "Ask clarifying questions (bounded)" [label="bounded"];
-    "Classify: spike / bounded / architectural" -> "Explore project context" [label="architectural"];
-    "Present question + probe (2-3 sentences)" -> "Human approves?";
-    "Ask clarifying questions (bounded)" -> "Present short design in chat";
-    "Present short design in chat" -> "Human approves?";
-    "Human approves?" -> "Investigate; report recommendation" [label="spike: yes"];
-    "Human approves?" -> "Implement via normal workflow (no plan doc)" [label="bounded: yes"];
-    "Hidden complexity? Upgrade path" -> "Classify: spike / bounded / architectural";
-    "Explore project context" -> "Ask clarifying questions";
-    "Ask clarifying questions" -> "Propose 2-3 approaches";
-    "Propose 2-3 approaches" -> "Present design sections";
-    "Present design sections" -> "User approves design?";
-    "User approves design?" -> "Present design sections" [label="no, revise"];
-    "User approves design?" -> "Write design doc" [label="yes"];
-    "Write design doc" -> "Spec self-review\n(fix inline)";
-    "Spec self-review\n(fix inline)" -> "User reviews spec?";
-    "User reviews spec?" -> "Write design doc" [label="changes requested"];
-    "User reviews spec?" -> "Invoke the plan skill" [label="approved"];
-}
-```
-
-**Terminal states are path-bound.** Architectural: the ONLY skill you invoke after brainstorming is the `dryas:plan` skill, never a frontend-design, mcp-builder or other implementation skill. Bounded: after approval, implementation goes straight through the normal development workflow; no plan document. Spike: the terminal state is a reported recommendation.
 
 ## The process
 
-These steps serve the bounded and architectural paths (a spike stops at "present the probe, get a nod"). From **Exploring approaches** on it is architectural depth; for bounded work, context plus a few questions plus a short in-chat design is the whole process.
+From approaches on it is architectural depth; for bounded work, context plus a question round plus a short in-chat design is the whole process, and a spike stops at "present the probe, get a nod".
 
-**Understanding the idea:**
-- Check the current project state first (files, docs, recent commits).
-- Before detailed questions, assess scope: if the request describes several independent subsystems ("a platform with chat, file storage, billing and analytics"), flag it at once. Do not spend questions refining details of a project that must be decomposed first.
-- If it is too large for one spec, help decompose it into sub-projects: the independent pieces, how they relate, the build order. Then brainstorm the first sub-project through the normal flow. Each sub-project gets its own spec, plan and implementation cycle.
-- For well-scoped projects, ask questions one at a time to refine the idea.
-- Prefer multiple-choice questions; open-ended is fine too.
-- One question per message; if a topic needs more, break it into several questions.
-- Focus on understanding purpose, constraints and success criteria.
-
-**Exploring approaches:**
-- Propose 2-3 different approaches with trade-offs.
-- Present them conversationally with your recommendation and reasoning.
-- Lead with the recommended option and say why.
-- YAGNI ruthlessly: remove unnecessary features from every approach and design.
-
-**Presenting the design:**
-- Once you believe you understand what you are building, present the design.
-- Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced.
-- Ask after each section whether it looks right so far.
-- Cover architecture, components, data flow, error handling, testing.
-- Be ready to go back and clarify when something does not make sense.
-
-**Design for isolation and clarity:**
-- Break the system into smaller units, each with one clear purpose, communicating through well-defined interfaces, understandable and testable on its own.
-- For each unit you can answer: what does it do, how is it used, what does it depend on?
-- Can someone understand a unit without reading its internals? Can its internals change without breaking consumers? If not, the boundaries need work.
-- Small, well-bounded units are easier for you too: you reason better about code you can hold in context, and edits are more reliable in focused files. A file growing large often signals it does too much.
-
-**Working in existing codebases:**
-- Explore the current structure before proposing changes. Follow existing patterns.
-- Where existing code has problems that affect the work (an oversized file, unclear boundaries, tangled responsibilities), include targeted improvements in the design, as a good developer improves code they work in.
-- Do not propose unrelated refactoring. Stay on the current goal.
+- When exploring the idea, proposing approaches or presenting the design, read `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/reference.md` § Understanding the idea, § Exploring approaches, § Presenting the design, § Design for isolation and clarity and § Working in existing codebases.
+- When you want the whole flow as a graph, read `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/reference.md` § Process flow.
 
 Design work (UI/UX, layout, visual style, components, on-screen copy) also uses the design skills the rules name, when installed.
+
+**Terminal states are path-bound.** Architectural: the ONLY skill you invoke after brainstorming is the `dryas:plan` skill, never a frontend-design, mcp-builder or other implementation skill. Bounded: after approval, implementation goes straight through the normal development workflow; no plan document. Spike: the terminal state is a reported recommendation.
 
 ## After the design
 
 Architectural path.
 
-**Documentation:**
-- Save the spec as `docs/specs/YYYY-MM-DD-<topic>-design.md` (or under `docs/superpowers/specs/` if the project uses that), commit it, and review it with `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/spec-reviewer-prompt.md` before asking the user to read it.
-- User preferences for the spec location override this default.
-- Use a writing-clearly-and-concisely skill (elements-of-style) if available.
-
-**Spec self-review**, with fresh eyes, right after writing it:
-1. **Placeholder scan:** any "TBD", "TODO", incomplete section or vague requirement? Fix it.
-2. **Internal consistency:** do sections contradict each other? Does the architecture match the feature descriptions?
-3. **Scope check:** focused enough for a single implementation plan, or does it need decomposition?
-4. **Ambiguity check:** could a requirement be read two ways? Pick one and make it explicit.
-
-Fix issues inline; no need to re-review, just fix and move on.
-
-**User review gate:** after the review passes, ask the user to review the written spec before going on:
-
-> "Spec written and committed to `<path>`. Please review it and let me know if you want any changes before we write the implementation plan."
-
-Wait for the response. If they ask for changes, make them and re-run the review. Proceed only once the user approves.
-
-**Implementation:**
-- Invoke the `dryas:plan` skill (`/wplan`) to write the detailed implementation plan.
-- Do NOT invoke any other skill. The plan skill is the next step.
-
-The upstream browser-based visual companion (mockups and diagrams in a browser tab) is Node-based and not part of Dryas; it stays available by installing Superpowers.
+1. Save the spec as `docs/specs/YYYY-MM-DD-<topic>-design.md` (or under `docs/superpowers/specs/` if the project uses that), commit it, and review it with `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/spec-reviewer-prompt.md` before asking the user to read it. When choosing the location or the writing style, read `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/reference.md` § Spec documentation.
+2. Right after writing it, run the self-review in `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/reference.md` § Spec self-review; fix inline.
+3. **User review gate:** ask the user to review the written spec: "Spec written and committed to `<path>`. Please review it and let me know if you want any changes before we write the implementation plan." Wait for the response. If they ask for changes, make them and re-run the review. Proceed only once the user approves.
+4. Invoke the `dryas:plan` skill (`/wplan`) to write the detailed implementation plan. Invoke no other skill: the plan skill is the next step.
 
 ## Contested
 

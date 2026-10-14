@@ -39,6 +39,8 @@ git rev-parse --show-superproject-working-tree 2>/dev/null
 
 If the user declines, work in place and go to Project setup.
 
+This step is done when you have stated one of: already isolated (with the branch report), creating one, or working in place.
+
 ## Create the worktree
 
 Two mechanisms, in this order.
@@ -91,7 +93,7 @@ if [ -f pyproject.toml ]; then poetry install; fi
 if [ -f go.mod ]; then go mod download; fi
 ```
 
-No manifest (no `package.json`, `Cargo.toml` and so on): skip the dependency install.
+No manifest (no `package.json`, `Cargo.toml` and so on): skip the dependency install. Setup is done when the install command exits 0 (or there was nothing to install).
 
 ## Clean baseline
 
@@ -112,31 +114,7 @@ Tests passing (<N> tests, 0 failures)
 Ready to implement <feature-name>
 ```
 
-## Quick reference
+## Reference
 
-| Situation | Action |
-|---|---|
-| Already in a linked worktree | Skip creation (Detect existing isolation) |
-| In a submodule | Treat as a normal repo (submodule guard) |
-| Native worktree tool available | Use it |
-| No native tool | Git fallback |
-| `.worktrees/` exists | Use it (check it is ignored) |
-| `worktrees/` exists | Use it (check it is ignored) |
-| Both exist | Use `.worktrees/` |
-| Neither exists | Check the instructions, then default `.worktrees/` |
-| Directory not ignored | Add to `.gitignore` and commit |
-| Permission error on create | Sandbox fallback: work in place |
-| Tests fail at baseline | Report failures and ask |
-| No package manifest | Skip dependency install |
-| Another session works in this worktree | Create your own worktree and branch |
-
-## Common rationalizations
-
-| Excuse | Reality |
-|---|---|
-| "I'm obviously not in a worktree, no need to check" | Run the detection. Harness-created isolation and submodules both fool eyeballing; the commands settle it. |
-| "`git worktree add` is quicker than looking for a native tool" | A native tool owns placement, branching and cleanup. Bypassing it is the most common mistake: it creates phantom state the harness cannot see or manage. |
-| "The worktree directory is surely ignored already" | Run `git check-ignore`. An unignored worktree directory commits the whole tree into the repo. |
-| "Any directory name works" | Explicit instructions beat an existing project-local directory, which beats the `.worktrees/` default. |
-| "The workspace is fresh, baseline tests can wait" | A dirty baseline makes every later failure ambiguous. Run the tests now; proceeding past failures is your human partner's call. |
-| "That worktree is free right now, I'll share it" | One agent per worktree. Make your own. |
+- When a situation is unclear (submodule, both directory names exist, sandbox denial, another session in the worktree), read `<dryas-root>/skills/worktree/reference.md` § Quick reference.
+- When tempted to skip detection, the ignore check or the baseline, read `<dryas-root>/skills/worktree/reference.md` § Common rationalizations.

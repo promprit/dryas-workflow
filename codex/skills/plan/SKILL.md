@@ -24,14 +24,9 @@ If the spec covers several independent subsystems, it should have been split int
 
 ## File structure
 
-Before defining tasks, map which files are created or modified and what each is responsible for. This is where decomposition decisions get locked in.
+Before defining tasks, map which files are created or modified and what each is responsible for. This is where decomposition decisions get locked in. When drawing the file map, read `<dryas-root>/skills/plan/reference.md` § File structure guidance (one responsibility per file, focused files, files that change together live together, follow established patterns).
 
-- Design units with clear boundaries and well-defined interfaces. Each file has one clear responsibility.
-- You reason best about code you can hold in context, and edits are more reliable in focused files. Prefer smaller, focused files over large ones that do too much.
-- Files that change together live together. Split by responsibility, not by technical layer.
-- In existing codebases, follow established patterns. If the codebase uses large files, do not restructure unilaterally; but if a file you are modifying has grown unwieldy, a split in the plan is reasonable.
-
-This structure informs the task decomposition. Each task produces self-contained changes that make sense on their own.
+The map is done when every file a task touches is listed with its responsibility. This structure informs the task decomposition. Each task produces self-contained changes that make sense on their own.
 
 ## Task right-sizing
 
@@ -70,7 +65,8 @@ A `## Review Focus` section: the five input classes or failure modes the spec im
 
 ## Task format
 
-Each task begins exactly as `.orchestrate/PLAN.md` expects (`"<dryas-root>/bin/dryas-py" "<dryas-root>/jev/planfile.py" section` cuts it out for the executor):
+Each task begins exactly as `.orchestrate/PLAN.md` expects; this command cuts it out for the executor:
+`"<dryas-py>" -X utf8 "<dryas-root>/jev/planfile.py" section .orchestrate/PLAN.md <N>`
 
 ````markdown
 ## Task N: <title>
@@ -93,21 +89,11 @@ Failing test first: <test file :: test name>   (or `none (review)` / `none (clea
 - [ ] **Step 5: Commit.** <explicit paths, conventional message>
 ````
 
-- Scope lists the exact files to create, modify and test (globs only where a folder is new); steps name exact paths, with line ranges for modified code.
-- Interfaces: an executor sees only its own task, so this block is how it learns the names, parameter and return types its neighbors use.
-- Step 1 shows the real test code; Step 2 names the exact command and the expected failure; Step 3 shows the minimal implementation; Step 4 expects PASS; Step 5 commits explicit paths with a conventional message.
-
-Tasks that may run in parallel have non-overlapping Scope globs; say the order at the end of the file map.
+When filling in Scope, Interfaces or the steps, read `<dryas-root>/skills/plan/reference.md` § Task fields (exact paths, Consumes and Produces, what each step shows, non-overlapping Scope for parallel tasks).
 
 ## No placeholders
 
-Every step contains the actual content the engineer needs. These are plan failures; never write them:
-- "TBD", "TODO", "implement later", "fill in details".
-- "Add appropriate error handling" / "add validation" / "handle edge cases".
-- "Write tests for the above" (without the test code).
-- "Similar to Task N" (repeat the code: the engineer may read tasks out of order, and an executor sees only its own).
-- Steps that say what to do without showing how (code blocks are required for code steps).
-- References to types, functions or methods not defined in any task.
+Every step contains the actual content the engineer needs: real code, exact commands, expected output. When scanning for placeholders, read `<dryas-root>/skills/plan/reference.md` § Placeholder patterns; the plan is done when none of them appears.
 
 ## Self-review
 
@@ -118,7 +104,7 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 3. **Type consistency:** do the types, signatures and property names in later tasks match those defined earlier? `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 4. **Review focus:** for each input class or failure mode the spec implies, is there a task whose tests exercise it? The five uncovered ones most likely to bite a person go in Review Focus, and each line there gets its test added to the owning task. An empty section means you checked and found none, not that you skipped the check.
 
-Fix issues inline; no need to re-review, just fix and move on. A spec requirement with no task gets a task.
+Fix issues inline; no need to re-review, just fix and move on. A spec requirement with no task gets a task. The review is done when the four checks find nothing left to fix.
 
 Also review the plan with `<dryas-root>/skills/plan/plan-reviewer-prompt.md` when it has more than five tasks.
 

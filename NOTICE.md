@@ -11,3 +11,7 @@ This repository is MIT-licensed (see [LICENSE](LICENSE)). Third-party tools are 
 ## Generated copies
 
 `codex/jev` and `codex/pstack` are generated copies of `claude/jev` and `claude/pstack` (made by `tools/sync_codex_plugin.py`) for the Codex plugin; `codex/pstack` carries the same license texts, notice and provenance. The eight process skills in `codex/skills/`, with `codex/skills/UPSTREAM.md` and `LICENSE-superpowers`, are rendered from `claude/skills/` by the same tool. `claude/LICENSE` and `codex/LICENSE` are copies of [LICENSE](LICENSE), since Claude Code and Codex copy only the plugin folder.
+
+## Ideas
+
+The skill-writing rules in CONTRIBUTING.md, the brainstorm question rounds, the debug feedback loop and the parallel two-stage review draw on ideas from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT). No text is copied.

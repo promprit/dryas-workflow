@@ -38,21 +38,21 @@ Upstream: `verification-before-completion/`
 | Red Flags - STOP — "just this once" | verify/SKILL.md § Red flags |
 | Red Flags - STOP — tired and wanting work over | verify/SKILL.md § Red flags |
 | Red Flags - STOP — any wording implying success without verification | verify/SKILL.md § Red flags |
-| Rationalization Prevention | verify/SKILL.md § Rationalizations |
-| Rationalization Prevention — "Should work now" | verify/SKILL.md § Rationalizations |
-| Rationalization Prevention — "I'm confident" | verify/SKILL.md § Rationalizations |
-| Rationalization Prevention — "Just this once" | verify/SKILL.md § Rationalizations |
-| Rationalization Prevention — "Linter passed" | verify/SKILL.md § Rationalizations |
-| Rationalization Prevention — "Agent said success" | verify/SKILL.md § Rationalizations |
-| Rationalization Prevention — "I'm tired" | verify/SKILL.md § Rationalizations |
-| Rationalization Prevention — "Partial check is enough" | verify/SKILL.md § Rationalizations |
-| Rationalization Prevention — "Different words so rule doesn't apply" | verify/SKILL.md § Rationalizations |
-| Key Patterns | verify/SKILL.md § Key patterns |
-| Key Patterns — tests | verify/SKILL.md § Key patterns |
-| Key Patterns — regression tests (red-green) | verify/SKILL.md § Key patterns |
-| Key Patterns — build | verify/SKILL.md § Key patterns |
-| Key Patterns — requirements | verify/SKILL.md § Key patterns |
-| Key Patterns — agent delegation | verify/SKILL.md § Key patterns |
+| Rationalization Prevention | verify/reference.md § Rationalizations |
+| Rationalization Prevention — "Should work now" | verify/reference.md § Rationalizations |
+| Rationalization Prevention — "I'm confident" | verify/reference.md § Rationalizations |
+| Rationalization Prevention — "Just this once" | verify/reference.md § Rationalizations |
+| Rationalization Prevention — "Linter passed" | verify/reference.md § Rationalizations |
+| Rationalization Prevention — "Agent said success" | verify/reference.md § Rationalizations |
+| Rationalization Prevention — "I'm tired" | verify/reference.md § Rationalizations |
+| Rationalization Prevention — "Partial check is enough" | verify/reference.md § Rationalizations |
+| Rationalization Prevention — "Different words so rule doesn't apply" | verify/reference.md § Rationalizations |
+| Key Patterns | verify/reference.md § Key patterns |
+| Key Patterns — tests | verify/reference.md § Key patterns |
+| Key Patterns — regression tests (red-green) | verify/reference.md § Key patterns |
+| Key Patterns — build | verify/reference.md § Key patterns |
+| Key Patterns — requirements | verify/reference.md § Key patterns |
+| Key Patterns — agent delegation | verify/reference.md § Key patterns |
 | When To Apply | verify/SKILL.md § When to apply |
 | When To Apply — ALWAYS before: any success or completion claim | verify/SKILL.md § When to apply |
 | When To Apply — ALWAYS before: any expression of satisfaction | verify/SKILL.md § When to apply |

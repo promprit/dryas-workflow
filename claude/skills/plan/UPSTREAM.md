@@ -21,10 +21,10 @@ Upstream: `writing-plans/`
 | Scope Check — one plan per independent subsystem, each working and testable | plan/SKILL.md § Scope check |
 | File Structure | plan/SKILL.md § File structure |
 | File Structure — map files and responsibilities before tasks | plan/SKILL.md § File structure |
-| File Structure — clear boundaries, one responsibility per file | plan/SKILL.md § File structure |
-| File Structure — prefer smaller, focused files | plan/SKILL.md § File structure |
-| File Structure — files that change together live together | plan/SKILL.md § File structure |
-| File Structure — follow established patterns; split an unwieldy file you modify | plan/SKILL.md § File structure |
+| File Structure — clear boundaries, one responsibility per file | plan/reference.md § File structure guidance |
+| File Structure — prefer smaller, focused files | plan/reference.md § File structure guidance |
+| File Structure — files that change together live together | plan/reference.md § File structure guidance |
+| File Structure — follow established patterns; split an unwieldy file you modify | plan/reference.md § File structure guidance |
 | File Structure — structure informs decomposition; self-contained tasks | plan/SKILL.md § File structure |
 | Task Right-Sizing | plan/SKILL.md § Task right-sizing |
 | Task Right-Sizing — fold setup into the task that needs it; split where a reviewer could reject one | plan/SKILL.md § Task right-sizing |
@@ -46,20 +46,20 @@ Upstream: `writing-plans/`
 | Plan Document Header — Review Focus: silence in the spec is not permission to break | plan/SKILL.md § Review focus |
 | Plan Document Header — Review Focus: pin each line with a test in the owning task | plan/SKILL.md § Review focus |
 | Task Structure | plan/SKILL.md § Task format |
-| Task Structure — Files: create, modify with line ranges, test | plan/SKILL.md § Task format |
-| Task Structure — Interfaces: Consumes and Produces | plan/SKILL.md § Task format |
-| Task Structure — Step 1 write the failing test (code) | plan/SKILL.md § Task format |
-| Task Structure — Step 2 run test to verify it fails | plan/SKILL.md § Task format |
-| Task Structure — Step 3 write minimal implementation | plan/SKILL.md § Task format |
-| Task Structure — Step 4 run test to verify it passes | plan/SKILL.md § Task format |
-| Task Structure — Step 5 commit | plan/SKILL.md § Task format |
+| Task Structure — Files: create, modify with line ranges, test | plan/SKILL.md § Task format; plan/reference.md § Task fields |
+| Task Structure — Interfaces: Consumes and Produces | plan/SKILL.md § Task format; plan/reference.md § Task fields |
+| Task Structure — Step 1 write the failing test (code) | plan/SKILL.md § Task format; plan/reference.md § Task fields |
+| Task Structure — Step 2 run test to verify it fails | plan/SKILL.md § Task format; plan/reference.md § Task fields |
+| Task Structure — Step 3 write minimal implementation | plan/SKILL.md § Task format; plan/reference.md § Task fields |
+| Task Structure — Step 4 run test to verify it passes | plan/SKILL.md § Task format; plan/reference.md § Task fields |
+| Task Structure — Step 5 commit | plan/SKILL.md § Task format; plan/reference.md § Task fields |
 | No Placeholders | plan/SKILL.md § No placeholders |
-| No Placeholders — "TBD", "TODO", "implement later", "fill in details" | plan/SKILL.md § No placeholders |
-| No Placeholders — "Add appropriate error handling" / validation / edge cases | plan/SKILL.md § No placeholders |
-| No Placeholders — "Write tests for the above" | plan/SKILL.md § No placeholders |
-| No Placeholders — "Similar to Task N" | plan/SKILL.md § No placeholders |
-| No Placeholders — steps without how; code blocks required | plan/SKILL.md § No placeholders |
-| No Placeholders — references to undefined types or functions | plan/SKILL.md § No placeholders |
+| No Placeholders — "TBD", "TODO", "implement later", "fill in details" | plan/reference.md § Placeholder patterns |
+| No Placeholders — "Add appropriate error handling" / validation / edge cases | plan/reference.md § Placeholder patterns |
+| No Placeholders — "Write tests for the above" | plan/reference.md § Placeholder patterns |
+| No Placeholders — "Similar to Task N" | plan/reference.md § Placeholder patterns |
+| No Placeholders — steps without how; code blocks required | plan/reference.md § Placeholder patterns |
+| No Placeholders — references to undefined types or functions | plan/reference.md § Placeholder patterns |
 | Self-Review | plan/SKILL.md § Self-review |
 | Self-Review — a checklist you run yourself | plan/SKILL.md § Self-review |
 | Self-Review — 1. Spec coverage | plan/SKILL.md § Self-review |

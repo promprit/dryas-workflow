@@ -36,8 +36,8 @@ Upstream: `brainstorming/`
 | Three Paths — Bounded: design in chat, STOP, approval as hard a gate; no spec, no plan doc | brainstorm/SKILL.md § Three paths |
 | Three Paths — Architectural | brainstorm/SKILL.md § Three paths |
 | Three Paths — in doubt take the heavier path; one-way ratchet, nothing downgrades | brainstorm/SKILL.md § Three paths |
-| Anti-Pattern: "Too Simple To Need Approval" | brainstorm/SKILL.md § Too simple to need approval |
-| Anti-Pattern: "Too Simple To Need Approval" — scale the artifact to the path; complete its reviews | brainstorm/SKILL.md § Too simple to need approval |
+| Anti-Pattern: "Too Simple To Need Approval" | brainstorm/reference.md § Too simple to need approval; brainstorm/SKILL.md § Three paths |
+| Anti-Pattern: "Too Simple To Need Approval" — scale the artifact to the path; complete its reviews | brainstorm/reference.md § Too simple to need approval; brainstorm/SKILL.md § Three paths |
 | Red Flags | brainstorm/SKILL.md § Red flags |
 | Red Flags — "This is too simple to need a design" | brainstorm/SKILL.md § Red flags |
 | Red Flags — "I'll call it bounded and skip the spec" | brainstorm/SKILL.md § Red flags |
@@ -67,44 +67,44 @@ Upstream: `brainstorming/`
 | Checklist — Architectural 7. Spec self-review | brainstorm/SKILL.md § Checklist |
 | Checklist — Architectural 8. User reviews written spec | brainstorm/SKILL.md § Checklist |
 | Checklist — Architectural 9. Transition to implementation | brainstorm/SKILL.md § Checklist |
-| Process Flow | brainstorm/SKILL.md § Process flow |
-| Process Flow — digraph | brainstorm/SKILL.md § Process flow |
-| Process Flow — terminal states are path-bound; only writing-plans after architectural | brainstorm/SKILL.md § Process flow |
+| Process Flow | brainstorm/reference.md § Process flow |
+| Process Flow — digraph | brainstorm/reference.md § Process flow |
+| Process Flow — terminal states are path-bound; only writing-plans after architectural | brainstorm/SKILL.md § The process |
 | The Process | brainstorm/SKILL.md § The process |
 | The Process — spike stops at the probe; bounded is context, questions, short design | brainstorm/SKILL.md § The process |
-| The Process — Understanding the idea: check project state first | brainstorm/SKILL.md § The process |
-| The Process — Understanding the idea: flag multiple independent subsystems at once | brainstorm/SKILL.md § The process |
-| The Process — Understanding the idea: decompose into sub-projects, each its own cycle | brainstorm/SKILL.md § The process |
-| The Process — Understanding the idea: one question at a time | brainstorm/SKILL.md § The process |
-| The Process — Understanding the idea: prefer multiple choice | brainstorm/SKILL.md § The process |
-| The Process — Understanding the idea: one question per message | brainstorm/SKILL.md § The process |
-| The Process — Understanding the idea: purpose, constraints, success criteria | brainstorm/SKILL.md § The process |
-| The Process — Exploring approaches: 2-3 approaches with trade-offs | brainstorm/SKILL.md § The process |
-| The Process — Exploring approaches: conversational, with recommendation | brainstorm/SKILL.md § The process |
-| The Process — Exploring approaches: lead with the recommended option | brainstorm/SKILL.md § The process |
-| The Process — Exploring approaches: YAGNI ruthlessly | brainstorm/SKILL.md § The process |
-| The Process — Presenting the design: present once understood | brainstorm/SKILL.md § The process |
-| The Process — Presenting the design: scale sections, up to 200-300 words | brainstorm/SKILL.md § The process |
-| The Process — Presenting the design: ask after each section | brainstorm/SKILL.md § The process |
-| The Process — Presenting the design: cover architecture, components, data flow, errors, testing | brainstorm/SKILL.md § The process |
-| The Process — Presenting the design: go back and clarify | brainstorm/SKILL.md § The process |
-| The Process — Design for isolation and clarity: small units, clear interfaces | brainstorm/SKILL.md § The process |
-| The Process — Design for isolation and clarity: what it does, how used, what it depends on | brainstorm/SKILL.md § The process |
-| The Process — Design for isolation and clarity: understandable without internals | brainstorm/SKILL.md § The process |
-| The Process — Design for isolation and clarity: focused files; large file signals too much | brainstorm/SKILL.md § The process |
-| The Process — Working in existing codebases: explore first, follow patterns | brainstorm/SKILL.md § The process |
-| The Process — Working in existing codebases: targeted improvements that affect the work | brainstorm/SKILL.md § The process |
-| The Process — Working in existing codebases: no unrelated refactoring | brainstorm/SKILL.md § The process |
+| The Process — Understanding the idea: check project state first | brainstorm/reference.md § Understanding the idea |
+| The Process — Understanding the idea: flag multiple independent subsystems at once | brainstorm/reference.md § Understanding the idea |
+| The Process — Understanding the idea: decompose into sub-projects, each its own cycle | brainstorm/reference.md § Understanding the idea |
+| The Process — Understanding the idea: one question at a time | brainstorm/SKILL.md § Question rounds |
+| The Process — Understanding the idea: prefer multiple choice | brainstorm/SKILL.md § Question rounds |
+| The Process — Understanding the idea: one question per message | brainstorm/SKILL.md § Question rounds |
+| The Process — Understanding the idea: purpose, constraints, success criteria | brainstorm/reference.md § Understanding the idea |
+| The Process — Exploring approaches: 2-3 approaches with trade-offs | brainstorm/reference.md § Exploring approaches |
+| The Process — Exploring approaches: conversational, with recommendation | brainstorm/reference.md § Exploring approaches |
+| The Process — Exploring approaches: lead with the recommended option | brainstorm/reference.md § Exploring approaches |
+| The Process — Exploring approaches: YAGNI ruthlessly | brainstorm/reference.md § Exploring approaches |
+| The Process — Presenting the design: present once understood | brainstorm/reference.md § Presenting the design |
+| The Process — Presenting the design: scale sections, up to 200-300 words | brainstorm/reference.md § Presenting the design |
+| The Process — Presenting the design: ask after each section | brainstorm/reference.md § Presenting the design |
+| The Process — Presenting the design: cover architecture, components, data flow, errors, testing | brainstorm/reference.md § Presenting the design |
+| The Process — Presenting the design: go back and clarify | brainstorm/reference.md § Presenting the design |
+| The Process — Design for isolation and clarity: small units, clear interfaces | brainstorm/reference.md § Design for isolation and clarity |
+| The Process — Design for isolation and clarity: what it does, how used, what it depends on | brainstorm/reference.md § Design for isolation and clarity |
+| The Process — Design for isolation and clarity: understandable without internals | brainstorm/reference.md § Design for isolation and clarity |
+| The Process — Design for isolation and clarity: focused files; large file signals too much | brainstorm/reference.md § Design for isolation and clarity |
+| The Process — Working in existing codebases: explore first, follow patterns | brainstorm/reference.md § Working in existing codebases |
+| The Process — Working in existing codebases: targeted improvements that affect the work | brainstorm/reference.md § Working in existing codebases |
+| The Process — Working in existing codebases: no unrelated refactoring | brainstorm/reference.md § Working in existing codebases |
 | After the Design (architectural path) | brainstorm/SKILL.md § After the design |
 | After the Design (architectural path) — Documentation: spec path | brainstorm/SKILL.md § After the design |
-| After the Design (architectural path) — Documentation: user preferences override the location | brainstorm/SKILL.md § After the design |
-| After the Design (architectural path) — Documentation: writing-clearly-and-concisely skill if available | brainstorm/SKILL.md § After the design |
+| After the Design (architectural path) — Documentation: user preferences override the location | brainstorm/reference.md § Spec documentation |
+| After the Design (architectural path) — Documentation: writing-clearly-and-concisely skill if available | brainstorm/reference.md § Spec documentation |
 | After the Design (architectural path) — Documentation: commit the design document | brainstorm/SKILL.md § After the design |
-| After the Design (architectural path) — Spec Self-Review 1. Placeholder scan | brainstorm/SKILL.md § After the design |
-| After the Design (architectural path) — Spec Self-Review 2. Internal consistency | brainstorm/SKILL.md § After the design |
-| After the Design (architectural path) — Spec Self-Review 3. Scope check | brainstorm/SKILL.md § After the design |
-| After the Design (architectural path) — Spec Self-Review 4. Ambiguity check | brainstorm/SKILL.md § After the design |
-| After the Design (architectural path) — Spec Self-Review: fix inline, no re-review | brainstorm/SKILL.md § After the design |
+| After the Design (architectural path) — Spec Self-Review 1. Placeholder scan | brainstorm/reference.md § Spec self-review |
+| After the Design (architectural path) — Spec Self-Review 2. Internal consistency | brainstorm/reference.md § Spec self-review |
+| After the Design (architectural path) — Spec Self-Review 3. Scope check | brainstorm/reference.md § Spec self-review |
+| After the Design (architectural path) — Spec Self-Review 4. Ambiguity check | brainstorm/reference.md § Spec self-review |
+| After the Design (architectural path) — Spec Self-Review: fix inline, no re-review | brainstorm/reference.md § Spec self-review |
 | After the Design (architectural path) — User Review Gate: ask, wait, re-review on changes, proceed on approval | brainstorm/SKILL.md § After the design |
 | After the Design (architectural path) — Implementation: invoke writing-plans | brainstorm/SKILL.md § After the design |
 | After the Design (architectural path) — Implementation: do not invoke any other skill | brainstorm/SKILL.md § After the design |
