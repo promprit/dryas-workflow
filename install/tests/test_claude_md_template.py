@@ -17,7 +17,7 @@ class ClaudeMdTemplateTest(unittest.TestCase):
         for s in ("~/.dryas/docs/dryas-workflow.md", "dryas:brainstorm", "ui-ux-pro-max", "impeccable",
                   "/orchestrate", "git worktree", "One agent per worktree", "/wreview",
                   "dryas:verify", "Ask before any install", ".orchestrate/",
-                  "scope lock -> Jev -> Ruflo", "/handoff", "Edit the repo"):
+                  "scope lock -> gate -> memory -> observer", "/handoff", "Edit the repo"):
             self.assertIn(s, self.off, s)
 
     def test_pstack_rules_gated(self):
