@@ -20,7 +20,7 @@ Dryas has five layers and one loop. The layers say *what must exist*; the loop s
 
 | Layer | Purpose | Model doc | Reference binding |
 | --- | --- | --- | --- |
-| **Memory** | Carry outcomes across sessions so the same mistake is not paid for twice. | [memory-model.md](memory-model.md) | Ruflo memory, namespaced per repo |
+| **Memory** | Carry outcomes across sessions so the same mistake is not paid for twice. | [memory-model.md](memory-model.md) | Dryas memory (`~/.dryas/dryas.db`: memory, edits, tasks, sessions, patterns, access and kv tables; one namespace per repo), served by the `jev` MCP server. Ruflo memory is an optional provider |
 | **Governance** | Keep decisions with the right party: humans for design and outward actions, a cheap judge for narrow questions, a lock for file scope. | [governance.md](governance.md) | Jev gate and judge, scope lock hook, approval rules |
 | **Execution** | Turn an approved design into small, verifiable tasks done by cheap agents that cannot collide. | [execution-model.md](execution-model.md) | `/orchestrate`, `executor` agent (`fast` tier first; `standard` default for reviews), git worktrees |
 | **Escalation** | Climb to a stronger model only on evidence of failure, with the reason on record. | [escalation-model.md](escalation-model.md) | fast → standard → strong → frontier, `log_escalation` |

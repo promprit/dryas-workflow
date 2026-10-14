@@ -1,0 +1,40 @@
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+DOCS = ["docs/workflow.md", "docs/architecture.md", "docs/memory-model.md", "docs/governance.md", "docs/install.md",
+        "docs/harnesses.md", "docs/roles.md", "docs/execution-model.md", "docs/review-model.md",
+        "docs/release-check.md", "docs/roadmap.md", "CONTRIBUTING.md"]
+STALE = [r"the \*\*only\*\* memory", r"only memory/learning layer", r"Superpowers\*\* \(plugin\) \| Process",
+         r"required by the plugin", r"required dependency", r"superpowers:[a-z]", r"Ruflo is the memory",
+         r"installs Superpowers as a dependency", r"searches Ruflo memory", r"stored in Ruflo memory",
+         r"Node is used only for the Ruflo MCP shim"]
+FILES = DOCS  # Task 11 appends README.md, reference/README.md, docs/why-dryas.md
+
+
+class DocsTest(unittest.TestCase):
+    def text(self, p):
+        return (ROOT / p).read_text(encoding="utf-8")
+
+    def test_no_stale_requirement_claims(self):
+        for p in FILES:
+            t = self.text(p)
+            for pat in STALE:
+                self.assertIsNone(re.search(pat, t), "%s: %s" % (p, pat))
+
+    def test_required_facts(self):
+        need = {
+            "docs/install.md": ["--judge local", "--with-ruflo", "--with-superpowers", "--with-design", "--memory",
+                                "dryas memory import-ruflo", "Node"],
+            "docs/workflow.md": ["mem-edit", "mem-session-end", "memory_search", "dryas:brainstorm", "/retro",
+                                 "fast → standard → strong → frontier"],
+            "docs/memory-model.md": ["dryas.db", "FTS5", "PageRank", "include_archive", "dryas memory consolidate"],
+            "docs/governance.md": ["Judge providers", "deterministic rules", "judge-corpus"],
+            "docs/harnesses.md": ["mem-session-start", "memory_search", "Claude Code only"],
+            "docs/roadmap.md": ["owned core"],
+        }
+        for p, needles in need.items():
+            t = self.text(p)
+            for n in needles:
+                self.assertIn(n, t, "%s lacks %r" % (p, n))

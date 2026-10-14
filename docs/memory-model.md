@@ -29,6 +29,17 @@ Session memory is short-lived (minutes to hours, one project). Project memory is
 | Root causes found | Full transcripts |
 | Approaches rejected during brainstorm, and why | Personal data |
 
-## Reference binding
+## Dryas memory
 
-Ruflo is the memory layer: `memory_search` before planning, `memory_store` after each task, namespace = main repo folder name, data under `$DRYAS_DATA_ROOT/ruflo`. Session memory is Dryas's own `/handoff` and compaction hooks. Details: [workflow.md §6–7](workflow.md).
+The reference implementation's memory layer is Dryas's own (`memory: dryas`, the default). Ruflo memory stays available as the `--memory ruflo` provider, and `--memory none` turns memory off.
+
+- **Store.** One SQLite file in WAL mode, `~/.dryas/dryas.db` (`DRYAS_DB` or `DRYAS_DATA_ROOT` moves it), stdlib `sqlite3`. Tables: `memory` (the records), `edits`, `tasks`, `sessions`, `patterns`, `access`, `forgotten` and `kv`. A newer database than this Dryas opens read-only.
+- **Search.** FTS5 when this SQLite build has it, a LIKE fallback otherwise (MEM-5: writes keep working either way, and the index is rebuilt when FTS5 returns). Results come with a reason string. Ranking: the share of query terms matched, then the PageRank of the memory graph and how often a memory was used. Learned patterns whose key mentions a query term come back with the results.
+- **Namespaces.** The main repo folder name, the same rule as Ruflo's, so both agree.
+- **Writes.** `memory_store` takes kinds `outcome`, `fact` and `retro`. MEM-4 checks refuse a secret-shaped value, over-long text and file contents. The tools on the `jev` MCP server are `memory_search`, `memory_store`, `memory_list`, `memory_forget` and `swarm_init`.
+- **Archive.** Imported hook noise is kept as kind `archive`; search skips it unless the call passes `include_archive`.
+- **Hooks fill it** (observe-only, Claude Code): `mem-edit`, `mem-task`, `mem-session-start`, `mem-session-end`; see [workflow.md §5](workflow.md). Codex has no memory hooks and uses the tools only.
+- **Consolidation** (dedupe, the memory graph, PageRank, learned patterns) runs at session end inside the hook while its budget allows. When it would overrun, the namespace is marked pending and a detached `dryas memory consolidate` finishes it outside the hook budget. A lock file beside the store keeps runs from overlapping (a second run exits at once, and a stale lock is taken over), and the next session start retries a pending marker. `/tune` reports the skipped and background runs, and the session-start rules add a warning line after repeated skips with no finished background run.
+- **Migration.** `dryas memory import-ruflo` reads a Ruflo memory read-only into the store. It is idempotent, exits non-zero if a source row is missing afterwards, and leaves `~/.dryas/ruflo` in place. `dryas memory stats` counts rows per namespace and kind.
+
+Session memory is Dryas's own `/handoff` and compaction hooks. Details: [workflow.md §6–7](workflow.md).

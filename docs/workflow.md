@@ -12,7 +12,7 @@ Last updated: 2026-10-05.
 
 - **Billing.** All Claude work runs on the Claude subscription.
   - Never set or use `ANTHROPIC_API_KEY`.
-  - Executors spawn through Claude Code's own Agent/Task tool, never through Ruflo's provider layer.
+  - Executors spawn through Claude Code's own Agent/Task tool, never through a third-party provider layer (Ruflo's, when installed).
 - **The only API key is `OPENROUTER_API_KEY`, and only Jev uses it.**
   - It lives only in the shell environment (your shell profile, for example `~/.zshrc`) or in the plugin option `openrouter_key`, which Claude Code keeps in its secure storage. Never write it to any file, config, log or test.
   - Claude Code passes the environment on to hooks and MCP servers, so never use `claude mcp add -e` with the key.
@@ -32,8 +32,10 @@ Last updated: 2026-10-05.
 |---|---|---|
 | **Orchestrator (main session)** — Claude Code on the `strong` tier by default; may be another harness (§14) | Orchestrator: brainstorms with you, plans, dispatches, judges, integrates | Edit project files itself on multi-step work |
 | **Jev** (TypeSafe `typesafe/jev-1.13` via OpenRouter) | Decision support: tool-call gate, prompt routing, per-task triage, commit check, compaction keep/drop | Write code or plans |
-| **Ruflo** (`ruflo`, latest; tested 3.53.0) | Orchestration plumbing (hierarchical swarm) and the **only** memory/learning layer | Plan (its goals/planning hooks are dropped); use `ANTHROPIC_API_KEY` |
-| **Superpowers** (plugin) | Process: brainstorming, worktrees, TDD, two-stage review, verification, plan format | — |
+| **Dryas memory** (`~/.dryas/dryas.db`, the `memory` component) | The memory/learning layer and the `swarm_init` ledger, served by the `jev` MCP server (§7) | Plan; store secrets or file contents |
+| **Dryas skills** (`dryas:brainstorm`, `dryas:worktree`, `dryas:tdd`, `dryas:review-request`, `dryas:review-receive`, `dryas:verify`, `dryas:plan`, `dryas:debug`) | Process: brainstorming, worktrees, TDD, two-stage review, verification, plan format | — |
+| **Ruflo** (optional extra, `--with-ruflo`; tested 3.53.0) | Alternative memory provider (`--memory ruflo`) and its hooks and plugins (§7) | Plan; use `ANTHROPIC_API_KEY` |
+| **Superpowers** (optional extra, `--with-superpowers`) | The upstream process skills, installed next to the Dryas ones (§8) | — |
 | **pstack picks** (vendored from pstack, optional, `--no-pstack-picks`) | Review, cleanup and perf references, executor principles | Route, pick models, add hooks, or run without a trigger |
 | **FlowObserve** (separate observer app, optional) | Ambient monitor of live sessions: shows each session's stage in the loop (Brainstorm, Plan, Judge, Build, Escalate, Review, Ship) and what needs you (observe-only) | Block or change anything; write Jev logs or `.orchestrate/` |
 
@@ -63,7 +65,7 @@ Last updated: 2026-10-05.
 
 ## 4. How a task flows
 
-1. **Brainstorm first, always.** The orchestrator runs `superpowers:brainstorming` with you:
+1. **Brainstorm first, always.** The orchestrator runs `dryas:brainstorm` with you:
    - it asks questions and proposes approaches
    - you approve the design
    - for architectural work, a written spec follows
@@ -74,9 +76,9 @@ Last updated: 2026-10-05.
 2. **Route.** On every prompt, the Jev route hook may add one line such as `Jev route: swarm (0.82); opus: no (0.91)`. This is advisory, and it's silent below 0.7.
    - Single-file fix: plain Claude on the `strong` tier.
    - Multi-step: `/orchestrate <task>`.
-3. **Memory first.** `/orchestrate` searches Ruflo memory (`memory_search`, with the main repo folder name as the namespace) and writes down the top 3 past outcomes (what worked, what failed).
+3. **Memory first.** `/orchestrate` searches Dryas memory (`memory_search`, with the main repo folder name as the namespace) and writes down the top 3 past outcomes (what worked, what failed).
 4. **Plan as a file.**
-   - Create a git worktree (`superpowers:using-git-worktrees`).
+   - Create a git worktree (`dryas:worktree`).
    - **One agent per worktree.** A worktree belongs to exactly one orchestrator session (one loop). Never run two sessions in the same worktree, and never dispatch into a worktree another session owns. To run more work on the same project at once, start another session in a new worktree on its own branch: loops run in parallel and never collide, and each merges only after its own review and verification. Executors inside one loop share their loop's worktree, kept apart by non-overlapping `Scope:` globs.
    - Write `.orchestrate/PLAN.md` in the worktree, one section per task, in this format:
      ```
@@ -99,16 +101,16 @@ Last updated: 2026-10-05.
 7. **Dispatch.**
    - Write `.orchestrate/active.json`, which arms the scope lock.
    - Each executor receives **only its own section** (`"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>`; Claude Code substitutes the plugin path, and setup renders the allow rule with the same absolute paths) plus the worktree path, never the whole plan.
-   - Independent tasks run in parallel through Ruflo's hierarchical swarm. Agents spawn via Claude Code's Agent tool, so they run on the subscription.
+   - Independent tasks run in parallel in parallel, recorded in the `swarm_init` ledger (topology always `hierarchical`). Agents spawn via Claude Code's Agent tool, so they run on the subscription.
    - Executors follow four principles (fix root causes, prove it works, test behavior, subtract before you add), full text in the plugin's `pstack/principles/`.
 8. **On return.** Jev checks `done` (done-criteria met?) and `risk` (routine / worth a look / incident).
    - Only incidents, failures and escalations reach the orchestrator in full; everything else becomes one summary line.
-   - The outcome is stored in Ruflo memory.
+   - The outcome is stored in Dryas memory (`memory_store`).
 8b. **Interrogate and cleanup** (pstack picks). Jev noul (yes/no) needs_interrogate (architectural or contested change?); at ≥ 0.7, or when you ask, two read-only executor reviewers (`standard` and `strong`, never `frontier`) run /interrogate and the orchestrator judges; Act On items become tasks. Then one `standard` cleanup task removes slop and stale comments from the diff's files, tests rerun. Docs-only diffs skip cleanup.
 9. **Finish.**
    - Delete `active.json`.
    - Run `/wreview` (two-stage: spec compliance, then code quality).
-   - Run `superpowers:verification-before-completion`.
+   - Run `dryas:verify`.
    - Run `/commit`: Jev asks "safe to commit?"; below 0.7, the orchestrator decides. Commits only, never pushes.
    - Merge only after review and verification pass.
 10. **Overrides.** Whenever the orchestrator acts against a Jev answer, it calls `log_override`. That feeds `/tune`.
@@ -134,13 +136,20 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
    - Otherwise no decision, so normal permissions apply. The gate **never auto-allows**.
    - Any failure (timeout 3 s, no key, offline, SSD missing) means no decision.
    - Gate state: `dev workspace on external SSD; prod credentials NOT present; parallel sessions possible in different project folders`.
-3. **Ruflo PreToolUse stages** (pre-bash only), skipped when the SSD is missing.
+3. **Ruflo PreToolUse stage** (pre-bash only; present only with the Ruflo extra), skipped when the SSD is missing.
 4. *(optional)* **FlowObserve `fo-hook`** (observe-only, last; its output is ignored; shipped disabled; §12).
 
-**UserPromptSubmit** (15 s): Jev route, then context watch, then FlowObserve if enabled (observe-only, §12). Ruflo's own route hook is dropped.
+**UserPromptSubmit** (15 s): Jev route, then context watch, then FlowObserve if enabled (observe-only, §12). Ruflo's own route hook (with the Ruflo extra) is dropped.
 
 **Other events:**
-- Ruflo learning and memory hooks: post-edit, session restore/end, memory import (no sync), PreCompact persist, SubagentStop post-task.
+- **Dryas memory stages** (the `memory` component, observe-only: every applicable stage runs in order, exit codes and output are ignored, nothing is printed, and each has a 2 s budget; the chain exits 0 whatever they do). Claude Code only:
+  - `mem-edit`: PostToolUse and PostToolUseFailure on Write, Edit, MultiEdit and NotebookEdit; records each edit and whether it succeeded.
+  - `mem-task`: SubagentStop; records the finished task.
+  - `mem-session-start`: SessionStart; opens the session, indexes the project's auto-memory notes, and retries a consolidation marked pending. Codex has no memory hooks, so this stage is Claude Code only. Codex gets the memory tools over MCP instead (§7).
+  - `mem-session-end`: SessionEnd writes the session summary and consolidates; PreCompact runs the same stage summary-only.
+  - `gate-outcome` (core, PostToolUse on Bash, Claude Code only): records what happened after a gated command, for `/tune`.
+  - A consolidation that would overrun the budget is marked pending and finished by a detached `dryas memory consolidate`; see [memory-model.md](memory-model.md).
+- With the Ruflo extra, its own learning and memory hooks run instead of the Dryas stages: post-edit, session restore/end, memory import (no sync), PreCompact persist, SubagentStop post-task.
 - Jev compaction: `PreCompact` runs `compact_keep.py`, `SessionStart(compact)` runs `compact_restore.py`, and `SessionStart(clear)` runs `handoff_restore.py` (for `/handoff`).
 - *(optional)* FlowObserve's own hooks for other events, installed by FlowObserve itself (§12).
 
@@ -168,7 +177,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   - every choice includes a `none_of_these` option
   - independent questions batched into one call
 - Noul (yes/no) answers carry no confidence, so ours is computed as `max(p, 1-p)`.
-- The Jev MCP server normalizes question shapes and returns safe error causes. The permission allow-list now includes the 3 Ruflo memory/swarm tools (`memory_search`, `memory_store`, `swarm_init`), `Read(~/.dryas/**)` and the planfile command.
+- The Jev MCP server normalizes question shapes and returns safe error causes. The memory tools (`memory_search`, `memory_store`, `memory_list`, `memory_forget`, `swarm_init`) are on the same `jev` server, so its one allow rule covers them; the allow-list also has `Read(~/.dryas/**)` and the planfile command.
 - **Thresholds** live only in `~/.dryas/jev/thresholds.json` (defaults in `thresholds.py`):
 
   | Area | Setting |
@@ -201,14 +210,21 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   It **proposes** threshold changes, and they're applied only after you approve each one.
 - **Cost.** $0.042 per million input tokens, with free output. Each response carries `usage.cost`, which is summed in `/tune`.
 
-## 7. Ruflo details
+## 7. Dryas memory, and the optional extra Ruflo
+
+**Dryas memory** is the default memory provider (`memory: dryas`):
+- One SQLite file, `~/.dryas/dryas.db` (under `DRYAS_DATA_ROOT` when set), served by the `jev` MCP server: `memory_search`, `memory_store`, `memory_list`, `memory_forget` and `swarm_init`, named `mcp__plugin_dryas_jev__<tool>`. The namespace is the main repo folder name. Model: [memory-model.md](memory-model.md).
+- The stages in §5 fill it. If the file is locked or missing, memory is degraded: the hooks exit 0, and work goes on without history.
+- `dryas memory import-ruflo` copies an existing Ruflo memory in; see [install.md](install.md#cut-over-from-1x).
+
+**Optional extra: Ruflo** (`--with-ruflo`, or `--memory ruflo`). Everything below applies only when it is installed. Needs Node and npm.
 
 - **CLI:** `npm i -g ruflo` (latest; tested 3.53.0, with automatic fallback), on the Mac's nvm Node.
 - **Plugins** (marketplace `ruvnet/ruflo`, user scope): ruflo-core 0.2.6, ruflo-swarm 0.3.0, ruflo-testgen 0.2.1, ruflo-jujutsu 0.2.1 (diff risk scoring). ruflo-cost-tracker 0.26.3 is installed but DISABLED (its Stop hook ran unpinned `npx @claude-flow/cli@latest`; disabled 2026-10-03). Not installed: ruflo-goals, or any other Ruflo plugin.
 - **Settings env:** `RUFLO_HOOK_SKIP_NPX=1`, `RUFLO_MCP_SKIP_NPX=1` and `RUFLO_NO_AUTO_ENABLE=1`. Ruflo never runs `npx ruflo@latest`, and never writes `~/.ruflo/first-run-enabled.json`.
 - **Topology:** hierarchical, passed in `swarm_init` arguments (the plugin MCP defaults to hierarchical-mesh, so the orchestrator always passes it).
 - **MCP launch:** the Ruflo MCP runs through the `RUFLO_MCP_CLI_OVERRIDE` shim, with cwd `Dev/_caches/ruflo/<main repo name>`. `RUFLO_DAEMON_AUTOSTART=0`. The memory namespace is the main repo folder name.
-- **Memory MCP tools** (from the ruflo-core plugin, named `mcp__plugin_ruflo-core_ruflo__<tool>`): `memory_search`, `memory_store` and `swarm_init`. The namespace is the main repo folder name.
+- **Ruflo memory MCP tools** (from the ruflo-core plugin, named `mcp__plugin_ruflo-core_ruflo__<tool>`): `memory_search`, `memory_store` and `swarm_init`. The namespace is the main repo folder name.
 - **Memory and data** go to `$DRYAS_DATA_ROOT/ruflo` (SSD), per project. Every lifted Ruflo hook is wrapped by the plugin's `ruflo/run.py` (helpers and the MCP shim live in `~/.dryas/ruflo`), so it's a silent no-op when the SSD or a helper is missing.
 - **Hooks:**
   - **Lifted by us:** pre-bash (an observe-only chain stage), session-restore, auto-memory import (import only, no Stop sync), helper post-edit, helper session-end on SessionEnd and on PreCompact (manual and auto), and SubagentStop post-task.
@@ -217,17 +233,15 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   - **Dropped:** route, compaction guidance, SubagentStart status, notify.
 - Ruflo's `CLAUDE.md` planning sections ("Implementation Loop", "Concurrency and authority") are not used, because the orchestrator owns planning.
 
-## 8. Superpowers details
+## 8. Optional extra: Superpowers
 
-- **Used:**
-  - brainstorming (**always first**)
-  - using-git-worktrees
-  - test-driven-development
+The process skills Dryas uses are its own (`dryas:brainstorm`, `dryas:worktree`, `dryas:tdd`, `dryas:review-request`, `dryas:review-receive`, `dryas:verify`, `dryas:plan`, `dryas:debug`; see `claude/skills/UPSTREAM.md`). Superpowers is not required. With `--with-superpowers` the upstream plugin is installed too, and the notes below apply to it.
+
+- **Upstream skills Dryas replaced:**
+  - brainstorming, using-git-worktrees, test-driven-development
   - requesting-code-review and receiving-code-review
-  - verification-before-completion
-  - writing-plans (plan format)
-  - systematic-debugging
-- **Denied** in `permissions.deny`: subagent-driven-development, executing-plans, dispatching-parallel-agents, finishing-a-development-branch and diagnosing-superpowers. The orchestrate skill replaces the planning and orchestration ones. you can still type them by hand.
+  - verification-before-completion, writing-plans, systematic-debugging
+- **Denied** in `permissions.deny` when Superpowers is installed: subagent-driven-development, executing-plans, dispatching-parallel-agents, finishing-a-development-branch and diagnosing-superpowers. The orchestrate skill replaces the planning and orchestration ones. You can still type them by hand.
 - **Allowed: writing-skills** (un-denied 2026-10-02 at your request). Use it to create new user-scope skills in `~/.claude/skills/`.
 
 ## 9. Commands, skills, agents (in the `dryas` plugin)
@@ -239,6 +253,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 | `/wreview` | Two-stage review (`/review` is a Claude Code built-in) |
 | `/commit` | Conventional commit, gated by Jev "safe to commit?", never pushes |
 | `/tune` | Weekly calibration (§6) |
+| `/retro` | Session retrospective: friction by severity, proposes and never applies; accepted lessons go to memory (kind `retro`) |
 | `/handoff` | Jev-scored context reset: saves kept items, then you type `/clear` (§6) |
 | `/interrogate` | Two-model adversarial review with a lead verdict; gated step of /orchestrate or on request |
 | `/benchmark-checklist` | Vet a measured perf number before reporting it |
@@ -255,18 +270,18 @@ This is the maintainer's example layout (a Mac plus a dev SSD at `$DEV_ROOT`); o
 | Mac (`~`) | SSD (`$DEV_ROOT`) |
 |---|---|
 | `~/.claude/` (settings, plugins including `dryas`, Claude memory per project); one such dir per account | `projects/<name>` |
-| `~/.dryas/` (Jev logs, thresholds, handoffs, `chain.local.json`, `accounts.json`, Ruflo helpers and MCP shim) | |
+| `~/.dryas/` (Jev logs, thresholds, handoffs, `chain.local.json`, `accounts.json`, **`dryas.db` Dryas memory**, Ruflo helpers and MCP shim when the extra is on) | |
 | `~/.dryas/docs/dryas-workflow.md` (this file, installed) | `CLAUDE.md` (workspace rules, inherited by every project) |
-| `ruflo` CLI (nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, **Ruflo memory**) |
+| `ruflo` CLI (only with the Ruflo extra; nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, Ruflo memory with the extra) |
 | `~/.zshrc` (`OPENROUTER_API_KEY`, guarded cache block, `dev` alias) | `_tools/` (settings_merge.py, relink_claude.py) |
-| `~/.claude/release/` (private export pipeline, never published) | `projects/dryas-workflow` (public repo clone; installer `install/install.sh` generates Ruflo helpers with `ruflo init` + pinned patches) |
+| `~/.claude/release/` (private export pipeline, never published) | `projects/dryas-workflow` (public repo clone; installer `install/install.sh`; with the Ruflo extra it generates Ruflo helpers with `ruflo init` + pinned patches) |
 | | `projects/flowobserve` (the observer app) |
 | | `docs/` (specs, plans, reports, workspace docs), `_archive/` |
 
 **If the SSD is unplugged:**
-- **Breaks:** projects, `Dev/CLAUDE.md`, Ruflo memory, caches and the FlowObserve server.
+- **Breaks:** projects, `Dev/CLAUDE.md`, Ruflo memory (extra), caches and the FlowObserve server.
 - **Keeps working:** Claude Code, everything in `~/.claude` and `~/.dryas`, and Jev's code and logs.
-- Ruflo hooks become silent no-ops, and the Jev gate makes no decision.
+- Ruflo hooks (extra) become silent no-ops, and the Jev gate makes no decision. Dryas memory lives in `~/.dryas/dryas.db` on the Mac, so it keeps working; a locked or missing database means degraded memory and hooks that still exit 0.
 
 ## 11. Orca
 
@@ -286,7 +301,7 @@ An optional, separate observer app (closed source). The workflow runs fully with
 - The OpenRouter key is never written by this workflow; it lives in your shell profile, for example `~/.zshrc` (pre-existing).
 - Commands are redacted before leaving the Mac, and file contents are never sent.
 - The gate fails open to normal permissions and never auto-allows.
-- Ruflo tracks latest, and the installer falls back to the tested version if Dryas's patches do not apply.
+- With the Ruflo extra: it tracks latest, and the installer falls back to the tested version if Dryas's patches do not apply.
 - Every settings change goes through dry-run, then approval, then backup.
 - **Known exposures you accepted:**
   - the prompt route sends the first 4k characters of each prompt to OpenRouter
@@ -300,5 +315,5 @@ The main agent (orchestrator) does not have to be Claude Code. Claude Code on th
 - **Always applies, any harness:** the ground rules (§1), brainstorm first, worktree per multi-step task, one agent (orchestrator session) per worktree, plan-as-a-file format, TDD gate, design rule (§4 step 1), `/wreview`-style two-stage review, verification before completion, commit only after review, never push without asking.
 - Codex: rules, skills, MCP and the scope-lock / Jev gate / Jev route hooks are installed by `--harness codex`. Details: [harnesses.md](harnesses.md).
   - Known limit: an edit made by a shell command (for example `apply_patch` run through Bash, or `sed -i`) is not seen by the scope lock, in Claude Code or Codex.
-- **Billing, any harness:** Jev and Ruflo follow the same billing rule: no `ANTHROPIC_API_KEY`; Jev uses only `OPENROUTER_API_KEY` from the shell environment.
+- **Billing, any harness:** Jev, Dryas memory and Ruflo (extra) follow the same billing rule: no `ANTHROPIC_API_KEY`; Jev uses only `OPENROUTER_API_KEY` from the shell environment.
 - **FlowObserve** only sees Claude Code sessions (it reads Claude Code hook events).
