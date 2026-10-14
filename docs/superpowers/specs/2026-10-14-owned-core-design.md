@@ -1,6 +1,6 @@
 # Phase 4: the owned core
 
-Date: 2026-10-14. Status: approved design, awaiting plans. Umbrella spec for Dryas 2.0: one spec, one plan per sub-project (A–D), one worktree per plan, merged one at a time. Supersedes the Phase 4 section of [roadmap.md](../../roadmap.md) ("Jev judges the task, not every edit"), which becomes sub-project A. **Contested: no** (the spec's numbered rules do not change; this project swaps the bindings underneath them).
+Date: 2026-10-14. Status: approved by Promprit on 2026-10-14 on the condition that nothing is lost (additive only); awaiting plans. Umbrella spec for Dryas 2.0: one spec, one plan per sub-project (A–D), one worktree per plan, merged one at a time. Supersedes the Phase 4 section of [roadmap.md](../../roadmap.md) ("Jev judges the task, not every edit"), which becomes sub-project A. **Contested: no** (the spec's numbered rules do not change; this project swaps the bindings underneath them).
 
 ## Goal
 
@@ -37,7 +37,7 @@ Read from `origin/docs/phase4-plan` on 2026-10-14.
 - **Additive only (2026-10-14).** Nothing an existing install has today disappears: every tool, flag, hook, skill and record keeps working, either through a Dryas-owned equivalent (the parity tables, each row with a test) or by staying installable as an optional extra. Ruflo, Superpowers and the design plugins remain installable with `--with-ruflo`, `--with-superpowers`, `--with-design`, and coexist with the Dryas core when present; Ruflo's other tools are not rebuilt, since no rule or hook calls them, but they are not taken away either. On upgrade an existing install keeps its current providers (`judge: jev` when a key is set, Ruflo memory when it was selected) until the user flips them; a fresh install defaults to the owned core.
 - **Jev JSONL logs stay JSONL.** They are FlowObserve's contract and `/tune`'s input. New fields only; FlowObserve's reducer is updated in step.
 - **Shadow before enforce.** Any judgement that changes safety or cost runs in shadow (computed and logged next to the deciding answer) and is switched on by a threshold once `/tune` shows it is right. Each switch is reversible.
-- **Sub-projects A, B and C are independent** (non-overlapping scope globs; parallel worktrees allowed). D integrates and releases.
+- **Order.** The no-loss inventory (see sub-project D) lands first, as its own small plan, so every later branch is checked against it. Then sub-projects A, B and C, which are independent (non-overlapping scope globs; parallel worktrees allowed). D integrates and releases.
 
 ## Sub-project A: the judge
 
@@ -87,7 +87,7 @@ Ranking keeps PageRank over the memory graph and adds the explainable statistics
 
 **MCP tools** on the Dryas server: `memory_search`, `memory_store`, `memory_list`, `memory_forget`. Same tools on Codex, from the same server: the Codex edition reaches full memory parity.
 
-**Migration.** `dryas memory import-ruflo` opens `agentdb-memory.db` read-only and imports the project namespaces (about 150 rows, `source = ruflo`); `commands` and `feedback` are skipped unless `--all`. `~/.dryas/ruflo` is left in place; uninstall offers its removal.
+**Migration.** `dryas memory import-ruflo` opens `agentdb-memory.db` read-only and imports every row (`source = ruflo`, original namespace and timestamps kept, embeddings kept as a blob for a later semantic provider). Project namespaces (about 150 rows) become normal memory; `commands` and `feedback` (about 34,000 rows) are imported as kind `archive`, searchable with `memory_search(include_archive=true)` but left out of default recall so they don't drown it. The import is idempotent and verifies row counts per namespace. `~/.dryas/ruflo` is left in place; uninstall offers its removal, never by default.
 
 ## Sub-project C: process skills
 
@@ -104,7 +104,9 @@ Eight Dryas skills under `claude/skills/`, rewritten in Dryas vocabulary (tiers,
 | receiving-code-review | `review-receive` | wreview |
 | (executor test-first practice) | `tdd` | executor |
 
-The "brainstorm first, always" hard gate stays, with the same three paths (spike, bounded, architectural). Credit: a NOTICE.md entry and `claude/skills/UPSTREAM.md` naming the upstream commit and the skill each derives from, the pstack pattern. `plugin.json` drops the hard dependency; Superpowers stays installable with `--with-superpowers` and coexists with the Dryas skills (the rules point at the Dryas skills; the deny list for the five overlapping Superpowers skills stays as today and only matters when Superpowers is present; every other Superpowers skill remains usable). The Dryas skills become shared source: `sync_codex_plugin.py` copies them to `codex/skills/`, replacing the hand-written Codex skills.
+The "brainstorm first, always" hard gate stays, with the same three paths (spike, bounded, architectural). Credit: a NOTICE.md entry and `claude/skills/UPSTREAM.md` naming the upstream commit and the skill each derives from, the pstack pattern. `plugin.json` drops the hard dependency; Superpowers stays installable with `--with-superpowers` and coexists with the Dryas skills (the rules point at the Dryas skills; the deny list for the five overlapping Superpowers skills stays as today and only matters when Superpowers is present; every other Superpowers skill remains usable). The Dryas skills become shared source: `sync_codex_plugin.py` copies them to `codex/skills/`; every Codex-specific instruction in today's hand-written Codex skills is carried over as a harness block in the shared source, and `--check` fails if one is missing.
+
+**No content lost in a rewrite.** Each rewritten skill ships with a coverage table in `claude/skills/UPSTREAM.md`: every step, rule, red flag and checklist item of the upstream skill, mapped to where it lives in the Dryas skill (or to the template rule that already states it). A row without a target fails review. Rewrites may shorten wording, never drop a rule.
 
 ## Sub-project D: integration and release
 
@@ -112,9 +114,11 @@ The "brainstorm first, always" hard gate stays, with the same three paths (spike
 
 **MCP server.** The `jev` server keeps its name and its tools (`jev_judge`, `log_dispatch`, `log_escalation`, `log_review`, `log_merge`, `log_override`), so no allow list or rule changes; `memory_search`, `memory_store`, `memory_list`, `memory_forget` and `swarm_init` are added to it. Both editions' `.mcp.json` already point at it. The Codex `[mcp_servers.ruflo]` block is written only with `--with-ruflo`. A rename to `dryas` is a later, separate change.
 
-**Installer and manifest.** Added: `--judge local|jev`, `--with-ruflo`, `--with-superpowers`, `--with-design`. Kept as aliases: `--no-jev` = `--judge local`; `--no-ruflo`, `--no-superpowers`, `--no-design` keep their meaning (the extra is not installed, which is now the default); `--openrouter-key` implies `--judge jev`; `--no-pstack-picks` unchanged. Preflight needs Python 3.9+ only; Node, npm and the path-with-spaces check apply only with `--with-ruflo`. `components.json` keeps `ruflo` and `superpowers` as optional extras; `dryas.yaml` and spec §9.2 show the new bindings. `write_chain_local` records the `judge` and `memory` providers; on upgrade it keeps whatever the install has now. Uninstall offers, never runs unasked, a legacy cleanup: the Ruflo plugins, the global `ruflo` package and `~/.dryas/ruflo`, each listed and confirmed. The Phase 2 item "installer reads `dryas.yaml`" stays a separate task.
+**Installer and manifest.** Added: `--judge local|jev`, `--with-ruflo`, `--with-superpowers`, `--with-design`. Kept as aliases: `--no-jev` = `--judge local`; `--no-ruflo`, `--no-superpowers` keep their meaning (the extra is not installed, which is now the default on a fresh install, since the core has owned equivalents); the design plugins have no owned equivalent, so they **stay installed by default** as today and `--no-design` keeps its meaning; `--openrouter-key` implies `--judge jev`; `--no-pstack-picks` unchanged. Preflight needs Python 3.9+ only; Node, npm and the path-with-spaces check apply only with `--with-ruflo`. `components.json` keeps `ruflo` and `superpowers` as optional extras; `dryas.yaml` and spec §9.2 show the new bindings. `write_chain_local` records the `judge` and `memory` providers; on upgrade it keeps whatever the install has now. Uninstall offers, never runs unasked, a legacy cleanup: the Ruflo plugins, the global `ruflo` package and `~/.dryas/ruflo`, each listed and confirmed. The Phase 2 item "installer reads `dryas.yaml`" stays a separate task.
 
 **Docs.** `workflow.md`, `architecture.md`, `memory-model.md`, `governance.md` (judge providers), `install.md`, `harnesses.md` (Codex now full conformance), `roles.md` if a role's skill list changes, both templates, `claude/skills/orchestrate/ruflo-tools.md` kept and re-titled as the optional Ruflo reference, `CHANGELOG.md` 2.0.0, `roadmap.md` Phase 4 rewritten to this shape. `~/.dryas/docs/dryas-workflow.md` regenerates from the repo at setup.
+
+**No-loss inventory.** Before any sub-project starts, `tools/inventory.py` snapshots 1.x into `reference/inventory-1.x.json`: every MCP tool, slash command, skill, agent, hook stage and settings hook, installer flag, `thresholds.json` key, JSONL record field and `/tune` report line. A test asserts that each entry exists in 2.0 or maps to a named equivalent in the parity tables. It runs in CI on every sub-project branch, so a loss fails the build rather than a review.
 
 **Release.** Version 2.0.0. `tools/release_check.py` gains a no-Node check (install into a temp config dir with Node absent from PATH). CI runs the install and the end-to-end loop on macOS, Linux and Windows without Node.
 
