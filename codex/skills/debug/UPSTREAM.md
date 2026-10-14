@@ -29,11 +29,14 @@ Upstream: `systematic-debugging/`
 | The Four Phases — complete each phase before the next | debug/SKILL.md § Iron law |
 | Phase 1: Root Cause Investigation | debug/SKILL.md § Phase 1: Root cause |
 | Phase 1: Root Cause Investigation — 1. Read error messages carefully | debug/SKILL.md § Phase 1: Root cause |
-| Phase 1: Root Cause Investigation — 2. Reproduce consistently; not reproducible, gather data | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 2. Reproduce consistently; not reproducible, gather data | debug/SKILL.md § Phase 1: Root cause; debug/SKILL.md § Feedback loop first |
+| Phase 1: Root Cause Investigation — feedback loop first: one fast deterministic command that fails on the bug; none, say what blocks it and stop (Dryas) | debug/SKILL.md § Feedback loop first |
+| Phase 1: Root Cause Investigation — redact secrets in any output shown (Dryas) | debug/SKILL.md § Feedback loop first; debug/reference.md § Multi-layer evidence |
+| Phase 1: Root Cause Investigation — tag temporary debug lines with a unique prefix (Dryas) | debug/SKILL.md § Phase 1: Root cause |
 | Phase 1: Root Cause Investigation — 3. Check recent changes | debug/SKILL.md § Phase 1: Root cause |
 | Phase 1: Root Cause Investigation — 4. Gather evidence in multi-component systems | debug/SKILL.md § Phase 1: Root cause |
-| Phase 1: Root Cause Investigation — 4. instrument each boundary, run once, analyze, investigate | debug/SKILL.md § Phase 1: Root cause |
-| Phase 1: Root Cause Investigation — 4. multi-layer example | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 4. instrument each boundary, run once, analyze, investigate | debug/SKILL.md § Phase 1: Root cause; debug/reference.md § Multi-layer evidence |
+| Phase 1: Root Cause Investigation — 4. multi-layer example | debug/reference.md § Multi-layer evidence |
 | Phase 1: Root Cause Investigation — 5. Trace data flow | debug/SKILL.md § Phase 1: Root cause; debug/root-cause-tracing.md § The tracing process |
 | Phase 1: Root Cause Investigation — 5. quick version: origin, caller, trace up, fix at source | debug/SKILL.md § Phase 1: Root cause |
 | Phase 2: Pattern Analysis | debug/SKILL.md § Phase 2: Pattern analysis |
@@ -43,6 +46,7 @@ Upstream: `systematic-debugging/`
 | Phase 2: Pattern Analysis — 4. Understand dependencies | debug/SKILL.md § Phase 2: Pattern analysis |
 | Phase 3: Hypothesis and Testing | debug/SKILL.md § Phase 3: Hypothesis and test |
 | Phase 3: Hypothesis and Testing — 1. Form a single hypothesis | debug/SKILL.md § Phase 3: Hypothesis and test |
+| Phase 3: Hypothesis and Testing — 3-5 ranked falsifiable hypotheses with predictions, shown to the user, tested in rank order (Dryas) | debug/SKILL.md § Phase 3: Hypothesis and test |
 | Phase 3: Hypothesis and Testing — 2. Test minimally, one variable at a time | debug/SKILL.md § Phase 3: Hypothesis and test |
 | Phase 3: Hypothesis and Testing — 3. Verify before continuing; no fixes on top | debug/SKILL.md § Phase 3: Hypothesis and test |
 | Phase 3: Hypothesis and Testing — 4. When you don't know | debug/SKILL.md § Phase 3: Hypothesis and test |
@@ -50,6 +54,7 @@ Upstream: `systematic-debugging/`
 | Phase 4: Implementation — 1. Create a failing test case (test-driven-development/ skill) | debug/SKILL.md § Phase 4: Fix |
 | Phase 4: Implementation — 2. Implement a single fix; no while-I'm-here, no bundled refactoring | debug/SKILL.md § Phase 4: Fix |
 | Phase 4: Implementation — 3. Verify the fix (verification-before-completion/ skill) | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — remove debug lines (prefix search finds none); confirmed hypothesis in the commit message (Dryas) | debug/SKILL.md § Phase 4: Fix |
 | Phase 4: Implementation — 4. Fix doesn't work: count; under 3 back to Phase 1; 3+ stop | debug/SKILL.md § Phase 4: Fix |
 | Phase 4: Implementation — 5. 3+ fixes failed: question the architecture | debug/SKILL.md § Phase 4: Fix |
 | Phase 4: Implementation — 5. signs of an architectural problem | debug/SKILL.md § Phase 4: Fix |
@@ -68,30 +73,30 @@ Upstream: `systematic-debugging/`
 | Red Flags - STOP and Follow Process — "One more fix attempt" after 2+ | debug/SKILL.md § Red flags |
 | Red Flags - STOP and Follow Process — each fix reveals a new problem elsewhere | debug/SKILL.md § Red flags |
 | Red Flags - STOP and Follow Process — all mean return to Phase 1; 3+ failed, question the architecture | debug/SKILL.md § Red flags |
-| your human partner's Signals You're Doing It Wrong | debug/SKILL.md § Signals from the user |
-| your human partner's Signals You're Doing It Wrong — "Is that not happening?" | debug/SKILL.md § Signals from the user |
-| your human partner's Signals You're Doing It Wrong — "Will it show us...?" | debug/SKILL.md § Signals from the user |
-| your human partner's Signals You're Doing It Wrong — "Stop guessing" | debug/SKILL.md § Signals from the user |
-| your human partner's Signals You're Doing It Wrong — "Ultra-think this" | debug/SKILL.md § Signals from the user |
-| your human partner's Signals You're Doing It Wrong — "We're stuck?" | debug/SKILL.md § Signals from the user |
-| your human partner's Signals You're Doing It Wrong — stop, return to Phase 1 | debug/SKILL.md § Signals from the user |
-| Common Rationalizations | debug/SKILL.md § Rationalizations |
-| Common Rationalizations — "Issue is simple, don't need process" | debug/SKILL.md § Rationalizations |
-| Common Rationalizations — "Emergency, no time for process" | debug/SKILL.md § Rationalizations |
-| Common Rationalizations — "Just try this first, then investigate" | debug/SKILL.md § Rationalizations |
-| Common Rationalizations — "I'll write test after confirming fix works" | debug/SKILL.md § Rationalizations |
-| Common Rationalizations — "Multiple fixes at once saves time" | debug/SKILL.md § Rationalizations |
-| Common Rationalizations — "Reference too long, I'll adapt the pattern" | debug/SKILL.md § Rationalizations |
-| Common Rationalizations — "I see the problem, let me fix it" | debug/SKILL.md § Rationalizations |
-| Common Rationalizations — "One more fix attempt" (after 2+ failures) | debug/SKILL.md § Rationalizations |
-| Quick Reference | debug/SKILL.md § Quick reference |
-| Quick Reference — four phases: key activities and success criteria | debug/SKILL.md § Quick reference |
-| When Process Reveals "No Root Cause" | debug/SKILL.md § No root cause found |
-| When Process Reveals "No Root Cause" — 1. you've completed the process | debug/SKILL.md § No root cause found |
-| When Process Reveals "No Root Cause" — 2. document what you investigated | debug/SKILL.md § No root cause found |
-| When Process Reveals "No Root Cause" — 3. appropriate handling (retry, timeout, error message) | debug/SKILL.md § No root cause found |
-| When Process Reveals "No Root Cause" — 4. monitoring or logging | debug/SKILL.md § No root cause found |
-| When Process Reveals "No Root Cause" — 95% are incomplete investigation | debug/SKILL.md § No root cause found |
+| your human partner's Signals You're Doing It Wrong | debug/reference.md § Signals from the user; debug/SKILL.md § More |
+| your human partner's Signals You're Doing It Wrong — "Is that not happening?" | debug/reference.md § Signals from the user; debug/SKILL.md § More |
+| your human partner's Signals You're Doing It Wrong — "Will it show us...?" | debug/reference.md § Signals from the user; debug/SKILL.md § More |
+| your human partner's Signals You're Doing It Wrong — "Stop guessing" | debug/reference.md § Signals from the user; debug/SKILL.md § More |
+| your human partner's Signals You're Doing It Wrong — "Ultra-think this" | debug/reference.md § Signals from the user; debug/SKILL.md § More |
+| your human partner's Signals You're Doing It Wrong — "We're stuck?" | debug/reference.md § Signals from the user; debug/SKILL.md § More |
+| your human partner's Signals You're Doing It Wrong — stop, return to Phase 1 | debug/reference.md § Signals from the user; debug/SKILL.md § More |
+| Common Rationalizations | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Common Rationalizations — "Issue is simple, don't need process" | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Common Rationalizations — "Emergency, no time for process" | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Common Rationalizations — "Just try this first, then investigate" | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Common Rationalizations — "I'll write test after confirming fix works" | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Common Rationalizations — "Multiple fixes at once saves time" | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Common Rationalizations — "Reference too long, I'll adapt the pattern" | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Common Rationalizations — "I see the problem, let me fix it" | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Common Rationalizations — "One more fix attempt" (after 2+ failures) | debug/reference.md § Rationalizations; debug/SKILL.md § More |
+| Quick Reference | debug/reference.md § Quick reference; debug/SKILL.md § More |
+| Quick Reference — four phases: key activities and success criteria | debug/reference.md § Quick reference; debug/SKILL.md § More |
+| When Process Reveals "No Root Cause" | debug/reference.md § No root cause found; debug/SKILL.md § More |
+| When Process Reveals "No Root Cause" — 1. you've completed the process | debug/reference.md § No root cause found; debug/SKILL.md § More |
+| When Process Reveals "No Root Cause" — 2. document what you investigated | debug/reference.md § No root cause found; debug/SKILL.md § More |
+| When Process Reveals "No Root Cause" — 3. appropriate handling (retry, timeout, error message) | debug/reference.md § No root cause found; debug/SKILL.md § More |
+| When Process Reveals "No Root Cause" — 4. monitoring or logging | debug/reference.md § No root cause found; debug/SKILL.md § More |
+| When Process Reveals "No Root Cause" — 95% are incomplete investigation | debug/reference.md § No root cause found; debug/SKILL.md § More |
 | Supporting Techniques | debug/SKILL.md § Supporting techniques |
 | Supporting Techniques — root-cause-tracing, defense-in-depth, condition-based-waiting | debug/SKILL.md § Supporting techniques |
 | Supporting Techniques — fix-root-causes principle (Dryas) | debug/SKILL.md § Supporting techniques |

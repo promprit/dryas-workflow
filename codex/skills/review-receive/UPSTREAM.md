@@ -75,18 +75,18 @@ Upstream: `receiving-code-review/`
 | Gracefully Correcting Your Pushback — good: "You were right ...", "Verified this ..." | review-receive/SKILL.md § Correcting your pushback |
 | Gracefully Correcting Your Pushback — bad: long apology, defending, over-explaining | review-receive/SKILL.md § Correcting your pushback |
 | Gracefully Correcting Your Pushback — state the correction factually and move on | review-receive/SKILL.md § Correcting your pushback |
-| Common Mistakes | review-receive/SKILL.md § Common mistakes |
-| Common Mistakes — performative agreement | review-receive/SKILL.md § Common mistakes |
-| Common Mistakes — blind implementation | review-receive/SKILL.md § Common mistakes |
-| Common Mistakes — batch without testing | review-receive/SKILL.md § Common mistakes |
-| Common Mistakes — assuming reviewer is right | review-receive/SKILL.md § Common mistakes |
-| Common Mistakes — avoiding pushback | review-receive/SKILL.md § Common mistakes |
-| Common Mistakes — partial implementation | review-receive/SKILL.md § Common mistakes |
-| Common Mistakes — can't verify, proceed anyway | review-receive/SKILL.md § Common mistakes |
-| Real Examples | review-receive/SKILL.md § Examples |
-| Real Examples — performative agreement (bad) | review-receive/SKILL.md § Examples |
-| Real Examples — technical verification (good) | review-receive/SKILL.md § Examples |
-| Real Examples — YAGNI (good) | review-receive/SKILL.md § Examples |
-| Real Examples — unclear item (good) | review-receive/SKILL.md § Examples |
+| Common Mistakes | review-receive/reference.md § Common mistakes; review-receive/SKILL.md § More |
+| Common Mistakes — performative agreement | review-receive/reference.md § Common mistakes; review-receive/SKILL.md § More |
+| Common Mistakes — blind implementation | review-receive/reference.md § Common mistakes; review-receive/SKILL.md § More |
+| Common Mistakes — batch without testing | review-receive/reference.md § Common mistakes; review-receive/SKILL.md § More |
+| Common Mistakes — assuming reviewer is right | review-receive/reference.md § Common mistakes; review-receive/SKILL.md § More |
+| Common Mistakes — avoiding pushback | review-receive/reference.md § Common mistakes; review-receive/SKILL.md § More |
+| Common Mistakes — partial implementation | review-receive/reference.md § Common mistakes; review-receive/SKILL.md § More |
+| Common Mistakes — can't verify, proceed anyway | review-receive/reference.md § Common mistakes; review-receive/SKILL.md § More |
+| Real Examples | review-receive/reference.md § Examples; review-receive/SKILL.md § More |
+| Real Examples — performative agreement (bad) | review-receive/reference.md § Examples; review-receive/SKILL.md § More |
+| Real Examples — technical verification (good) | review-receive/reference.md § Examples; review-receive/SKILL.md § More |
+| Real Examples — YAGNI (good) | review-receive/reference.md § Examples; review-receive/SKILL.md § More |
+| Real Examples — unclear item (good) | review-receive/reference.md § Examples; review-receive/SKILL.md § More |
 | GitHub Thread Replies | review-receive/SKILL.md § Thread replies |
 | GitHub Thread Replies — reply in the comment thread, not top-level | review-receive/SKILL.md § Thread replies |

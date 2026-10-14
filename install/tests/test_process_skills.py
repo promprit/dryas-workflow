@@ -20,8 +20,12 @@ SECTION = re.compile(r"^([a-z-]+/[A-Za-z0-9_.-]+\.md) § (.+)$")
 PHRASE = re.compile(r'^(template|executor|orchestrate): "(.+)"$')
 SP_NAME = re.compile(r"\bsuperpowers:[a-z]")
 CLAUDE_ONLY = ("${CLAUDE_PLUGIN_ROOT}", "mcp__plugin_", "Skill(", "subagent_type", "EnterWorktree")
-SHORT = {"brainstorm", "plan", "worktree", "verify"}
-TECHNIQUES = {"brainstorm": ("## Question rounds", "recommended answer", "look it up yourself")}
+SHORT = set(scp.PROCESS_SKILLS)
+TECHNIQUES = {
+    "brainstorm": ("## Question rounds", "recommended answer", "look it up yourself"),
+    "debug": ("## Feedback loop first", "3-5 ranked", "prediction", "unique prefix", "commit message", "redact"),
+    "review-request": ("two reviewers in parallel", "separately", "do not merge or re-rank"),
+}
 CLAUDE_COMMAND = re.compile(r"(?<![\w$/.<-])/(orchestrate|wplan|wreview|commit|tune|interrogate)\b(?![/\w-]|\.\w)")
 
 

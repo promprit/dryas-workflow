@@ -32,8 +32,8 @@ Upstream: `test-driven-development/`
 | Red-Green-Refactor — cycle diagram (red, verify red, green, verify green, refactor, next) | tdd/SKILL.md § Red, green, refactor |
 | RED - Write Failing Test | tdd/SKILL.md § Red: write a failing test |
 | RED - Write Failing Test — one minimal test showing what should happen | tdd/SKILL.md § Red: write a failing test |
-| RED - Write Failing Test — good example (retries 3 times) | tdd/SKILL.md § Red: write a failing test |
-| RED - Write Failing Test — bad example (vague name, tests the mock) | tdd/SKILL.md § Red: write a failing test |
+| RED - Write Failing Test — good example (retries 3 times) | tdd/reference.md § Red and green examples |
+| RED - Write Failing Test — bad example (vague name, tests the mock) | tdd/reference.md § Red and green examples |
 | RED - Write Failing Test — requirements: one behavior, clear name, real code | tdd/SKILL.md § Red: write a failing test |
 | Verify RED - Watch It Fail | tdd/SKILL.md § Verify red |
 | Verify RED - Watch It Fail — mandatory, never skip; run the test | tdd/SKILL.md § Verify red; executor: "run it and confirm it fails for the right reason" |
@@ -44,8 +44,8 @@ Upstream: `test-driven-development/`
 | Verify RED - Watch It Fail — test errors: fix and re-run until it fails correctly | tdd/SKILL.md § Verify red |
 | GREEN - Minimal Code | tdd/SKILL.md § Green: minimal code |
 | GREEN - Minimal Code — simplest code to pass the test | tdd/SKILL.md § Green: minimal code; executor: "Minimal change that meets Done." |
-| GREEN - Minimal Code — good example (just enough) | tdd/SKILL.md § Green: minimal code |
-| GREEN - Minimal Code — bad example (over-engineered options, YAGNI) | tdd/SKILL.md § Green: minimal code |
+| GREEN - Minimal Code — good example (just enough) | tdd/reference.md § Red and green examples |
+| GREEN - Minimal Code — bad example (over-engineered options, YAGNI) | tdd/reference.md § Red and green examples; tdd/SKILL.md § Green: minimal code |
 | GREEN - Minimal Code — no features, refactors or improvements beyond the test | tdd/SKILL.md § Green: minimal code; executor: "No refactors, renames or extras outside the goal." |
 | Verify GREEN - Watch It Pass | tdd/SKILL.md § Verify green |
 | Verify GREEN - Watch It Pass — mandatory; run the test | tdd/SKILL.md § Verify green; executor: "Run the tests named in Done before reporting." |
@@ -70,18 +70,18 @@ Upstream: `test-driven-development/`
 | Good Tests — assert on real behavior, never on mock behavior | tdd/SKILL.md § Good tests; executor: "assert the required result through the public interface" |
 | Good Tests — test-only code in test utilities | tdd/SKILL.md § Good tests |
 | Good Tests — understand a dependency's side effects before mocking | tdd/SKILL.md § Good tests |
-| Common Rationalizations | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Too simple to test" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "I'll test after" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Tests after achieve same goals (spirit not ritual)" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Already manually tested" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Deleting X hours is wasteful" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Keep as reference, write tests first" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Need to explore first" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Test hard = design unclear" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "TDD will slow me down" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Manual test faster" | tdd/SKILL.md § Rationalizations |
-| Common Rationalizations — "Existing code has no tests" | tdd/SKILL.md § Rationalizations |
+| Common Rationalizations | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Too simple to test" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "I'll test after" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Tests after achieve same goals (spirit not ritual)" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Already manually tested" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Deleting X hours is wasteful" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Keep as reference, write tests first" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Need to explore first" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Test hard = design unclear" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "TDD will slow me down" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Manual test faster" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
+| Common Rationalizations — "Existing code has no tests" | tdd/reference.md § Rationalizations; tdd/SKILL.md § When to use |
 | Red Flags - STOP and Start Over | tdd/SKILL.md § Red flags |
 | Red Flags - STOP and Start Over — code before test | tdd/SKILL.md § Red flags |
 | Red Flags - STOP and Start Over — test after implementation | tdd/SKILL.md § Red flags |
@@ -97,8 +97,8 @@ Upstream: `test-driven-development/`
 | Red Flags - STOP and Start Over — "TDD is dogmatic, I'm being pragmatic" | tdd/SKILL.md § Red flags |
 | Red Flags - STOP and Start Over — "This is different because..." | tdd/SKILL.md § Red flags |
 | Red Flags - STOP and Start Over — all mean: delete code, start over with TDD | tdd/SKILL.md § Red flags |
-| Example: Bug Fix | tdd/SKILL.md § Example: bug fix |
-| Example: Bug Fix — red, verify red, green, verify green, refactor (empty email) | tdd/SKILL.md § Example: bug fix |
+| Example: Bug Fix | tdd/reference.md § Example: bug fix; tdd/SKILL.md § Red, green, refactor |
+| Example: Bug Fix — red, verify red, green, verify green, refactor (empty email) | tdd/reference.md § Example: bug fix; tdd/SKILL.md § Red, green, refactor |
 | Verification Checklist | tdd/SKILL.md § Checklist |
 | Verification Checklist — every new function or method has a test | tdd/SKILL.md § Checklist |
 | Verification Checklist — watched each test fail before implementing | tdd/SKILL.md § Checklist |
@@ -109,11 +109,11 @@ Upstream: `test-driven-development/`
 | Verification Checklist — tests use real code (mocks only if unavoidable) | tdd/SKILL.md § Checklist |
 | Verification Checklist — edge cases and errors covered | tdd/SKILL.md § Checklist |
 | Verification Checklist — can't check all boxes: you skipped TDD, start over | tdd/SKILL.md § Checklist |
-| When Stuck | tdd/SKILL.md § When stuck |
-| When Stuck — don't know how to test: wished-for API, assertion first, ask | tdd/SKILL.md § When stuck |
-| When Stuck — test too complicated: simplify the interface | tdd/SKILL.md § When stuck |
-| When Stuck — must mock everything: dependency injection | tdd/SKILL.md § When stuck |
-| When Stuck — test setup huge: extract helpers, simplify design | tdd/SKILL.md § When stuck |
+| When Stuck | tdd/reference.md § When stuck; tdd/SKILL.md § Checklist |
+| When Stuck — don't know how to test: wished-for API, assertion first, ask | tdd/reference.md § When stuck; tdd/SKILL.md § Checklist |
+| When Stuck — test too complicated: simplify the interface | tdd/reference.md § When stuck; tdd/SKILL.md § Checklist |
+| When Stuck — must mock everything: dependency injection | tdd/reference.md § When stuck; tdd/SKILL.md § Checklist |
+| When Stuck — test setup huge: extract helpers, simplify design | tdd/reference.md § When stuck; tdd/SKILL.md § Checklist |
 | Debugging Integration | tdd/SKILL.md § With debug; debug/SKILL.md § Phase 4: Fix |
 | Debugging Integration — bug found: failing test reproducing it, follow the cycle | tdd/SKILL.md § With debug |
 | Debugging Integration — never fix bugs without a test | tdd/SKILL.md § With debug |
