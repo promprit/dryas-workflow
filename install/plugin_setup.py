@@ -576,6 +576,48 @@ def extras_commands(rec: dict, last_account: bool) -> List[List[str]]:
     return out
 
 
+RUFLO_PLUGINS = ("ruflo-core@ruflo", "ruflo-swarm@ruflo", "ruflo-testgen@ruflo", "ruflo-jujutsu@ruflo")
+
+
+def legacy_items(cd: Path, rec: dict, last_account: bool) -> list:
+    """Pre-2.0 Ruflo pieces still on the machine: (label, argv or None, path or None). Nothing here is removed
+    without a question (run_legacy). Commands extras_commands already offers are not repeated."""
+    offered = extras_commands(rec, last_account)
+    listed = _load_json(Path(cd) / "plugins" / "installed_plugins.json", {}).get("plugins", {})
+    items = []
+    for pid in RUFLO_PLUGINS:
+        argv = ["claude", "plugin", "uninstall", pid]
+        if pid in listed and argv not in offered:
+            items.append((" ".join(argv), argv, None))
+    argv = ["npm", "uninstall", "-g", "ruflo"]
+    if last_account and shutil.which("npm") and argv not in offered:
+        items.append((" ".join(argv), argv, None))
+    d = data_root() / "ruflo"
+    if d.exists():
+        items.append(("remove %s" % d, None, d))
+    return items
+
+
+def run_legacy(items: list, yes: bool, cd: Optional[Path] = None) -> int:
+    """Ask about each item (--yes lists without asking), run it, return the number of failures."""
+    failed = 0
+    for label, argv, path in items:
+        if not (yes or di.confirm("Remove %s?" % label)):
+            continue
+        if argv:
+            rc = di.run(argv, env=child_env(cd)) if cd is not None else di.run(argv)
+            if rc != 0:
+                print("warning: %s failed (exit %d)" % (label, rc))
+                failed += 1
+        elif path is not None:
+            try:
+                shutil.rmtree(str(path))
+            except OSError as e:
+                print("warning: could not remove %s (%s)" % (path, e))
+                failed += 1
+    return failed
+
+
 def extras_marketplaces(rec: dict) -> List[str]:
     """The marketplaces (the `@<name>` of each recorded plugin install) setup added; left for the user to remove."""
     names = []

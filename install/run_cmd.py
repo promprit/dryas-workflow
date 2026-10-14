@@ -246,7 +246,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             if not (a.yes or di.confirm("Proceed?")):
                 print("nothing removed")
                 return 1
-        extras = []
+        extras, legacy = [], []
         if want_claude:
             others = ps.other_accounts(cd, cdx if want_codex else None)
             extras = ps.extras_commands(ps._load_json(cd / ps.RECORD, {}), last_account=not others)
@@ -258,11 +258,20 @@ def main(argv: Optional[List[str]] = None) -> int:
                     print("  " + ps.shown(cd, argv))
                 if not (a.yes or di.confirm("Remove them too?")):
                     extras = []
+            if not a.keep_extras and (cd / ps.RECORD).exists():  # only an account Dryas set up
+                legacy = ps.legacy_items(cd, ps._load_json(cd / ps.RECORD, {}), last_account=not others)
+                if legacy:
+                    print("Legacy Ruflo pieces (each asked separately):")
+                    for label, _, _ in legacy:
+                        print("  " + label)
         rc = cps.uninstall(cdx) if want_codex else 0
         if rc:
             return rc
         if want_claude:
-            return ps.uninstall(cd, a.purge, extras=extras)
+            rc = ps.uninstall(cd, a.purge, extras=extras)
+            if legacy and ps.run_legacy(legacy, a.yes, cd):
+                print("warning: some legacy Ruflo pieces were not removed")
+            return rc
         if a.purge:
             ps.purge_shared()
         return 0
