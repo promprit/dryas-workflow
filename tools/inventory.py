@@ -159,6 +159,8 @@ def _load(path: Path, name: str) -> Any:
     """Import a repo module by path (its folder on sys.path while it loads, for sibling imports)."""
     d = str(path.parent)
     sys.path.insert(0, d)
+    old_flag = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
     try:
         spec = importlib.util.spec_from_file_location(name, str(path))
         mod = importlib.util.module_from_spec(spec)
@@ -167,6 +169,7 @@ def _load(path: Path, name: str) -> Any:
     except Exception as e:
         raise InventoryError("%s: %s: %s" % (path.as_posix(), type(e).__name__, e))
     finally:
+        sys.dont_write_bytecode = old_flag
         sys.path.remove(d)
 
 
@@ -187,8 +190,21 @@ def _mcp_tools(repo: Path) -> Set[str]:
 
 def _flags(repo: Path) -> Set[str]:
     rc = _load(repo / "install/run_cmd.py", "inventory_run_cmd")
-    with mock.patch.object(argparse.ArgumentParser, "parse_args", lambda self, *a, **k: self):
-        parser = rc.parse([])  # parse() builds the parser; parse_args is patched to hand it back
+    class _Parser(Exception):
+        def __init__(self, parser: Any) -> None:
+            super().__init__("parser")
+            self.parser = parser
+
+    def grab(self: Any, *a: Any, **k: Any) -> None:
+        raise _Parser(self)
+
+    try:
+        with mock.patch.object(argparse.ArgumentParser, "parse_args", grab):
+            rc.parse([])
+    except _Parser as e:
+        parser = e.parser
+    else:
+        raise InventoryError("install/run_cmd.py: parse() did not call parse_args")
     out = {"component:optional:" + c for c in rc.OPTIONAL}
     for action in parser._actions:
         for opt in action.option_strings:
@@ -214,36 +230,52 @@ def _thresholds(repo: Path) -> Set[str]:
     return out
 
 
-def _dict_keys(node: Any, assigns: Dict[str, List[Any]], seen: Set[int]) -> Set[str]:
+def _dict_keys(node: Any, assigns: Dict[str, List[Any]], funcs: Dict[str, Any], seen: Set[int]) -> Set[str]:
     if id(node) in seen:
         return set()
     seen.add(id(node))
     if isinstance(node, ast.Dict):
         return {k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)}
-    if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "dict":
-        keys = {kw.arg for kw in node.keywords if kw.arg}
-        for a in node.args:
-            keys |= _dict_keys(a, assigns, seen)
+    if isinstance(node, ast.Call):
+        fn = getattr(node.func, "id", "")
+        if fn == "dict":
+            keys = {kw.arg for kw in node.keywords if kw.arg}
+            for a in list(node.args) + [kw.value for kw in node.keywords if not kw.arg]:
+                keys |= _dict_keys(a, assigns, funcs, seen)
+            return keys
+        keys = set()
+        if fn in funcs:
+            for r in ast.walk(funcs[fn]):
+                if isinstance(r, ast.Return) and r.value is not None:
+                    keys |= _dict_keys(r.value, {}, funcs, seen)
         return keys
     if isinstance(node, ast.Name):
-        keys: Set[str] = set()
+        keys = set()
         for value in assigns.get(node.id, []):
-            keys |= _dict_keys(value, assigns, seen)
+            keys |= _dict_keys(value, assigns, funcs, seen)
         return keys
     return set()
+
+
+def _assigned(target: Any, value: Any, assigns: Dict[str, List[Any]]) -> None:
+    if isinstance(target, ast.Name):
+        assigns.setdefault(target.id, []).append(value)
+    elif isinstance(target, ast.Tuple) and isinstance(value, ast.Tuple) and len(target.elts) == len(value.elts):
+        for t, v in zip(target.elts, value.elts):
+            _assigned(t, v, assigns)
 
 
 def _logs(repo: Path) -> Set[str]:
     out = {"log_field:*:ts", "log_field:*:session_id", "log_field:*:cwd"}  # added by jevlog.append to every record
     for p in sorted((repo / "claude/jev").glob("*.py")):
         tree = ast.parse(p.read_text(encoding="utf-8"), p.as_posix())
+        funcs = {n.name: n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
         for scope in [tree] + [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
             assigns: Dict[str, List[Any]] = {}
             for n in ast.walk(scope):
                 if isinstance(n, ast.Assign):
                     for t in n.targets:
-                        if isinstance(t, ast.Name):
-                            assigns.setdefault(t.id, []).append(n.value)
+                        _assigned(t, n.value, assigns)
             for n in ast.walk(scope):
                 if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "append"
                         and getattr(n.func.value, "id", "") == "jevlog" and n.args
@@ -251,20 +283,31 @@ def _logs(repo: Path) -> Set[str]:
                     name = n.args[0].value
                     out.add("log:" + name)
                     if len(n.args) > 1:
-                        out |= {"log_field:%s:%s" % (name, k) for k in _dict_keys(n.args[1], assigns, set())}
+                        out |= {"log_field:%s:%s" % (name, k) for k in _dict_keys(n.args[1], assigns, funcs, set())}
+    return out
+
+
+def _tune_cmds(repo: Path) -> Set[str]:
+    tree = ast.parse((repo / "claude/jev/tune.py").read_text(encoding="utf-8"))
+    out: Set[str] = set()
+    for fn in tree.body:
+        if isinstance(fn, ast.FunctionDef) and fn.name == "main":
+            for n in ast.walk(fn):
+                if isinstance(n, ast.Compare) and getattr(n.left, "id", "") == "cmd":
+                    out |= {"tune_cmd:" + c.value for c in n.comparators
+                            if isinstance(c, ast.Constant) and isinstance(c.value, str)}
+                elif isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "cmd" for t in n.targets):
+                    out |= {"tune_cmd:" + c.value for c in ast.walk(n.value)
+                            if isinstance(c, ast.Constant) and isinstance(c.value, str)}
     return out
 
 
 def _tune(repo: Path) -> Set[str]:
-    tmp = tempfile.mkdtemp()
-    try:
-        with mock.patch.dict(os.environ, _isolated(tmp)):
-            os.makedirs(os.path.join(tmp, "jev", "logs"))
-            tune = _load(repo / "claude/jev/tune.py", "inventory_tune")
-            text = tune.render(tune.build(os.path.join(tmp, "jev", "logs")), [])
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-    out: Set[str] = set()
+    logs = os.environ["JEV_LOG_DIR"]
+    os.makedirs(logs, exist_ok=True)
+    tune = _load(repo / "claude/jev/tune.py", "inventory_tune")
+    text = tune.render(tune.build(logs), [])
+    out: Set[str] = _tune_cmds(repo)
     for line in text.splitlines():
         if line.startswith("#"):
             out.add("tune_line:" + line.lstrip("#").strip())
@@ -282,8 +325,14 @@ RUNTIME: Tuple[Callable[[Path], Set[str]], ...] = (_mcp_tools, _flags, _threshol
 
 def collect(repo: Path = ROOT) -> List[str]:
     out: Set[str] = set()
-    for c in STATIC + RUNTIME:
-        out |= c(repo)
+    tmp = tempfile.mkdtemp()
+    try:
+        env = dict(_isolated(tmp), HOME=tmp, USERPROFILE=tmp)
+        with mock.patch.dict(os.environ, env):
+            for c in STATIC + RUNTIME:
+                out |= c(repo)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
     return sorted(out)
 
 
@@ -326,6 +375,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 0
         snap = repo / SNAPSHOT
         if a.write:
+            if a.force and not _version(repo).startswith("1."):
+                print("inventory: --force only rebuilds the baseline from a 1.x tree (this is %s)" % _version(repo),
+                      file=sys.stderr)
+                return 1
             if snap.exists() and not a.force:
                 print("inventory: %s is the 1.x baseline and already exists; --force rebuilds it, "
                       "and only from a 1.x tree" % SNAPSHOT, file=sys.stderr)

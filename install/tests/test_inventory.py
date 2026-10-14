@@ -156,3 +156,104 @@ class CheckTest(unittest.TestCase):
         (t / "claude/jev").mkdir(parents=True)
         (t / "claude/jev/chain.json").write_text("{not json", encoding="utf-8")
         self.assertEqual(inv.main(["--list", "--repo", str(t)]), 2)
+
+
+class ReviewFixTest(unittest.TestCase):
+    def _tmp(self):
+        t = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(t), True)
+        return t
+
+    def test_kwargs_and_call_fields_are_collected(self):
+        t = self._tmp()
+        (t / "claude/jev").mkdir(parents=True)
+        (t / "claude/jev/x.py").write_text(
+            "import jevlog\n"
+            "def _head():\n"
+            "    if 1:\n"
+            "        return {'head': 'x'}\n"
+            "    return {}\n"
+            "def f(n):\n"
+            "    extra = {}\n"
+            "    via, extra = 'c', {'parts': 1}\n"
+            "    base = dict({'tool': 1}, **_head())\n"
+            "    jevlog.append('g', dict(base, decision='d', **extra))\n", encoding="utf-8")
+        got = inv._logs(t)
+        for f in ("tool", "head", "decision", "parts"):
+            self.assertIn("log_field:g:" + f, got)
+
+    def test_real_gate_fields_are_collected(self):
+        got = set(inv.collect(ROOT))
+        self.assertIn("log_field:gate:parts", got)
+        self.assertIn("log_field:gate:head", got)
+
+    def test_tune_subcommands_are_collected(self):
+        got = set(inv.collect(ROOT))
+        for c in ("report", "apply", "record-compare"):
+            self.assertIn("tune_cmd:" + c, got)
+
+    def test_collect_isolates_the_environment_once(self):
+        sentinel = str(self._tmp())
+        seen = {}
+
+        def spy(repo):
+            for k in ("DRYAS_DATA_ROOT", "JEV_LOG_DIR", "JEV_THRESHOLDS", "HOME", "USERPROFILE"):
+                seen[k] = os.environ.get(k)
+            return set()
+
+        with mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": sentinel, "HOME": sentinel, "USERPROFILE": sentinel}), \
+                mock.patch.object(inv, "RUNTIME", (spy,)):
+            inv.collect(ROOT)
+        for k in ("DRYAS_DATA_ROOT", "HOME", "USERPROFILE"):
+            self.assertNotEqual(seen[k], sentinel, k)
+            self.assertTrue(seen[k], k)
+        self.assertTrue(seen["JEV_LOG_DIR"])
+        self.assertTrue(seen["JEV_THRESHOLDS"])
+
+    def test_force_write_refuses_a_non_1x_tree(self):
+        t = self._tmp()
+        (t / "reference").mkdir()
+        snap = t / inv.SNAPSHOT
+        snap.write_text("{}", encoding="utf-8")
+        with mock.patch.object(inv, "_version", return_value="2.0.0"), \
+                mock.patch.object(inv, "collect", return_value=[]):
+            rc = inv.main(["--write", "--force", "--repo", str(t)])
+        self.assertEqual(rc, 1)
+        self.assertEqual(snap.read_text(encoding="utf-8"), "{}")
+
+    def test_flags_do_not_depend_on_parse_returning_the_parser(self):
+        import argparse
+
+        class FakeRC:
+            OPTIONAL = ["ruflo"]
+
+            @staticmethod
+            def parse(argv):
+                p = argparse.ArgumentParser()
+                p.add_argument("--foo", action="store_true")
+                p.parse_args(argv)
+                return "not-the-parser"
+
+        with mock.patch.object(inv, "_load", return_value=FakeRC):
+            got = inv._flags(ROOT)
+        self.assertIn("install_flag:--foo", got)
+        self.assertIn("component:optional:ruflo", got)
+
+    def test_load_does_not_write_bytecode_and_restores_the_flag(self):
+        t = self._tmp()
+        (t / "m.py").write_text("import sys\nSEEN = sys.dont_write_bytecode\n", encoding="utf-8")
+        before = sys.dont_write_bytecode
+        sys.dont_write_bytecode = False
+        try:
+            mod = inv._load(t / "m.py", "inventory_probe_m")
+            self.assertTrue(mod.SEEN)
+            self.assertFalse(sys.dont_write_bytecode)
+        finally:
+            sys.dont_write_bytecode = before
+
+    def test_every_kind_has_entries(self):
+        kinds = {e.split(":", 1)[0] for e in inv.collect(ROOT)}
+        want = ("agent allowed_tool chain_stage command component env install_flag log log_field mcp_param "
+                "mcp_server mcp_tool permission plugin_config plugin_dep plugin_hook setting settings_hook "
+                "skill skill_ref threshold tool_ref tune_cmd tune_line").split()
+        self.assertEqual([k for k in want if k not in kinds], [])
