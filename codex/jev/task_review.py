@@ -102,6 +102,16 @@ def review_sets(data: Any) -> Optional[Dict[str, Dict[str, List[str]]]]:
     return out
 
 
+def rels(root: Optional[str], tool: str, ti: Dict[str, Any], cwd: str = "", cap: Optional[int] = 16) -> List[str]:
+    """Worktree-relative paths an edit targets ("<outside>" for one that is not under root), at most cap of them."""
+    base = os.path.realpath(cwd or ".")
+    out = []
+    for t in targets(tool, ti)[:cap]:
+        r = os.path.relpath(os.path.realpath(os.path.join(base, t)), root).replace(os.sep, "/") if root else ""
+        out.append("<outside>" if not r or r == ".." or r.startswith("../") else r)
+    return out
+
+
 def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any],
                  loaded: Optional[Tuple[Optional[str], Any]] = None) -> Optional[Tuple[str, str]]:
     """(verdict, why) for a file edit inside an orchestrated task, None outside one. verdict: "skip" (the task
@@ -117,9 +127,8 @@ def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any],
         paths = targets(tool, ti)
         if not paths:
             return ("review", "no_path")
-        base = os.path.realpath(cwd or ".")
-        rels = [os.path.relpath(os.path.realpath(os.path.join(base, t)), root).replace(os.sep, "/") for t in paths]
-        if any(always_judged(r) for r in rels):
+        rels_ = rels(root, tool, ti, cwd, cap=None)
+        if any(r == "<outside>" or always_judged(r) for r in rels_):
             return ("review", "always")
         sig = content_signal(edit_text(tool, ti))
         if sig:
@@ -127,7 +136,7 @@ def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any],
         sets = review_sets(loaded[1])
         if sets is None:
             return ("unknown", "no_review_set")
-        for r in rels:
+        for r in rels_:
             if any(planfile.in_scope(r, e["review"]) for e in sets.values()):
                 return ("review", "review_glob")
             if not any(planfile.in_scope(r, e["skip"]) for e in sets.values()):
