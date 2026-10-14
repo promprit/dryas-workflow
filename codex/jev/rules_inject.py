@@ -6,7 +6,8 @@ resolved to the plugin root and a "Dryas paths:" line naming <dryas-root> and <d
 On resume the context is injected again on purpose: additionalContext is not part of the saved transcript.
 For Claude Code, when the account's settings.json lacks the deny rules of settings.fragment.json (setup not run),
 one line says so, since the Superpowers overlap rules are then missing. When memory consolidation keeps being
-skipped inside hooks with no background run finishing, one line says so too.
+skipped inside hooks with no background run finishing, one line says so too, and one line names each namespace
+whose last 3+ background runs failed.
 Fails silent (no output) on any error."""
 import datetime
 import json
@@ -30,9 +31,11 @@ SETUP_LINE = ("Dryas setup has not been run for this Claude config dir (run inst
               "repo): the Superpowers overlap deny rules are missing, so the disabled Superpowers skills may still "
               "trigger; do not use them.")
 CONSOLIDATE_LINE = ("Memory consolidation keeps skipping inside hooks (%d in 7 days) and no background run finished; "
-                    "run `dryas memory consolidate`.")
+                    "run `%s memory consolidate`.")
+FAILED_LINE = ("Memory consolidation failed %d times for %s; run `%s memory consolidate --ns %s` and read memory.jsonl.")
 WARN_WINDOW_S = 7 * 86400
 WARN_MIN_SKIPS = 3
+WARN_MIN_FAILURES = 3
 MEMORY_TAIL = 200
 
 
@@ -89,10 +92,16 @@ def _ts(rec: Dict[str, Any]) -> float:
     return datetime.datetime.strptime(str(rec.get("ts")), "%Y-%m-%dT%H:%M:%S%z").timestamp()
 
 
+def wrapper() -> str:
+    """The full path of the `dryas` command-line wrapper for this OS."""
+    return os.path.join(paths.plugin_root(), "bin", "dryas.cmd" if os.name == "nt" else "dryas")
+
+
 def consolidate_warning(rows: List[Dict[str, Any]], now: float) -> str:
     """One line when 3+ consolidations were skipped in hooks in the last 7 days and no background run finished
-    after the last skip; empty otherwise (rows without a readable ts are ignored)."""
-    skips, done = [], []
+    after the last skip, plus one line per namespace whose last 3+ background runs (rows in log order) failed;
+    empty otherwise (rows without a readable ts are ignored)."""
+    skips, done, failed = [], [], {}  # failed: ns -> background failures since its last success
     for r in rows:
         try:
             t = _ts(r)
@@ -104,9 +113,14 @@ def consolidate_warning(rows: List[Dict[str, Any]], now: float) -> str:
             skips.append(t)
         elif r.get("stage") == "consolidate" and r.get("ok") is True:
             done.append(t)
-    if len(skips) < WARN_MIN_SKIPS or any(t > max(skips) for t in done):
-        return ""
-    return CONSOLIDATE_LINE % len(skips)
+            failed.pop(r.get("ns"), None)
+        elif r.get("stage") == "consolidate" and r.get("ok") is False and isinstance(r.get("ns"), str):
+            failed[r["ns"]] = failed.get(r["ns"], 0) + 1
+    cmd, lines = wrapper(), []
+    if len(skips) >= WARN_MIN_SKIPS and not any(t > max(skips) for t in done):
+        lines.append(CONSOLIDATE_LINE % (len(skips), cmd))
+    lines += [FAILED_LINE % (n, ns, cmd, ns) for ns, n in sorted(failed.items()) if n >= WARN_MIN_FAILURES]
+    return "\n".join(lines)
 
 
 def _memory_rows() -> List[Dict[str, Any]]:

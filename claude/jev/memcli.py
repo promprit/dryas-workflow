@@ -3,8 +3,11 @@
 
   memcli.py [--db PATH] import-ruflo [--from PATH]   import Ruflo memory read-only; exit 1 if a source row
                                                      is missing from the store, 2 if there is no Ruflo memory
-  memcli.py [--db PATH] consolidate [--ns NS]        run consolidation (no deadline) for one or every namespace;
+  memcli.py [--db PATH] consolidate [--ns NS] [--wait S]
+                                                     run consolidation (no deadline) for one or every namespace;
                                                      takes a lock beside the store, so a second run exits at once
+                                                     (or waits up to S seconds); a failure counts against the
+                                                     namespace's pending marker
   memcli.py [--db PATH] stats [--ns NS]              rows per namespace and kind
 --db (or DRYAS_DB) picks the store; the default is ~/.dryas/dryas.db."""
 import argparse
@@ -32,11 +35,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     st.add_argument("--ns")
     co = sub.add_parser("consolidate", help="dedupe, graph and patterns, outside a hook")
     co.add_argument("--ns")
+    co.add_argument("--wait", type=float, default=0, help="seconds to wait for a running consolidation")
     a = ap.parse_args(argv)
     if a.cmd == "consolidate":
         root = os.path.dirname(os.path.abspath(a.db or memdb.db_path()))  # one lock per store
         os.makedirs(root, exist_ok=True)
-        fd = consolidate_bg.acquire(root)
+        fd = consolidate_bg.wait_acquire(root, a.wait)
         if fd is None:
             print("consolidation already running")
             return 0
@@ -46,6 +50,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             names = [a.ns] if a.ns else sorted(set(consolidate_bg.pending(conn)) | {r[0] for r in conn.execute(
                 "SELECT ns FROM memory UNION SELECT ns FROM edits UNION SELECT ns FROM tasks")})
             for ns in names:
+                consolidate_bg.heartbeat(root)
                 t = time.monotonic()
                 try:
                     r = memlearn.consolidate(conn, ns)
@@ -53,6 +58,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     jevlog.append("memory", dict(stage="consolidate", ns=ns, ok=False,
                                                  ms=int((time.monotonic() - t) * 1000), error=type(e).__name__))
                     print("%-24s failed: %s" % (ns, e), file=sys.stderr)
+                    consolidate_bg.record_failure(conn, ns)
                     continue
                 jevlog.append("memory", dict(stage="consolidate", ns=ns, ok=True, ms=int((time.monotonic() - t) * 1000)))
                 consolidate_bg.clear_pending(conn, ns)

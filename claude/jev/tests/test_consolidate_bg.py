@@ -49,7 +49,7 @@ class SpawnTest(unittest.TestCase):
         with mock.patch("subprocess.Popen") as P:
             self.assertTrue(bg.spawn("repo"))
         args, kw = P.call_args
-        self.assertTrue(args[0][-2:] == ["--ns", "repo"] and "memcli.py" in args[0][-4])
+        self.assertTrue(args[0][-2:] == ["--ns", "repo"] and "consolidate" in args[0] and "memcli.py" in args[0][args[0].index("consolidate") - 1])
         self.assertIn("stdin", kw)
         if os.name == "nt":
             self.assertTrue(kw.get("creationflags"))
@@ -88,5 +88,5 @@ class HookTest(unittest.TestCase):
         bg.mark_pending(conn, "repo")
         with mock.patch.object(memhooks.consolidate_bg, "spawn", return_value=True) as sp:
             memhooks.on_session_start(conn, {"session_id": "s2", "cwd": self.d})
-        sp.assert_called_once_with(None)
+        sp.assert_called_once_with("repo")
         conn.close()
