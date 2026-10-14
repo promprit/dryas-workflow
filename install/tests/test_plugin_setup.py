@@ -54,6 +54,7 @@ class Env:
 
 
 COMPS = ["core", "jev"]
+SP_COMPS = ["core", "jev", "superpowers"]
 
 
 def _out(fn):
@@ -121,24 +122,30 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(ps.install_path(e.a), str(REPO / "claude"))  # installed_plugins.json installPath
 
     def test_official_marketplace_added_before_install(self):
-        """claude-plugins-official is added before dryas is installed: the superpowers component installs from it
-        (and existing installs whose dependency never resolved still need it)."""
+        """With superpowers selected, claude-plugins-official is added before dryas is installed: the component
+        installs from it."""
         e = Env(self)
-        ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
+        ps.setup(REPO, e.a, SP_COMPS, yes=True, key="", flowobserve=False)
         cmds = [c[1:5] for c in e.calls()]
         off = cmds.index(["plugin", "marketplace", "add", ps.OFFICIAL_SOURCE])
         dr = cmds.index(["plugin", "install", ps.ID, "--scope"])
         self.assertLess(off, dr)
-        self.assertNotIn(["plugin", "install", ps.SUPERPOWERS, "--scope"], cmds)
 
     def test_missing_dependency_installed(self):
         """An existing install whose dependency never resolved: `plugin install dryas` does not retry it."""
         e = Env(self)
         _patch_env(self, {"FAKE_MISSING_DEP": ps.SUPERPOWERS})
-        self.assertEqual(ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False), 0)
+        self.assertEqual(ps.setup(REPO, e.a, SP_COMPS, yes=True, key="", flowobserve=False), 0)
         cmds = [c[1:4] for c in e.calls()]
         self.assertLess(cmds.index(["plugin", "install", ps.ID]), cmds.index(["plugin", "install", ps.SUPERPOWERS]))
         self.assertTrue((e.a / "settings.json").exists())
+
+    def test_legacy_dependency_repair_respects_no_superpowers(self):
+        e = Env(self)
+        _patch_env(self, {"FAKE_MISSING_DEP": ps.SUPERPOWERS})
+        out = _out(lambda: ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=False))
+        self.assertFalse(any(c[1:3] == ["plugin", "install"] and ps.SUPERPOWERS in c for c in e.calls()))
+        self.assertIn("an earlier install expected Superpowers; it is optional now and was not installed", out)
 
     def test_load_errors_stop_before_settings(self):
         e = Env(self)
@@ -152,7 +159,7 @@ class SetupTest(unittest.TestCase):
         e = Env(self)
         out = _out(lambda: ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=False))
         self.assertIn("Superpowers is not installed; the Dryas process skills cover the loop", out)
-        self.assertTrue(any(c[1:4] == ["plugin", "marketplace", "add"] and ps.OFFICIAL_SOURCE in c for c in e.calls()))
+        self.assertFalse(any(ps.OFFICIAL_SOURCE in c for c in e.calls()))
         self.assertFalse(any(ps.SUPERPOWERS in c for c in e.calls()))
         s = json.loads((e.a / "settings.json").read_text())
         self.assertEqual(len([r for r in s["permissions"]["deny"] if r.startswith("Skill(superpowers:")]), 5)

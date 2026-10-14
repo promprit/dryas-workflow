@@ -64,6 +64,18 @@ class InvocationTest(unittest.TestCase):
         self.assertEqual(scp.invocation_drift(t), ["skill tune: codex allow_implicit_invocation is true, "
                                                    "claude says user-invoked"])
 
+    def test_orchestrate_allows_commit_tools(self):
+        """/orchestrate's finish runs the commit steps, so it may use every tool /commit lists."""
+        import inventory
+
+        def tools(rel):
+            m = re.search(r"^allowed-tools:\s*(.+)$", (ROOT / rel).read_text(encoding="utf-8"), re.M)
+            return {t.strip() for t in inventory._SPLIT.split(m.group(1)) if t.strip()}
+        want = tools("claude/commands/commit.md")
+        self.assertTrue(want)
+        for rel in ("claude/skills/orchestrate/SKILL.md", "claude/commands/orchestrate.md"):
+            self.assertEqual(want - tools(rel), set(), rel)
+
 
 if __name__ == "__main__":
     unittest.main()

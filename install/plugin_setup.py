@@ -315,9 +315,9 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     if "superpowers" not in comps:
         print("note: Superpowers is not installed; the Dryas process skills cover the loop "
               "(its conflicting skills stay denied if you add it later).")
-    # claude-plugins-official hosts the optional superpowers component; an install whose old superpowers dependency
-    # never resolved still installs it below.
-    steps = [["claude", "plugin", "marketplace", "add", OFFICIAL_SOURCE, "--scope", "user"],
+    # claude-plugins-official hosts the optional superpowers component: it is added, and an old unresolved
+    # superpowers dependency repaired below, only when superpowers is selected.
+    steps = ([["claude", "plugin", "marketplace", "add", OFFICIAL_SOURCE, "--scope", "user"]] if "superpowers" in comps else []) + [
              ["claude", "plugin", "marketplace", "add", str(repo), "--scope", "user"],
              ["claude", "plugin", "install", ID, "--scope", "user", "-y"] + (["--config", "openrouter_key=" + key] if key else [])]
     for argv in steps:
@@ -336,6 +336,9 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     # an earlier install whose dependency never resolved: re-installing dryas does not retry it, so install it here
     deps = [d.get("dependency") for d in (entry or {}).get("errorDetails") or []
             if isinstance(d, dict) and d.get("type") == "dependency-unsatisfied" and d.get("dependency")]
+    if deps and "superpowers" not in comps:
+        print("note: an earlier install expected Superpowers; it is optional now and was not installed")
+        deps = []
     for dep in deps:
         argv = ["claude", "plugin", "install", dep, "--scope", "user", "-y"]
         print("%s%s" % (env_prefix(cd), " ".join(argv)))
