@@ -4,7 +4,7 @@
 Sends the (redacted) command, or file path + byte/line counts. Never file contents. Tool input is
 sent inside `untrusted_*` fields and the questions say it is data, not instructions.
 Allowlisted plain shell reads, allowlisted compounds, commands the local prescreen finds not risky
-and file edits inside cwd that touch nothing sensitive (SENSITIVE_*) skip Jev. Every failure means no decision.
+and file edits inside cwd that touch nothing sensitive (SENSITIVE_*) skip Jev. Every failure means no decision, except that a Jev failure falls back to the local judge (providers.py).
 """
 import json
 import os
@@ -12,11 +12,15 @@ import re
 import shlex
 import string
 import sys
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
 import thresholds
+import local_judge
+import providers
+import taskctx
 
 try:
     import prescreen
@@ -234,6 +238,15 @@ def decide(answers: Dict[str, Dict[str, Any]], t: Dict[str, Any]) -> Optional[Tu
     return None
 
 
+def _local_decision(local: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """The local judge's own verdict; gate thresholds apply to Jev answers only."""
+    if local["decision"] == "deny":
+        return "deny", "Local judge: blocked (%s)" % local["reasons"][0]
+    if local["decision"] == "ask":
+        return "ask", "Local judge: looks destructive (%s) - please confirm" % local["reasons"][0]
+    return None
+
+
 def _head(tool: str, ti: Dict[str, Any]) -> Dict[str, Any]:
     if tool != "Bash":
         return {}
@@ -266,21 +279,26 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     tool = event.get("tool_name")
     if tool not in GATE_TOOLS:
         return None
-    t = thresholds.load()["gate"]
+    t_all = thresholds.load()
+    t = t_all["gate"]
     ti = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
-    base = dict({"tool": tool}, **_head(tool, ti))
-    if tool != "Bash" and local_file(tool, ti, str(event.get("cwd") or "")):
+    cwd = str(event.get("cwd") or "")
+    base = dict({"tool": tool}, **_head(tool, ti), **taskctx.context(cwd))
+    if tool != "Bash" and local_file(tool, ti, cwd):
         jevlog.append("gate", dict(base, decision="skipped", via="local_file"))
         return None
+    cmd = str(ti.get("command", "")) if tool == "Bash" else ""
+    risky = True
     if tool == "Bash":
-        cmd = str(ti.get("command", ""))
         ok = allowlisted(cmd, t["allowlist"]) and _plain(cmd)
         via, extra = "allowlist", {}
         if not ok and t.get("compound", True):
-            ok, n = allowlisted_compound(cmd, t["allowlist"], str(event.get("cwd") or ""))
+            ok, n = allowlisted_compound(cmd, t["allowlist"], cwd)
             via, extra = "compound", {"parts": n}
-        if not ok and t.get("prescreen", True) and not _risky(cmd):
-            ok, via, extra = True, "prescreen", {}
+        if not ok:
+            risky = _risky(cmd)
+            if t.get("prescreen", True) and not risky:
+                ok, via, extra = True, "prescreen", {}
         if ok:
             jevlog.append("gate", dict(base, decision="skipped", via=via, **extra))
             return None
@@ -288,21 +306,19 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     if ssd and not os.path.isdir(ssd):
         jevlog.append("gate", dict(base, decision="none", error="ssd_missing"))
         return None
-    from jev_client import JevUnavailable, judge  # after the skip checks: allowlisted calls never pay the ssl/http import
+    t0 = time.monotonic()
+    local = local_judge.gate_answers(tool, cmd, risky)
+    local_ms = round((time.monotonic() - t0) * 1000, 2)
     state = {"environment": os.environ.get("JEV_GATE_STATE", DEFAULT_STATE), "cwd": str(event.get("cwd", "")),
              "action": describe(tool, ti)}
     try:
-        res = (judge_fn or judge)(state, QUESTIONS)
-        a = res["answers"]
-        d = decide(a, t)
+        v = providers.ask(state, QUESTIONS, local, t_all, judge_fn)
+        a = v["answers"]
+        d = _local_decision(local) if v["provider"] == "local" else decide(a, t)
         # Try to log and format decision, but don't let logging failure suppress a computed decision
         try:
-            log_record = dict(base, decision=d[0] if d else "none", p_safe=round(a["safe"]["value"], 3),
-                            risk=a["risk"]["value"], risk_conf=round(a["risk"]["confidence"], 3),
-                            latency_ms=res.get("latency_ms"), input_tokens=res.get("input_tokens"), cost=res.get("cost"))
-            jevlog.append("gate", log_record)
-        except Exception as e:
-            # Logging failed, but if we have a decision, still return it
+            jevlog.append("gate", _record(base, d, a, v, t, local, local_ms))
+        except Exception:
             try:
                 jevlog.append("gate", dict(base, decision=d[0] if d else "none", error="logging_failed"))
             except Exception:
@@ -310,9 +326,46 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
         if not d:
             return None
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": d[0], "permissionDecisionReason": d[1]}}
-    except (JevUnavailable, KeyError, TypeError, ValueError, AttributeError) as e:
+    except (KeyError, TypeError, ValueError, AttributeError) as e:
         jevlog.append("gate", dict(base, decision="none", error=type(e).__name__))
         return None
+
+
+def _record(base: Dict[str, Any], d: Optional[Tuple[str, str]], a: Dict[str, Any], v: Dict[str, Any],
+            t: Dict[str, Any], local: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
+    # Returned as dict(...) built from helpers so tools/inventory.py can trace the log fields.
+    return dict(base, decision=d[0] if d else "none", p_safe=round(a["safe"]["value"], 3), risk=a["risk"]["value"],
+                risk_conf=round(a["risk"]["confidence"], 3), provider=v["provider"],
+                **_provider_fields(v, local_ms), **_shadow_fields(v, t, local))
+
+
+def _provider_fields(v: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
+    if v["provider"] == "jev":
+        return dict(latency_ms=v.get("latency_ms"), input_tokens=v.get("input_tokens"), cost=v.get("cost"))
+    if v.get("fallback"):
+        return dict(local_ms=local_ms, reasons=list(v.get("reasons", []))[:4], fallback=v["fallback"],
+                    error=v.get("error"))
+    return dict(local_ms=local_ms, reasons=list(v.get("reasons", []))[:4])
+
+
+def _shadow_fields(v: Dict[str, Any], t: Dict[str, Any], local: Dict[str, Any]) -> Dict[str, Any]:
+    sa = v.get("shadow_answers")
+    if not sa:
+        if v.get("shadow_error"):
+            return dict(shadow_provider=v["shadow_provider"], shadow_error=v["shadow_error"])
+        return {}
+    if v["shadow_provider"] == "local":
+        sd = local["decision"] or "none"
+    else:
+        jd = decide(sa, t)
+        sd = jd[0] if jd else "none"
+    out = dict(shadow_provider=v["shadow_provider"], shadow_decision=sd,
+               shadow_p_safe=round(sa["safe"]["value"], 3), shadow_risk=sa["risk"]["value"])
+    if v.get("shadow_reasons"):
+        out["shadow_reasons"] = list(v["shadow_reasons"])[:4]
+    if v.get("shadow_cost") is not None:
+        out["shadow_cost"] = v["shadow_cost"]
+    return out
 
 
 if __name__ == "__main__":
