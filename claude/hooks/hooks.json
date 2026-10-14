@@ -19,10 +19,9 @@
       {"hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/chain.py\" session-end", "timeout": 5}]}
     ],
     "SessionStart": [
-      {"matcher": "startup|resume|clear|compact", "hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/rules_inject.py\"", "timeout": 5}]},
+      {"matcher": "startup|resume|clear|compact", "hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/rules_inject.py\"", "timeout": 5}, {"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/chain.py\" session-start", "timeout": 5}]},
       {"matcher": "compact", "hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/compact_restore.py\"", "timeout": 5}]},
-      {"matcher": "clear", "hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/handoff_restore.py\"", "timeout": 5}]},
-      {"matcher": "startup|resume|clear|compact", "hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/chain.py\" session-start", "timeout": 5}]}
+      {"matcher": "clear", "hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/handoff_restore.py\"", "timeout": 5}]}
     ],
     "PreCompact": [
       {"hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/compact_keep.py\"", "timeout": 30}]},
