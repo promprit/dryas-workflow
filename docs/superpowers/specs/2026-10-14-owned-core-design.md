@@ -120,6 +120,13 @@ The "brainstorm first, always" hard gate stays, with the same three paths (spike
 
 **No-loss inventory.** Before any sub-project starts, `tools/inventory.py` snapshots 1.x into `reference/inventory-1.x.json`: every MCP tool, slash command, skill, agent, hook stage and settings hook, installer flag, `thresholds.json` key, JSONL record field and `/tune` report line. A test asserts that each entry exists in 2.0 or maps to a named equivalent in the parity tables. It runs in CI on every sub-project branch, so a loss fails the build rather than a review.
 
+**Learning loop and shared language** (added 2026-10-14, approved by Promprit; ideas from mattpocock/skills, MIT, no text copied):
+
+- `/retro`, a user-invoked command next to `/tune`. `/tune` calibrates numbers; `/retro` reads the current session (or a named one) and proposes environment improvements in order of severity, in these categories: navigation (files or facts the agent struggled to find), automated checks (mistakes a test, lint or hook could have caught), instruction lines that changed nothing, tool cost, and missing information access. Its rule: a mechanical rule becomes a deterministic check (the scope lock and `tools/inventory.py` are the model); only judgement calls stay as prose. It proposes, never applies; accepted items go into a plan. Its outcome is stored with `memory_store` (kind `retro`), so B's memory surfaces past lessons before the next task.
+- `GLOSSARY.md` at the repo root: one line per Dryas term (Jev, judge, provider, shadow, fallback, tier and rung, ladder, scope lock, worktree loop, task id, baseline, inventory, extra) so skills, templates and docs use one word per meaning and point to it instead of re-explaining. Both editions' skills may point to it; `tools/sync_codex_plugin.py` does not copy it (it is read from the repo).
+- `.out-of-scope/`: one short file per decided non-goal, with the date, the decision and the reason, so a settled question is not reopened. First entries: Rust core (rejected 2026-10-14: a toolchain or signed binaries would reintroduce a dependency), embeddings in memory (deferred until full-text recall proves too weak), rebuilding Ruflo tools no rule calls, replacing the design plugins.
+- Rules-template pass (last task of D, after C lands): rewrite `claude/CLAUDE.md.template` and `codex/AGENTS.md.template` with the writing rules C adopts (front-loaded pointers instead of restated rules, checkable bounds, positive instructions with "never" kept for hard guardrails, one source of truth, no-op lines deleted). Measure before and after: today 3,909 and 2,402 bytes; a new test sets the budget at the rewritten size plus 10% for each edition, and every rule present today stays reachable (in the template or behind a pointer) — checked by a coverage table like C's `UPSTREAM.md`.
+
 **Release.** Version 2.0.0. `tools/release_check.py` gains a no-Node check (install into a temp config dir with Node absent from PATH). CI runs the install and the end-to-end loop on macOS, Linux and Windows without Node.
 
 **Cut-over for an existing install.** Run setup for 2.0 with `--judge jev` (shadow `local` is the default when a key is present), run `dryas memory import-ruflo`, accept the legacy cleanup, keep working. Flip to `--judge local` when `/tune` proposes it.
@@ -152,4 +159,4 @@ The "brainstorm first, always" hard gate stays, with the same three paths (spike
 
 ## Effort
 
-A 6–9 days of work plus a baseline week and 2–4 weeks of shadow data; B 4–6; C 3–5; D 3–4. About 3–4 weeks of build in parallel worktrees, 6 weeks start to finish.
+A 6–9 days of work plus a baseline week and 2–4 weeks of shadow data; B 4–6; C 3–5; D 3–4, plus 2–3 for `/retro`, `GLOSSARY.md`, `.out-of-scope/` and the rules-template pass. About 3–4 weeks of build in parallel worktrees, 6 weeks start to finish.

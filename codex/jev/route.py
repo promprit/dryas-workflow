@@ -3,7 +3,7 @@
 Advisory only. Never suggests frontier: frontier is reached only after a strong executor fails.
 
 Injects one line, e.g. 'Jev route: swarm (0.82); opus: no (0.91)'. Parts below the route
-confidence threshold are dropped; if nothing is confident, nothing is injected.
+confidence threshold are dropped; if nothing is confident, nothing is injected. With the local judge provider (no key, or judge.provider local) nothing is injected.
 """
 import json
 import os
@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
+import providers
 import thresholds
 from jev_client import JevUnavailable, judge
 
@@ -37,13 +38,17 @@ QUESTIONS: Dict[str, Any] = {
 }
 
 
-def run(event: Dict[str, Any], judge_fn=judge) -> Optional[str]:
+def run(event: Dict[str, Any], judge_fn=None) -> Optional[str]:
     prompt = str(event.get("prompt", ""))
     if not prompt.strip():
         return None
-    t = thresholds.load()["route"]
+    t_all = thresholds.load()
+    t = t_all["route"]
+    if providers.resolve(t_all, judge_fn is not None)[0] == "local":
+        jevlog.append("route", {"provider": "local", "injected": False})
+        return None  # the local judge gives no route hint
     try:
-        res = judge_fn({"prompt": prompt[:4000], "cwd": str(event.get("cwd", ""))}, QUESTIONS)
+        res = (judge_fn or judge)({"prompt": prompt[:4000], "cwd": str(event.get("cwd", ""))}, QUESTIONS)
         r, f = res["answers"]["route"], res["answers"]["opus"]
         parts: List[str] = []
         route_criteria = QUESTIONS["route"]["criteria"]
@@ -55,7 +60,7 @@ def run(event: Dict[str, Any], judge_fn=judge) -> Optional[str]:
             label = "escalate" if os.environ.get("DRYAS_HARNESS") == "codex" else "opus"
             parts.append("%s: %s (%.2f)" % (label, "yes" if float(f["value"]) >= 0.5 else "no", f["confidence"]))
         line = ("Jev " + "; ".join(parts)) if parts else None
-        jevlog.append("route", {"route": str(r["value"]), "route_conf": round(r["confidence"], 3), "opus_p": round(f["value"], 3),
+        jevlog.append("route", {"provider": "jev", "route": str(r["value"]), "route_conf": round(r["confidence"], 3), "opus_p": round(f["value"], 3),
                                 "opus_conf": round(f["confidence"], 3), "injected": bool(line),
                                 "latency_ms": res.get("latency_ms"), "input_tokens": res.get("input_tokens"), "cost": res.get("cost")})
         return line
