@@ -25,7 +25,10 @@ def _n(v: Any) -> Optional[float]:
 
 
 def _tier(v: Any) -> Optional[str]:
-    return v if isinstance(v, str) and v in RANK else None
+    """The tier a model name maps to: a name containing "haiku", "sonnet", "opus" or "fable" (Claude tiers and
+    Codex model names alike) is that tier. Any other name is unknown and left out of the tier stats."""
+    name = v.lower() if isinstance(v, str) else ""
+    return next((t for t in RANK if t in name), None)
 
 
 def as_int(v: Any) -> Optional[int]:
@@ -278,7 +281,7 @@ def lines(s: Dict[str, Any]) -> List[str]:
             "- Start tier from the score: %d tasks, escalation %s, tokens median %s; from the tier questions: %d tasks, "
             "escalation %s, tokens median %s" % (sc["tasks"], _pct(sc["escalation_rate"]), _f(sc["tokens_median"]),
                                                  qs["tasks"], _pct(qs["escalation_rate"]), _f(qs["tokens_median"])),
-            "- Score in shadow (%d scored tasks): would help %d, would hurt %d" % (
+            "- Score in shadow (%d scored tasks): would help %d, would hurt %d (ON needs help >= 2 x hurt, at least 1)" % (
                 s["scored_tasks"], s["shadow_helps"], s["shadow_hurts"]),
             _skip_line(s)]
     return out
@@ -288,8 +291,8 @@ def proposals(s: Dict[str, Any], th: Dict[str, Dict[str, Any]]) -> List[Dict[str
     """review.task_skip: OFF -> ON when the false-skip rate over judged would-skip edits is at most
     max_false_skip_rate over min_tasks tasks (enforced skips are never evidence). ON -> OFF once enforced when any
     judged edit since shows a false skip; before any enforced skip, when the rate is above the maximum.
-    dispatch.scored_tier: OFF -> ON over min_tasks scored tasks when the score in shadow would help more tasks
-    than it would hurt (scored_evidence). ON -> OFF when, with min_tasks tasks in each group, tasks started from
+    dispatch.scored_tier: OFF -> ON over min_tasks scored tasks when the score in shadow would help at least twice
+    as many tasks as it would hurt and at least one (helps >= 2 * hurts, helps >= 1; scored_evidence). ON -> OFF when, with min_tasks tasks in each group, tasks started from
     the score escalate more often than tasks started from the tier questions."""
     out: List[Dict[str, Any]] = []
     rv, dp = th["review"], th["dispatch"]
@@ -306,11 +309,13 @@ def proposals(s: Dict[str, Any], th: Dict[str, Dict[str, Any]]) -> List[Dict[str
         out.append({"key": "review.task_skip", "old": True, "new": False,
                     "why": "false-skip rate %s over %d tasks (max %s)" % (_pct(rate), s["skip_tasks"], _pct(mx))})
     sc, qs = s["score_starts"], s["question_starts"]
-    if not dp["scored_tier"] and s["scored_tasks"] >= dp["min_tasks"] and s["shadow_helps"] > s["shadow_hurts"]:
+    if not dp["scored_tier"] and s["scored_tasks"] >= dp["min_tasks"] and s["shadow_helps"] >= 1 \
+            and s["shadow_helps"] >= 2 * s["shadow_hurts"]:
         out.append({"key": "dispatch.scored_tier", "old": False, "new": True,
                     "why": "in shadow the score would have started lower on %d tasks that did not escalate and higher "
-                           "on %d that did; it would have hurt %d (%d scored tasks)"
-                           % (s["shadow_lower_ok"], s["shadow_higher_ok"], s["shadow_hurts"], s["scored_tasks"])})
+                           "on %d that did; helps %d, hurts %d (needs helps >= 2 x hurts; %d scored tasks)"
+                           % (s["shadow_lower_ok"], s["shadow_higher_ok"], s["shadow_helps"], s["shadow_hurts"],
+                              s["scored_tasks"])})
     elif (dp["scored_tier"] and sc["tasks"] >= dp["min_tasks"] and qs["tasks"] >= dp["min_tasks"]
           and sc["escalation_rate"] > qs["escalation_rate"]):
         out.append({"key": "dispatch.scored_tier", "old": True, "new": False,

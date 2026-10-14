@@ -4,13 +4,23 @@ tasks against the current window, per task (medians), with PASS or FAIL per line
   Gate wait per task      current < baseline (both 0 passes)
   Executor tokens / task  current <= baseline
   Escalation rate         current <= baseline
+  Review findings per merged branch  current <= baseline (critical + important per review record, summed per
+                          branch, median; records split by their ts at the same boundary as the tasks)
+  No enforced false skip on an always-judged file  (always printed) PASS unless a gate record shows a
+                          task_review skip of a path pathclass.always_judged says is always judged; n/a without
+                          gate records, or when skips were enforced but no record names the path
 Windows: tasks first dispatched before thresholds baseline.until (YYYY-MM-DD) against the rest, or, when it is "",
 the earlier half of the logged tasks against the later half (ordered by first dispatch time). A window with fewer
 than WINDOW_MIN tasks gives n/a. Each window states its task-type mix (a shift in mix moves the medians).
 baseline.until is validated by thresholds (a real YYYY-MM-DD date); this module trusts it."""
 import statistics
 from collections import Counter
+import os
+import sys
 from typing import Any, Dict, List, Optional, Tuple
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pathclass
 
 WINDOW_MIN = 10
 Rows = Dict[str, Dict[str, Any]]
@@ -53,7 +63,33 @@ CHECKS = (
 )
 
 
-def check(task_rows: Rows, until: Any) -> Dict[str, Any]:
+def _count(v: Any) -> float:
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 else 0.0
+
+
+def _findings(review: List[Any], keep) -> Optional[float]:
+    """Median over branches of critical + important, from the review records whose ts passes keep."""
+    per: Dict[str, float] = {}
+    for r in review:
+        if isinstance(r, dict) and isinstance(r.get("task"), (str, int)) and not isinstance(r.get("task"), bool) \
+                and isinstance(r.get("ts"), str) and keep(r["ts"]):
+            per[str(r["task"])] = per.get(str(r["task"]), 0.0) + _count(r.get("critical")) + _count(r.get("important"))
+    return float(statistics.median(per.values())) if per else None
+
+
+def _false_skip(gate: List[Any]) -> str:
+    recs = [r for r in gate if isinstance(r, dict)]
+    if not recs:
+        return "n/a"
+    enforced = [r for r in recs if r.get("decision") == "skipped" and r.get("via") == "task_review"]
+    paths = [r.get(k) for r in enforced for k in ("path", "file_path", "rel") if isinstance(r.get(k), str)]
+    if enforced and not paths:
+        return "n/a"
+    return "FAIL" if any(pathclass.always_judged(p) for p in paths) else "PASS"
+
+
+def check(task_rows: Rows, until: Any, review: Optional[List[Any]] = None,
+          gate: Optional[List[Any]] = None) -> Dict[str, Any]:
     base, cur, until = windows(task_rows, until)
     out = {"basis": ("before %s" % until) if until else "earlier half", "base_tasks": len(base),
            "current_tasks": len(cur), "base_types": _types(base), "current_types": _types(cur), "lines": []}
@@ -63,6 +99,13 @@ def check(task_rows: Rows, until: Any) -> Dict[str, Any]:
         c = _median(cur, key) if key else _rate(cur)
         verdict = "n/a" if not enough or b is None or c is None else ("PASS" if ok(b, c) else "FAIL")
         out["lines"].append({"name": name, "base": b, "current": c, "target": target, "verdict": verdict})
+    cut = until or (cur[0]["first_ts"] if cur else None)
+    b = _findings(review or [], lambda ts: cut is not None and ts < cut)
+    c = _findings(review or [], lambda ts: cut is not None and ts >= cut)
+    verdict = "n/a" if not enough or b is None or c is None else ("PASS" if c <= b else "FAIL")
+    out["lines"].append({"name": "Review findings per merged branch", "base": b, "current": c, "target": "no higher",
+                         "verdict": verdict})
+    out["false_skip"] = _false_skip(gate or [])
     return out
 
 
@@ -77,4 +120,5 @@ def lines(res: Dict[str, Any]) -> List[str]:
         WINDOW_MIN)]
     out += ["- Done-when %s: baseline %s, current %s (target: %s): %s" % (
         l["name"], _v(l["base"]), _v(l["current"]), l["target"], l["verdict"]) for l in res["lines"]]
+    out.append("- Done-when No enforced false skip on an always-judged file: %s" % res.get("false_skip", "n/a"))
     return out

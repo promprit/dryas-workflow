@@ -95,7 +95,7 @@ class TuneTasksTest(unittest.TestCase):
                      "- Score buckets (tasks, escalated): 0-29 1/1",
                      "- Start tier from the score: 2 tasks, escalation 50.0%, tokens median 7000; from the tier questions: "
                      "1 tasks, escalation 0.0%, tokens median 4000",
-                     "- Score in shadow (3 scored tasks): would help 0, would hurt 1",
+                     "- Score in shadow (3 scored tasks): would help 0, would hurt 1 (ON needs help >= 2 x hurt, at least 1)",
                      "- Task review: false-skip rate 50.0% (1 of 2 judged would-skip edits, 3 tasks), enforced skips 0, "
                      "would-skip edits 2"):
             self.assertIn(part, text)
@@ -235,6 +235,25 @@ class ScoredTierTest(unittest.TestCase):
         self.assertEqual((s["shadow_helps"], s["shadow_hurts"]), (2, 2))
         self.assertEqual(tt.proposals(s, TH), [])
 
+    def test_on_needs_a_margin_helps_at_least_twice_hurts(self):
+        three_two = scored_summary([scored("a", "sonnet", "haiku", False), scored("b", "sonnet", "haiku", False),
+                                    scored("c", "sonnet", "opus", True), scored("d", "sonnet", "haiku", True),
+                                    scored("e", "sonnet", "opus", False)])
+        self.assertEqual((three_two["shadow_helps"], three_two["shadow_hurts"]), (3, 2))
+        self.assertEqual(tt.proposals(three_two, TH), [])
+        four_two = scored_summary([scored("a", "sonnet", "haiku", False), scored("b", "sonnet", "haiku", False),
+                                   scored("c", "sonnet", "opus", True), scored("f", "sonnet", "opus", True),
+                                   scored("d", "sonnet", "haiku", True), scored("e", "sonnet", "opus", False)])
+        self.assertEqual((four_two["shadow_helps"], four_two["shadow_hurts"]), (4, 2))
+        p = tt.proposals(four_two, TH)
+        self.assertEqual([(x["key"], x["new"]) for x in p], [("dispatch.scored_tier", True)])
+        self.assertIn("helps 4, hurts 2", p[0]["why"])
+
+    def test_zero_helps_never_turns_on_even_with_zero_hurts(self):
+        s = dict(scored_summary([scored("a", "sonnet", "sonnet", False), scored("b", "sonnet", "sonnet", False)]))
+        s.update(scored_tasks=2, shadow_helps=0, shadow_hurts=0)
+        self.assertEqual(tt.proposals(s, TH), [])
+
     def test_on_needs_min_scored_tasks(self):
         s = scored_summary([scored("a", "sonnet", "haiku", False)])
         self.assertEqual(tt.proposals(s, TH), [])
@@ -251,6 +270,19 @@ class ScoredTierTest(unittest.TestCase):
         few = scored_summary([scored("a", "haiku", "haiku", True), scored("b", "haiku", "haiku", False),
                               scored("c", "sonnet", "haiku", False)])  # one question start: no baseline
         self.assertEqual(tt.proposals(few, on), [])
+
+
+class CodexTierTest(unittest.TestCase):
+    def test_model_names_map_to_their_tier_and_unknown_names_are_skipped(self):
+        for name, tier in (("claude-haiku-4-5", "haiku"), ("gpt-sonnet-x", "sonnet"), ("Opus-5", "opus"),
+                           ("fable", "fable"), ("sonnet", "sonnet")):
+            self.assertEqual(tt._tier(name), tier, name)
+        for name in ("gpt-5-codex", "", None, 3, "o3"):
+            self.assertIsNone(tt._tier(name), name)
+
+    def test_codex_named_dispatch_lands_in_tier_stats(self):
+        t = tt.tiers([d("x", "claude-haiku-4-5"), d("y", "gpt-5-codex")])
+        self.assertEqual((t["x"]["start"], t["y"]["start"]), ("haiku", None))
 
 
 class TiersTest(unittest.TestCase):

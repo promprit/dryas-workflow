@@ -24,12 +24,12 @@ def rows(base, cur):
 class WindowTest(unittest.TestCase):
     def test_pass_when_targets_met(self):
         res = tw.check(rows((8, 900.0, 50000.0), (3, 400.0, 48000.0)), "")
-        self.assertEqual([l["verdict"] for l in res["lines"]], ["PASS"] * 4)
+        self.assertEqual([l["verdict"] for l in res["lines"][:4]], ["PASS"] * 4)
         self.assertEqual((res["base_tasks"], res["current_tasks"], res["basis"]), (10, 10, "earlier half"))
 
     def test_fail_lines(self):
         res = tw.check(rows((8, 900.0, 50000.0), (5, 950.0, 51000.0, True)), "")
-        self.assertEqual([l["verdict"] for l in res["lines"]], ["FAIL"] * 4)
+        self.assertEqual([l["verdict"] for l in res["lines"][:4]], ["FAIL"] * 4)
 
     def test_until_date_splits_windows(self):
         r = rows((8, 900.0, 50000.0), (3, 400.0, 48000.0))
@@ -64,6 +64,73 @@ class WindowTest(unittest.TestCase):
         self.assertIn("- Done-when Jev calls per task: baseline 8, current 3 (target: at most half): PASS", text)
 
 
+def rev(day, branch, crit=0, imp=0):
+    return {"task": branch, "critical": crit, "important": imp, "minor": 9, "ts": "2026-10-%02dT10:00:00+0700" % day}
+
+
+def skip(path=None, **kw):
+    r = {"tool": "Write", "decision": "skipped", "via": "task_review"}
+    if path:
+        r["path"] = path
+    return dict(r, **kw)
+
+
+class ReviewFindingsTest(unittest.TestCase):
+    R = rows((8, 900.0, 50000.0), (3, 400.0, 48000.0))  # baseline days 1-9, current days 20-28
+
+    def line(self, review, gate=None, until=""):
+        res = tw.check(self.R, until, review, gate)
+        return [l for l in res["lines"] if l["name"] == "Review findings per merged branch"][0]
+
+    def test_review_findings_line(self):
+        base = [rev(2, "a", 1, 1), rev(3, "b", 0, 2), rev(4, "c", 3, 0)]  # 2, 2, 3 -> median 2 (minor ignored)
+        l = self.line(base + [rev(21, "d", 0, 1), rev(22, "e", 0, 2)])  # 1, 2 -> 1.5
+        self.assertEqual((l["base"], l["current"], l["verdict"]), (2.0, 1.5, "PASS"))
+        l = self.line(base + [rev(21, "d", 1, 2), rev(22, "e", 0, 3)])  # 3, 3
+        self.assertEqual((l["base"], l["current"], l["verdict"]), (2.0, 3.0, "FAIL"))
+        self.assertEqual(self.line(base + [rev(21, "d", 0, 2)])["verdict"], "PASS")  # equal passes
+        text = "\n".join(tw.lines(tw.check(self.R, "", base + [rev(21, "d", 0, 1)], [])))
+        self.assertIn("- Done-when Review findings per merged branch: baseline 2, current 1 (target: no higher): PASS", text)
+
+    def test_records_of_one_branch_sum_and_until_splits_by_ts(self):
+        review = [rev(2, "a", 0, 1), rev(3, "a", 0, 1), rev(25, "b", 0, 1)]
+        l = self.line(review, until="2026-10-15")
+        self.assertEqual((l["base"], l["current"]), (2.0, 1.0))
+        l = self.line([rev(14, "a", 0, 5), rev(15, "b", 0, 7)], until="2026-10-15")
+        self.assertEqual((l["base"], l["current"]), (5.0, 7.0))
+
+    def test_missing_review_data_is_na(self):
+        self.assertEqual(self.line([])["verdict"], "n/a")
+        self.assertEqual(self.line([rev(2, "a", 0, 1)])["verdict"], "n/a")
+        self.assertEqual(self.line([{"task": "a", "important": 1}, "x", None])["verdict"], "n/a")
+
+
+class FalseSkipLineTest(unittest.TestCase):
+    def fs(self, gate):
+        return tw.check(rows((8, 900.0, 50000.0), (3, 400.0, 48000.0)), "", [], gate)["false_skip"]
+
+    def test_verdicts(self):
+        self.assertEqual(self.fs([skip("src/a.py"), {"tool": "Bash", "decision": "none"}]), "PASS")
+        self.assertEqual(self.fs([skip("src/a.py"), skip("scripts/run.sh")]), "FAIL")
+        self.assertEqual(self.fs([skip("../x.py")]), "FAIL")
+        self.assertEqual(self.fs([{"tool": "Bash", "decision": "none"}]), "PASS")  # no enforced skip at all
+        self.assertEqual(self.fs([skip("scripts/run.sh", decision="none", via=None)]), "PASS")  # not enforced
+
+    def test_na_without_data(self):
+        self.assertEqual(self.fs([]), "n/a")
+        self.assertEqual(self.fs([skip()]), "n/a")  # enforced skip, path not logged
+
+    def test_line_is_always_printed_and_tune_passes_records(self):
+        text = "\n".join(tw.lines(tw.check({}, "")))
+        self.assertIn("- Done-when No enforced false skip on an always-judged file: n/a", text)
+        tmp = tempfile.mkdtemp()
+        for name, recs in (("gate", [skip("Makefile")]), ("review", [])):
+            with open(os.path.join(tmp, name + ".jsonl"), "w") as f:
+                f.write("".join(json.dumps(r) + "\n" for r in recs))
+        with mock.patch.dict(os.environ, {"JEV_LOG_DIR": tmp, "JEV_THRESHOLDS": os.path.join(tmp, "t.json")}):
+            self.assertEqual(tune.build(tmp)["done_check"]["false_skip"], "FAIL")
+
+
 class TuneWiringTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -81,7 +148,8 @@ class TuneWiringTest(unittest.TestCase):
         i = next(n for n, l in enumerate(lines) if l.startswith("- Cost per merged task:"))
         self.assertTrue(lines[i + 1].startswith("- Per task (median over 0 tasks):"))
         j = next(n for n, l in enumerate(lines) if l.startswith("- Swarm vs plain token ratio:"))
-        self.assertTrue(lines[j - 1].startswith("- Done-when Escalation rate:"))
+        self.assertTrue(lines[j - 1].startswith("- Done-when No enforced false skip on an always-judged file:"))
+        self.assertTrue(lines[j - 2].startswith("- Done-when Review findings per merged branch:"))
 
     def test_report_carries_task_numbers_and_proposals(self):
         self.write("dispatch", [{"task": "b:%d" % i, "tier": "haiku", "role": "coder", "attempt": 1, "tokens": 1000,
@@ -102,7 +170,8 @@ class TuneWiringTest(unittest.TestCase):
 
 
 def verdicts(res):
-    return {l["name"]: l["verdict"] for l in res["lines"]}
+    """The four task-number lines (the review-findings line needs review records and has its own tests)."""
+    return {l["name"]: l["verdict"] for l in res["lines"][:4]}
 
 
 class BoundaryTest(unittest.TestCase):
