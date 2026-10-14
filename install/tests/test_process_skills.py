@@ -29,15 +29,22 @@ def present():
 
 def tables():
     """Dryas skill -> list of (upstream cell, target cell) rows."""
-    out, cur = {}, None
-    for line in UPSTREAM.read_text(encoding="utf-8").splitlines():
+    out = {}
+    for f in [UPSTREAM] + [SKILLS / n / "UPSTREAM.md" for n in scp.PROCESS_SKILLS]:
+        if f.is_file():
+            parse_table(f, out)
+    return out
+
+
+def parse_table(f, out):
+    cur = None
+    for line in f.read_text(encoding="utf-8").splitlines():
         m = re.match(r"^## ([a-z-]+)$", line)
         if m:
             cur = out.setdefault(m.group(1), [])
         elif cur is not None and line.startswith("| ") and not line.startswith(("| Upstream item", "|---")):
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             cur.append(tuple(cells))
-    return out
 
 
 def upstream_dir():
@@ -78,6 +85,8 @@ class ProcessSkillsTest(unittest.TestCase):
             self.assertLessEqual(len(desc), 1024, n)
             for f in (SKILLS / n).glob("*.md"):
                 self.assertLess(len(f.read_text(encoding="utf-8").splitlines()), 500, f)
+        for f in [UPSTREAM] + list(SKILLS.glob("*/UPSTREAM.md")):
+            self.assertLess(len(f.read_text(encoding="utf-8").splitlines()), 500, f)
 
     def test_no_superpowers_names(self):
         files = [UPSTREAM] + [f for n in scp.PROCESS_SKILLS for f in (SKILLS / n).glob("*.md")]
@@ -102,7 +111,7 @@ class ProcessSkillsTest(unittest.TestCase):
     def test_every_present_skill_has_a_table(self):
         t = tables()
         for n in present():
-            self.assertTrue(t.get(n), "no coverage table for %s in claude/skills/UPSTREAM.md" % n)
+            self.assertTrue(t.get(n), "no coverage table for %s in claude/skills/<skill>/UPSTREAM.md" % n)
 
     def test_coverage_targets_resolve(self):
         for skill, rows in tables().items():
