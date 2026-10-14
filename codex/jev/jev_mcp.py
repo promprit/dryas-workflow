@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jev_client
 import jevlog
+import providers
 import thresholds
 
 PROTOCOL = "2025-06-18"
@@ -237,18 +238,33 @@ def _validate_questions(questions: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _judge(mid: Any, args: Dict[str, Any], judge_fn) -> Dict[str, Any]:
+def _checked_questions(mid: Any, args: Dict[str, Any]) -> Any:
+    """Return (normalized_questions, None), or (None, error_reply) when state or a question is invalid."""
     if "state" not in args or not isinstance(args.get("questions"), dict) or not args["questions"]:
-        return _text(mid, "jev_judge needs 'state' and a non-empty 'questions' map", True)
-
-    # Normalize questions first
-    normalized_questions = _normalize_questions(args["questions"])
-
-    # Validate normalized questions
-    validation_error = _validate_questions(normalized_questions)
+        return None, _text(mid, "jev_judge needs 'state' and a non-empty 'questions' map", True)
+    normalized = _normalize_questions(args["questions"])
+    validation_error = _validate_questions(normalized)
     if validation_error:
         jevlog.append("mcp", {"tool": "jev_judge", "error": "invalid_question"})
-        return _text(mid, validation_error, True)
+        return None, _text(mid, validation_error, True)
+    return normalized, None
+
+
+def _local(mid: Any, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Local judge provider: no model answers. Validate as Jev would, then escalate every question."""
+    normalized_questions, reply = _checked_questions(mid, args)
+    if reply:
+        return reply
+    names = sorted(q[:64] for q in normalized_questions)[:64]
+    jevlog.append("mcp", {"tool": "jev_judge", "provider": "local", "escalate": names})
+    return _text(mid, {"answers": {}, "escalate": names, "provider": "local",
+                       "note": "Local judge: no model answers. The orchestrator decides every question."})
+
+
+def _judge(mid: Any, args: Dict[str, Any], judge_fn) -> Dict[str, Any]:
+    normalized_questions, reply = _checked_questions(mid, args)
+    if reply:
+        return reply
 
     try:
         res = judge_fn(args["state"], normalized_questions)
@@ -272,7 +288,7 @@ def _judge(mid: Any, args: Dict[str, Any], judge_fn) -> Dict[str, Any]:
                 val = val[:64]
             capped_answers[q_capped] = {"value": val, "confidence": round(a["confidence"], 3)}
 
-        jevlog.append("mcp", {"tool": "jev_judge",
+        jevlog.append("mcp", {"tool": "jev_judge", "provider": "jev",
                               "answers": capped_answers,
                               "escalate": escalate[:64] if len(escalate) > 64 else escalate,
                               "latency_ms": res["latency_ms"],
@@ -323,6 +339,8 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
         try:
             name, args = params.get("name"), params.get("arguments") or {}
             if name == "jev_judge":
+                if judge_fn is None and providers.resolve(thresholds.load(), False)[0] == "local":
+                    return _local(mid, args)
                 return _judge(mid, args, judge_fn or jev_client.judge)
             if name == "log_escalation":
                 jevlog.append("escalations", _sanitize_log_escalation(args))
