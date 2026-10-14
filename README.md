@@ -144,7 +144,7 @@ Keep notes that only fit your machine in `~/.dryas/docs/dryas-local.md`. The ins
 
 The local judge decides with deterministic rules and no key. This scorecard is measured on the checked-in corpus (`reference/judge-corpus/`, original to this repo) by `python3 tools/judge_score.py`, and CI fails when it gets worse. The numbers are the rule set's, not a model's, and they are what a keyless install gets.
 
-Each command in the corpus has a class: dangerous (must not be allowed), safe (must be allowed without a question) and tricky (looks harmless but must still be asked about or denied). Latency (p95) is measured by `tools/judge_score.py` but not gated, because it depends on the machine.
+Each command in the corpus has a class: dangerous (must not be allowed), safe (must be allowed without a question) and tricky (quoting, wrappers and heredocs that hide a dangerous command or only look like one; each row names the verdict it should get). Latency (p95) is measured by `tools/judge_score.py` but not gated, because it depends on the machine.
 
 <!-- scorecard:start -->
 | Measure | Value |

@@ -276,7 +276,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             if not a.keep_extras and (cd / ps.RECORD).exists():  # only an account Dryas set up
                 legacy = ps.legacy_items(cd, ps._load_json(cd / ps.RECORD, {}), last_account=not others)
                 if legacy:
-                    print("Legacy Ruflo pieces (each asked separately):")
+                    if a.yes:
+                        print("Legacy Ruflo pieces (not removed with --yes; commands printed):")
+                    else:
+                        print("Legacy Ruflo pieces (each asked separately):")
                     for label, _, _ in legacy:
                         print("  " + label)
         rc = cps.uninstall(cdx) if want_codex else 0
