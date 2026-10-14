@@ -35,6 +35,10 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | Harness | Skills binding | Plugin `claude/skills/` and `claude/commands/`; Codex: plugin `codex/skills/` (`$dryas:<name>`) |
 | Harness | State | `~/.dryas` (`$DRYAS_DATA_ROOT`), shared by every Claude config dir and Codex |
 
+## No-loss inventory
+
+`reference/inventory-1.x.json` lists every user-visible surface of Dryas 1.x: MCP tools and parameters, commands, skills, agents, allowed tools, plugin and settings hooks, chain stages, permissions, env keys, installer flags, thresholds, Jev log fields and `/tune` report lines. `python tools/inventory.py --check` (run by `install/tests/test_inventory.py` in CI) fails when one of them disappears unless `reference/inventory-map.json` maps it to the entry that replaces it, or to `extra:<component>` when it lives on in an optional component. The baseline is written once and never regenerated to make a check pass.
+
 ## Conformance
 
 `met` / `partial` / `not met` for the Claude Code (CC) and Codex (CX) editions.
