@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
 import thresholds
+import tune_judge
 import tune_memory
 import tune_tasks
 import tune_window
@@ -228,6 +229,8 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "fable_without_opus": _steps(esc, "fable", "opus", skipped=True),
         "delivery": delivery(dispatch, scope, esc, review, merge),
         "memory": tune_memory.summary(read("memory", log_dir)),
+        "judge": {"disagreements": tune_judge.disagreements(gate),
+                  "approved": tune_judge.approved_asks(gate, read("outcomes", log_dir))},
         "compare_count": len(ratios),
         "swarm_vs_plain": round(sum(ratios) / len(ratios), 3) if ratios else None,
         "jev_spend_usd": _cost(gate) + _cost(route) + _cost(mcp) + _cost(compact) + shadow_spend,
@@ -291,6 +294,11 @@ def proposals(rep: Dict[str, Any], th: Dict[str, Dict[str, Any]]) -> List[Dict[s
                                % (rate * 100, started, cap * 100, json.dumps(d.get("haiku_climb_reasons") or {}))})
     if rep.get("tasks"):
         out += tune_tasks.proposals(rep["tasks"], th)
+    if rep.get("judge"):
+        p = tune_judge.allowlist_proposal(rep["judge"]["approved"], th["gate"]["allowlist"],
+                                          th["gate"]["allowlist_min_approvals"])
+        if p is not None:
+            out.append(p)
     return [p for p in out if p["new"] != p["old"]]
 
 
@@ -338,6 +346,8 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
              "- Jev spend: $%.6f" % rep["jev_spend_usd"], "", "| question | calls | below thr | overrides | override rate |", "|---|---|---|---|---|"]
     for q, v in sorted(rep["questions"].items()):
         lines.append("| %s | %d | %d | %d | %.0f%% |" % (q, v["calls"], v["below_threshold"], v["overrides"], v["override_rate"] * 100))
+    if rep.get("judge"):
+        lines += tune_judge.lines(rep["judge"])
     lines += ["", "## Proposals (apply only after approval)"]
     lines += ["- `%s`: %s -> %s. %s" % (p["key"], p["old"], p["new"], p["why"]) for p in props] or ["- none"]
     lines.append("")

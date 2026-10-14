@@ -26,6 +26,8 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
             "pnpm test", "npm test", "pnpm lint", "pnpm typecheck",
             "pytest", "python3 -m pytest", "swift test",
         ],
+        # /tune proposes an allowlist entry for a local ask the user approved at least this many times.
+        "allowlist_min_approvals": 3,
     },
     "route": {"min_confidence": 0.7, "swarm_min": 0.7},
     "dispatch": {"min_confidence": 0.7, "haiku_default": True, "scored_tier": False, "min_tasks": 50},
@@ -161,6 +163,15 @@ def validate(dotted: str, value: Any) -> Optional[str]:
                 first_word = item.split()[0]
                 if first_word in DANGEROUS_HEADS:
                     return f"{dotted} entry '{item}' starts with dangerous head '{first_word}'"
+        # An allowlisted command bypasses the gate: refuse anything the local judge would deny or ask about.
+        import local_judge
+        for item in value:
+            try:
+                bad = local_judge.danger(item) or local_judge.destructive(item)
+            except Exception:
+                bad = "error"  # fail closed: an entry the judge cannot read is not allowlisted
+            if bad:
+                return "refused: %r matches a dangerous or destructive pattern" % item
 
     if key == "ask_risk":
         # Must match gate.QUESTIONS["risk"]["criteria"] keys except "none_of_these"
@@ -168,6 +179,9 @@ def validate(dotted: str, value: Any) -> Optional[str]:
         valid_risks = {"routine", "worth_a_look", "destructive"}
         if value not in valid_risks:
             return f"{dotted} must be one of {valid_risks}, got {value}"
+
+    if key == "allowlist_min_approvals" and not 1 <= value <= 1000:
+        return f"{dotted} must be an int in [1, 1000]"
 
     if key == "min_tasks" and not 1 <= value <= 100000:
         return f"{dotted} must be an int in [1, 100000]"

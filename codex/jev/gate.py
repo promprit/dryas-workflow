@@ -264,7 +264,8 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     ti = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
     cwd = str(event.get("cwd") or "")
     loaded = taskctx.load(cwd)
-    base = dict({"tool": tool}, **_head(tool, ti), **taskctx.context(cwd, loaded))
+    base = dict({"tool": tool}, **_head(tool, ti), **taskctx.context(cwd, loaded),
+                **({"tool_use_id": str(event["tool_use_id"])[:64]} if isinstance(event.get("tool_use_id"), str) else {}))
     base = dict(base, **_task_review(tool, ti, cwd, loaded))
     if tool != "Bash" and local_file(tool, ti, cwd):
         jevlog.append("gate", dict(base, decision="skipped", via="local_file"))
