@@ -370,6 +370,22 @@ class NoNodeCheckTest(unittest.TestCase):
         path = run.call_args[1]["env"]["PATH"]
         self.assertIsNone(shutil.which("node", path=path))
 
+    def test_claude_next_to_node_is_kept(self):
+        d = os.path.join(self.tmp, "nvm-bin")
+        os.mkdir(d)
+        for n in ("node", "claude"):
+            with open(os.path.join(d, n), "w") as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(d, n), 0o755)
+        p = mock.patch.dict(os.environ, {"PATH": d + os.pathsep + os.path.dirname(sys.executable)})
+        p.start()
+        self.addCleanup(p.stop)
+        rep, out, run = self.run_no_node(0, "preflight ok\n")
+        path = run.call_args[1]["env"]["PATH"]
+        self.assertIsNone(shutil.which("node", path=path))
+        self.assertIsNotNone(shutil.which("claude", path=path))
+        self.assertEqual(rep.fails, 0)
+
     def test_fail_when_preflight_fails(self):
         rep, out, _ = self.run_no_node(1, "node missing\n")
         self.assertIn("FAIL  no-node install", out)

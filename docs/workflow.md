@@ -101,7 +101,7 @@ Last updated: 2026-10-05.
 7. **Dispatch.**
    - Write `.orchestrate/active.json`, which arms the scope lock.
    - Each executor receives **only its own section** (`"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>`; Claude Code substitutes the plugin path, and setup renders the allow rule with the same absolute paths) plus the worktree path, never the whole plan.
-   - Independent tasks run in parallel in parallel, recorded in the `swarm_init` ledger (topology always `hierarchical`). Agents spawn via Claude Code's Agent tool, so they run on the subscription.
+   - Independent tasks run in parallel, recorded in the `swarm_init` ledger (topology always `hierarchical`). Agents spawn via Claude Code's Agent tool, so they run on the subscription.
    - Executors follow four principles (fix root causes, prove it works, test behavior, subtract before you add), full text in the plugin's `pstack/principles/`.
 8. **On return.** Jev checks `done` (done-criteria met?) and `risk` (routine / worth a look / incident).
    - Only incidents, failures and escalations reach the orchestrator in full; everything else becomes one summary line.
@@ -142,13 +142,13 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 **UserPromptSubmit** (15 s): Jev route, then context watch, then FlowObserve if enabled (observe-only, §12). Ruflo's own route hook (with the Ruflo extra) is dropped.
 
 **Other events:**
-- **Dryas memory stages** (the `memory` component, observe-only: every applicable stage runs in order, exit codes and output are ignored, nothing is printed, and each has a 2 s budget; the chain exits 0 whatever they do). Claude Code only:
+- **Dryas memory stages** (the `memory` component, observe-only: every applicable stage runs in order, exit codes and output are ignored, nothing is printed, and each stage has a 2 s budget, per stage (one event may run two stages, so its total can reach 4 s); the chain exits 0 whatever they do). Claude Code only:
   - `mem-edit`: PostToolUse and PostToolUseFailure on Write, Edit, MultiEdit and NotebookEdit; records each edit and whether it succeeded.
   - `mem-task`: SubagentStop; records the finished task.
   - `mem-session-start`: SessionStart; opens the session, indexes the project's auto-memory notes, and retries a consolidation marked pending. Codex has no memory hooks, so this stage is Claude Code only. Codex gets the memory tools over MCP instead (§7).
   - `mem-session-end`: SessionEnd writes the session summary and consolidates; PreCompact runs the same stage summary-only.
   - `gate-outcome` (core, PostToolUse on Bash, Claude Code only): records what happened after a gated command, for `/tune`.
-  - A consolidation that would overrun the budget is marked pending and finished by a detached `dryas memory consolidate`; see [memory-model.md](memory-model.md).
+  - A consolidation that would overrun the budget is marked pending and finished by a detached `dryas memory consolidate` (the launcher is `<plugin root>/bin/dryas`); see [memory-model.md](memory-model.md).
 - With the Ruflo extra, its own learning and memory hooks run instead of the Dryas stages: post-edit, session restore/end, memory import (no sync), PreCompact persist, SubagentStop post-task.
 - Jev compaction: `PreCompact` runs `compact_keep.py`, `SessionStart(compact)` runs `compact_restore.py`, and `SessionStart(clear)` runs `handoff_restore.py` (for `/handoff`).
 - *(optional)* FlowObserve's own hooks for other events, installed by FlowObserve itself (§12).

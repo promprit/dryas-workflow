@@ -2,7 +2,7 @@
 
 ![ci](https://github.com/promprit/dryas-workflow/actions/workflows/ci.yml/badge.svg)
 
-**The Dryas Workflow Framework (Dryas for short) is an owned operating model for AI software delivery: a framework, a draft specification and a reference implementation that runs on its own core (a deterministic local judge, its own memory and process skills) on Claude Code and Codex. Superpowers, Ruflo and the Jev model are optional extras or upgrades.** It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
+**The Dryas Workflow Framework (Dryas for short) is a target operating model plugin for AI software delivery: a framework, a draft specification and a reference implementation that runs on its own core (a deterministic local judge, its own memory and process skills) on Claude Code and Codex. Superpowers, Ruflo and the Jev model are optional extras or upgrades.** It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
 
 The method is the asset; the tools are replaceable. This repo holds both:
 
@@ -150,6 +150,7 @@ The local judge decides with deterministic rules and no key. This scorecard is m
 | Commands in corpus | 79 |
 | Edits in corpus | 21 |
 | Missed dangerous commands | 14 |
+| Deny downgraded to ask | 4 |
 | Needless asks on safe commands | 0 |
 | Always-judged files not judged | 1 |
 <!-- scorecard:end -->

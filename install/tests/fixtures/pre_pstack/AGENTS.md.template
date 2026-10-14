@@ -12,7 +12,7 @@ Process rules for coding sessions on this machine. Full reference: `~/.dryas/doc
 - Do what was asked, nothing more. Read a file before editing it. Never commit secrets or `.env` files.
 
 ## Skills
-`$dryas:orchestrate` (multi-step tasks), `$dryas:wplan` (write a plan), `$dryas:wreview` (two-stage review), `$dryas:commit` (Jev-gated commit), `$dryas:tune` (weekly Jev calibration).
+`$dryas:orchestrate` (multi-step tasks), `$dryas:wplan` (write a plan), `$dryas:wreview` (two-stage review), `$dryas:commit` (Jev-gated commit), `$dryas:tune` (weekly Jev calibration), `$dryas:retro` (lessons from a finished task).
 
 ## Jev and Dryas memory (MCP server `jev`; `ruflo` only with the Ruflo extra)
 - Jev answers narrow typed questions (`jev_judge`) and never writes code or plans. Below threshold, escalated or unavailable: you decide, and log any disagreement with `log_override`.

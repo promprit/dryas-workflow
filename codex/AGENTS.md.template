@@ -12,7 +12,7 @@ Process rules for coding sessions on this machine. Full reference: `~/.dryas/doc
 - Do what was asked, nothing more. Read a file before editing it. Never commit secrets or `.env` files.
 
 ## Skills
-`$dryas:orchestrate` (multi-step tasks), `$dryas:wplan` (write a plan), `$dryas:wreview` (two-stage review), `$dryas:commit` (Jev-gated commit), `$dryas:tune` (weekly Jev calibration).
+`$dryas:orchestrate` (multi-step tasks), `$dryas:wplan` (write a plan), `$dryas:wreview` (two-stage review), `$dryas:commit` (Jev-gated commit), `$dryas:tune` (weekly Jev calibration), `$dryas:retro` (lessons from a finished task).
 <!-- pstack-picks -->
 `$dryas:interrogate` (gated two-model review), `$dryas:benchmark-checklist` (vet a measured performance number). Shared references: `{{CD}}/pstack/`.
 <!-- /pstack-picks -->

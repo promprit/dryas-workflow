@@ -32,6 +32,11 @@ class WrapperTest(unittest.TestCase):
         for n, needle in (("dryas", "jev/memcli.py"), ("dryas.cmd", "jev\\memcli.py")):
             self.assertIn(needle, (BIN / n).read_text(encoding="utf-8"))
 
+    def test_cmd_python_lookup_order(self):
+        t = (BIN / "dryas.cmd").read_text(encoding="utf-8")
+        order = [t.index(n) for n in ("DRYAS_PY", "py -3", "python3", "\npython -X")]
+        self.assertEqual(order, sorted(order))
+
 
 if __name__ == "__main__":
     unittest.main()

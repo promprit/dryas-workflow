@@ -51,7 +51,7 @@ class RepositionTest(unittest.TestCase):
 
     def test_readme_positioning(self):
         r = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("owned operating model", r)
+        self.assertIn("target operating model plugin", r)
         self.assertNotIn("built on Superpowers, Ruflo", r)
         for flag in ("--with-ruflo", "--with-superpowers", "--judge"):
             self.assertIn(flag, r)

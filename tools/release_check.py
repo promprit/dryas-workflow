@@ -246,8 +246,22 @@ def no_node(rep, repo, tmp):
     home = Path(tempfile.mkdtemp(dir=str(tmp)))
     env = sandbox(os.environ, home)
     env.update(HOME=str(home), USERPROFILE=str(home))
-    env["PATH"] = os.pathsep.join(d for d in env.get("PATH", "").split(os.pathsep)
-                                  if not any(os.path.isfile(os.path.join(d, n)) for n in ("node", "node.exe")))
+    # nvm and Homebrew put claude, codex and git next to node: link them into a shim dir before node's dir is dropped.
+    shim = Path(tempfile.mkdtemp(dir=str(tmp)))
+    for tool in ("claude", "codex", "git", "python3", "python"):
+        src = shutil.which(tool)
+        if not src:
+            continue
+        dst = shim / os.path.basename(src)
+        try:
+            if os.name == "nt":
+                shutil.copy2(src, str(dst))
+            else:
+                os.symlink(src, str(dst))
+        except OSError:
+            pass
+    env["PATH"] = os.pathsep.join([str(shim)] + [d for d in env.get("PATH", "").split(os.pathsep)
+                                  if not any(os.path.isfile(os.path.join(d, n)) for n in ("node", "node.exe"))])
     argv = [sys.executable, str(Path(repo) / "install" / "dryas_install.py"), "preflight", "--harness", "claude",
             "--claude-dir", str(home / ".claude")]
     try:

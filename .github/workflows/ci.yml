@@ -25,7 +25,11 @@ jobs:
       - run: python -m pip install pytest
       - run: python -m pytest -q -rs claude/jev/tests install/tests
   ruflo-extra:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
