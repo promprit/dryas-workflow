@@ -4,14 +4,16 @@ event on stdin, write the memory store, print nothing, always exit 0, stay insid
 0.5 s). A failure is one line in memory.jsonl.
 
   memhooks.py edit                       PostToolUse / PostToolUseFailure on Write|Edit|MultiEdit|NotebookEdit
-  memhooks.py task                       SubagentStop: close the active task rows (tiers from dispatch.jsonl)
+  memhooks.py task                       SubagentStop: upsert the active task rows (tiers from dispatch.jsonl), close finished ones
   memhooks.py session-start              SessionStart: session row; Claude memory files indexed as notes
   memhooks.py session-end [manual|auto]  SessionEnd (summary, consolidate) / PreCompact (summary only)
 Sub-project D wires these into chain.json (mem-edit, mem-task, mem-session-start, mem-session-end)."""
+import datetime
 import json
 import os
 import re
 import sys
+import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -28,6 +30,7 @@ import taskctx
 HOOK_BUSY_MS = 500
 CONSOLIDATE_BEFORE_S = 1.0  # consolidate only if the stage has used less than this of its 2 s budget
 NOTE_MAX_BYTES = 64 * 1024
+BUDGET_S = 1.8  # the watchdog fires here, inside the 2 s hook budget
 STDIN_MAX = 1024 * 1024
 TAIL_BYTES = 2 * 1024 * 1024
 EDIT_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
@@ -59,15 +62,12 @@ def repo_rel(path: str) -> str:
 
 
 def _task_ids(cwd: str) -> List[str]:
-    """Every active task id. Accepts both taskctx shapes: {"task", "co_tasks"?} and {"tasks"}."""
+    """Every active task id (taskctx returns {"task": id} or {"tasks": [ids]})."""
     ctx = taskctx.context(cwd)
-    ids = [str(ctx["task"])] if ctx.get("task") else []
-    for key in ("co_tasks", "tasks"):
-        extra = ctx.get(key)
-        for t in extra if isinstance(extra, list) else []:
-            if str(t) not in ids:
-                ids.append(str(t))
-    return ids
+    if ctx.get("task"):
+        return [str(ctx["task"])]
+    extra = ctx.get("tasks")
+    return [str(t) for t in extra] if isinstance(extra, list) else []
 
 
 def on_edit(conn, event: Dict[str, Any]) -> bool:
@@ -122,26 +122,64 @@ def _plan_section(cwd: str, task_id: str) -> Tuple[str, List[str]]:
     return sec.splitlines()[0].split(":", 1)[-1].strip()[:200], planfile.scope(sec)
 
 
+def _orch_root(cwd: str) -> Optional[str]:
+    """Realpath of the dir holding .orchestrate, found upwards from cwd; stops at the checkout root."""
+    d = os.path.realpath(cwd)
+    while True:
+        if os.path.isdir(os.path.join(d, ".orchestrate")):
+            return d
+        parent = os.path.dirname(d)
+        if os.path.exists(os.path.join(d, ".git")) or parent == d:
+            return None
+        d = parent
+
+
+def _ts(rec: Dict[str, Any], default: float) -> float:
+    try:
+        return datetime.datetime.strptime(str(rec.get("ts")), "%Y-%m-%dT%H:%M:%S%z").timestamp()
+    except ValueError:
+        return default
+
+
+def sweep(conn, ns: str, root: Optional[str], active: List[str]) -> int:
+    """Close this root's open task rows whose id is no longer active."""
+    if not root:
+        return 0
+    stale = []
+    for r in conn.execute("SELECT task_id, meta FROM tasks WHERE ns = ? AND ended IS NULL", (ns,)):
+        try:
+            if json.loads(r["meta"] or "{}").get("root") == root and r["task_id"] not in active:
+                stale.append(r["task_id"])
+        except (ValueError, AttributeError):
+            continue
+    if stale:
+        with memdb.tx(conn):
+            conn.executemany("UPDATE tasks SET ended = ?, outcome = 'done' WHERE ns = ? AND task_id = ?",
+                             [(time.time(), ns, t) for t in stale])
+    return len(stale)
+
+
 def on_task(conn, event: Dict[str, Any]) -> int:
     cwd = _cwd(event)
-    ns, now, n = projns.project_ns(cwd), time.time(), 0
-    for tid in _task_ids(cwd):
+    ns, now, root, ids = projns.project_ns(cwd), time.time(), _orch_root(cwd), _task_ids(cwd)
+    for tid in ids:
         d = _dispatches(tid)
         tiers = [str(r["tier"]) for r in d if r.get("tier")]
         title, scope = _plan_section(cwd, tid)
         with memdb.tx(conn):
             conn.execute(
                 "INSERT INTO tasks (task_id, ns, title, scope, tier_start, tier_end, outcome, started, ended, meta) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(task_id) DO UPDATE SET "
+                "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, ?) ON CONFLICT(ns, task_id) DO UPDATE SET "
                 "title = CASE WHEN excluded.title != '' THEN excluded.title ELSE tasks.title END, "
                 "scope = CASE WHEN excluded.scope != '[]' THEN excluded.scope ELSE tasks.scope END, "
                 "tier_start = COALESCE(tasks.tier_start, excluded.tier_start), "
                 "tier_end = COALESCE(excluded.tier_end, tasks.tier_end), "
-                "outcome = excluded.outcome, ended = excluded.ended, meta = excluded.meta",
+                "started = COALESCE(tasks.started, excluded.started), "
+                "outcome = NULL, ended = NULL, meta = excluded.meta",
                 (tid, ns, title, json.dumps(scope), tiers[0] if tiers else None, tiers[-1] if tiers else None,
-                 "returned", now, now, json.dumps({"dispatches": len(d)})))
-        n += 1
-    return n
+                 _ts(d[0], now) if d else now, json.dumps({"dispatches": len(d), "root": root})))
+    sweep(conn, ns, root, ids)
+    return len(ids)
 
 
 def notes_dir(cwd: str) -> Optional[str]:
@@ -164,34 +202,36 @@ def _title(text: str, fallback: str) -> str:
 
 def index_notes(conn, ns: str, d: str) -> Dict[str, int]:
     counts = {"indexed": 0, "unchanged": 0, "skipped": 0, "removed": 0}
-    existing: Dict[str, Tuple[int, Any]] = {}
-    for r in conn.execute("SELECT id, key, meta FROM memory WHERE ns = ? AND source = 'claude-memory'", (ns,)):
-        try:
-            existing[r["key"]] = (r["id"], json.loads(r["meta"] or "{}").get("mtime"))
-        except ValueError:
-            existing[r["key"]] = (r["id"], None)
-    seen = set()
-    for name in sorted(os.listdir(d)):
-        if not name.endswith(".md"):
-            continue
-        p = os.path.join(d, name)
-        seen.add(p)
-        try:
-            st = os.stat(p)
-            if st.st_size > NOTE_MAX_BYTES:
+    with memdb.tx(conn):  # one transaction for the whole run
+        existing: Dict[str, Tuple[int, Any]] = {}
+        for r in conn.execute("SELECT id, key, meta FROM memory WHERE ns = ? AND source = 'claude-memory'", (ns,)):
+            try:
+                meta = json.loads(r["meta"] or "{}")
+            except ValueError:
+                meta = {}
+            if isinstance(meta, dict) and isinstance(meta.get("path"), str) and os.path.dirname(meta["path"]) == d:
+                existing[r["key"]] = (r["id"], meta.get("mtime"))
+        seen = set()
+        for name in sorted(os.listdir(d)):
+            if not name.endswith(".md"):
+                continue
+            p = os.path.join(d, name)
+            seen.add(p)
+            try:
+                st = os.stat(p)
+                if st.st_size > NOTE_MAX_BYTES:
+                    counts["skipped"] += 1
+                    continue
+                if p in existing and existing[p][1] == st.st_mtime:
+                    counts["unchanged"] += 1
+                    continue
+                with open(p, encoding="utf-8") as fh:
+                    text = fh.read()
+            except (OSError, UnicodeDecodeError):
                 counts["skipped"] += 1
                 continue
-            if p in existing and existing[p][1] == st.st_mtime:
-                counts["unchanged"] += 1
-                continue
-            with open(p, encoding="utf-8") as fh:
-                text = fh.read()
-        except (OSError, UnicodeDecodeError):
-            counts["skipped"] += 1
-            continue
-        title, body = _title(text, name[:-3]), redact.redact(text)
-        meta, h = json.dumps({"mtime": st.st_mtime, "path": p}), memdb.content_hash(title, body)
-        with memdb.tx(conn):
+            title, body = redact.redact(_title(text, name[:-3])), redact.redact(text)
+            meta, h = json.dumps({"mtime": st.st_mtime, "path": p}), memdb.content_hash(title, body)
             if p in existing:
                 conn.execute("UPDATE memory SET title = ?, body = ?, hash = ?, meta = ? WHERE id = ?",
                              (title, body, h, meta, existing[p][0]))
@@ -199,12 +239,11 @@ def index_notes(conn, ns: str, d: str) -> Dict[str, int]:
                 conn.execute("INSERT INTO memory (ns, kind, title, body, tags, source, key, hash, meta, created) "
                              "VALUES (?, 'note', ?, ?, '[\"claude-memory\"]', 'claude-memory', ?, ?, ?, ?)",
                              (ns, title, body, p, h, meta, st.st_mtime))
-        counts["indexed"] += 1
-    gone = [v[0] for k, v in existing.items() if k not in seen]
-    if gone:
-        with memdb.tx(conn):
+            counts["indexed"] += 1
+        gone = [v[0] for k, v in existing.items() if k not in seen]
+        if gone:
             conn.execute("DELETE FROM memory WHERE id IN (%s)" % ",".join("?" * len(gone)), gone)
-        counts["removed"] = len(gone)
+            counts["removed"] = len(gone)
     return counts
 
 
@@ -239,6 +278,9 @@ def on_session_end(conn, event: Dict[str, Any], mode: Optional[str], t0: float) 
             conn.execute("UPDATE sessions SET summary = ?, ended = ? WHERE id = ?", (text, now, sid))
         else:
             conn.execute("UPDATE sessions SET summary = ? WHERE id = ?", (text, sid))
+    root = _orch_root(cwd)
+    if root:
+        sweep(conn, ns, root, _task_ids(cwd))
     out: Dict[str, Any] = {"summary": text}
     if mode is None and time.monotonic() - t0 < CONSOLIDATE_BEFORE_S:
         out["consolidated"] = memlearn.consolidate(conn, ns)
@@ -261,10 +303,22 @@ def run(stage: str, event: Dict[str, Any], rest: List[str], t0: float) -> Any:
         conn.close()
 
 
+def _watchdog(stage: str, seconds: float) -> threading.Timer:
+    """Armed timer: on expiry log a Timeout line and exit 0, so a stuck stage never outlives its budget."""
+    def fire() -> None:
+        jevlog.append("memory", dict(stage=stage[:32], error="Timeout", detail=""))
+        os._exit(0)
+    t = threading.Timer(seconds, fire)
+    t.daemon = True
+    t.start()
+    return t
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     t0 = time.monotonic()
     argv = sys.argv[1:] if argv is None else argv
     stage = argv[0] if argv else ""
+    dog = _watchdog(stage, BUDGET_S)
     try:
         event = json.loads(sys.stdin.buffer.read(STDIN_MAX).decode("utf-8", "replace") or "{}")
         if not isinstance(event, dict):
@@ -272,6 +326,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         run(stage, event, argv[1:], t0)
     except Exception as e:
         jevlog.append("memory", dict(stage=stage[:32], error=type(e).__name__, detail=str(e)[:200]))
+    dog.cancel()
     return 0
 
 

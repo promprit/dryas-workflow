@@ -30,9 +30,9 @@ TABLES = (
     """CREATE TABLE IF NOT EXISTS edits (ns TEXT NOT NULL, session TEXT, task_id TEXT, file TEXT NOT NULL,
         ok INTEGER NOT NULL, ts REAL NOT NULL)""",
     "CREATE INDEX IF NOT EXISTS edits_ns ON edits(ns, ts)",
-    """CREATE TABLE IF NOT EXISTS tasks (task_id TEXT PRIMARY KEY, ns TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
+    """CREATE TABLE IF NOT EXISTS tasks (task_id TEXT NOT NULL, ns TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
         scope TEXT NOT NULL DEFAULT '[]', tier_start TEXT, tier_end TEXT, outcome TEXT, started REAL, ended REAL,
-        meta TEXT NOT NULL DEFAULT '{}')""",
+        meta TEXT NOT NULL DEFAULT '{}', PRIMARY KEY (ns, task_id))""",
     "CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, ns TEXT NOT NULL, started REAL, ended REAL, summary TEXT)",
     """CREATE TABLE IF NOT EXISTS patterns (ns TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL, value TEXT,
         support INTEGER NOT NULL DEFAULT 0, updated REAL NOT NULL, PRIMARY KEY (ns, kind, key))""",
@@ -129,10 +129,33 @@ def _open(target: str, busy_ms: int, uri: bool = False) -> Conn:
     return conn
 
 
+def _tighten(p: str) -> None:
+    """Make the store and its WAL/SHM files owner-only; a store left 0644 is fixed on the next connect."""
+    for f in (p, p + "-wal", p + "-shm"):
+        try:
+            if os.stat(f).st_mode & 0o077:
+                os.chmod(f, 0o600)  # portable-ok: POSIX file privacy; only called when os.name == "posix"
+        except FileNotFoundError:
+            pass
+
+
 def connect(path: Optional[str] = None, busy_ms: int = BUSY_MS) -> Conn:
-    """Open the store, creating or migrating it. Raises sqlite3.Error or OSError; callers degrade (MEM-5)."""
+    """Open the store, creating or migrating it. Raises sqlite3.Error or OSError; callers degrade (MEM-5).
+    On POSIX the files are created under umask 077 and tightened to 0600."""
     p = path or db_path()
-    fresh = not os.path.exists(p)
+    posix = os.name == "posix"
+    old_umask = os.umask(0o077) if posix else None
+    try:
+        conn = _connect(p, busy_ms)
+    finally:
+        if posix:
+            os.umask(old_umask)
+    if posix:
+        _tighten(p)
+    return conn
+
+
+def _connect(p: str, busy_ms: int) -> Conn:
     os.makedirs(os.path.dirname(os.path.abspath(p)), mode=0o700, exist_ok=True)
     conn = _open(p, busy_ms)
     ver = conn.execute("PRAGMA user_version").fetchone()[0]
@@ -146,6 +169,4 @@ def connect(path: Optional[str] = None, busy_ms: int = BUSY_MS) -> Conn:
     conn.execute("PRAGMA journal_mode=WAL")
     if not (ver == SCHEMA_VERSION and _kv(conn, "fts") == ("1" if conn.fts else "0")):
         migrate(conn)
-    if fresh and os.name == "posix" and os.path.exists(p):
-        os.chmod(p, 0o600)  # portable-ok: POSIX file privacy; guarded by os.name
     return conn

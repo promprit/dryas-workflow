@@ -50,10 +50,10 @@ def store(conn, ns: str, title: str, body: str, kind: str = "outcome", tags: Ite
           key: Optional[str] = None, created: Optional[float] = None, meta: Optional[Dict[str, Any]] = None,
           check_content: bool = True) -> Dict[str, Any]:
     title, body = (title or "").strip(), (body or "").strip()
-    if check_content:
-        check(title, body, [*(str(t)[:64] for t in (tags or ())[:20]), task_id, commit])
-    h = memdb.content_hash(title, body)
     tag_list = [str(t)[:64] for t in (tags or ())][:20]
+    if check_content:
+        check(title, body, [*tag_list, task_id, commit])
+    h = memdb.content_hash(title, body)
     with memdb.tx(conn):
         if key is None:
             same = conn.execute("SELECT id FROM memory WHERE ns = ? AND hash = ? AND kind NOT IN ('note', 'archive') LIMIT 1",

@@ -20,8 +20,7 @@ MAX_BODY = 4000
 STORE_KINDS = ("outcome", "fact", "retro")
 RANK_WEIGHT = 0.3
 HIT_WEIGHT = 0.1
-CANDIDATES = 200
-LIKE_CANDIDATES = 2000
+CANDIDATES = 2000
 MAX_TERMS = 16
 _WORD = re.compile(r"[^\W_]+")
 _DIFF = re.compile(r"^(?:diff --git |@@ -\d+(?:,\d+)? \+\d+|\+\+\+ [ab/]|--- a/|index [0-9a-f]{7,}\.\.[0-9a-f]{7,})", re.M)
@@ -31,7 +30,7 @@ class Rejected(ValueError):
     """MEM-4: this content may not be stored."""
 
 
-def check(title: str, body: str) -> None:
+def check(title: str, body: str, extra: Iterable[Optional[str]] = ()) -> None:
     if not title.strip() and not body.strip():
         raise Rejected("nothing to store: title and body are empty")
     if len(title) > MAX_TITLE:
@@ -41,7 +40,7 @@ def check(title: str, body: str) -> None:
                        % (len(body), MAX_BODY))
     if _DIFF.search(body):
         raise Rejected("body looks like a diff: store the outcome, not the patch")
-    for text in (title, body):
+    for text in (title, body, *(str(x) for x in extra if x)):
         if redact.redact(text) != text:
             raise Rejected("contains a secret-shaped value (MEM-4); remove it and store again")
 
@@ -51,13 +50,13 @@ def store(conn, ns: str, title: str, body: str, kind: str = "outcome", tags: Ite
           key: Optional[str] = None, created: Optional[float] = None, meta: Optional[Dict[str, Any]] = None,
           check_content: bool = True) -> Dict[str, Any]:
     title, body = (title or "").strip(), (body or "").strip()
-    if check_content:
-        check(title, body)
-    h = memdb.content_hash(title, body)
     tag_list = [str(t)[:64] for t in (tags or ())][:20]
+    if check_content:
+        check(title, body, [*tag_list, task_id, commit])
+    h = memdb.content_hash(title, body)
     with memdb.tx(conn):
         if key is None:
-            same = conn.execute("SELECT id FROM memory WHERE ns = ? AND hash = ? AND kind != 'note' LIMIT 1",
+            same = conn.execute("SELECT id FROM memory WHERE ns = ? AND hash = ? AND kind NOT IN ('note', 'archive') LIMIT 1",
                                 (ns, h)).fetchone()
             if same:
                 return {"id": same["id"], "stored": False, "duplicate": True}
@@ -99,19 +98,32 @@ def _result(r, score: Optional[float], reason: str, body_cap: Optional[int] = No
             "score": None if score is None else round(score, 3), "reason": reason}
 
 
+def _matches(r, ts: List[str]) -> int:
+    words = set(_WORD.findall(("%s %s %s" % (r["title"], r["body"], r["tags"])).lower()))
+    return sum(1 for t in ts if any(w.startswith(t) for w in words))
+
+
 def _candidates(conn, ns: str, ts: List[str], include_archive: bool) -> List[Any]:
+    """The newest CANDIDATES rows of the namespace that match, newest first, on both backends."""
     arch = "" if include_archive else " AND m.kind != 'archive'"
+    order = " ORDER BY m.created DESC, m.id DESC"
     if conn.fts:  # terms are letters and digits only, so quoting makes each a plain prefix query
         q = " OR ".join('"%s"*' % t for t in ts)
         return conn.execute("SELECT m.* FROM memory_fts JOIN memory m ON m.id = memory_fts.rowid "
-                            "WHERE memory_fts MATCH ? AND m.ns = ?" + arch + " ORDER BY bm25(memory_fts) LIMIT ?",
+                            "WHERE memory_fts MATCH ? AND m.ns = ?" + arch + order + " LIMIT ?",
                             (q, ns, CANDIDATES)).fetchall()
-    like = " OR ".join("(m.title LIKE ? OR m.body LIKE ? OR m.tags LIKE ?)" for _ in ts)
-    args: List[Any] = [ns]
-    for t in ts:
-        args += ["%" + t + "%"] * 3
-    return conn.execute("SELECT m.* FROM memory m WHERE m.ns = ?" + arch + " AND (" + like + ") "
-                        "ORDER BY m.created DESC LIMIT ?", args + [LIKE_CANDIDATES]).fetchall()
+    sql, args = "SELECT m.* FROM memory m WHERE m.ns = ?" + arch, [ns]
+    if all(t.isascii() for t in ts):  # LIKE folds ASCII case only, so it may prefilter only ASCII terms
+        sql += " AND (" + " OR ".join("(m.title LIKE ? OR m.body LIKE ? OR m.tags LIKE ?)" for _ in ts) + ")"
+        for t in ts:
+            args += ["%" + t + "%"] * 3
+    out: List[Any] = []
+    for r in conn.execute(sql + order, args):
+        if _matches(r, ts):
+            out.append(r)
+            if len(out) >= CANDIDATES:
+                break
+    return out
 
 
 def _ranks(conn, ns: str, ids: List[int]) -> Tuple[Dict[int, float], float]:
@@ -129,7 +141,7 @@ def _reason(matched: int, total: int, rank: float, hits: int) -> str:
     if rank > 0:
         out += "; graph rank %.2f" % rank
     if hits:
-        out += "; used %d times" % hits
+        out += "; returned %d times" % hits
     return out
 
 
@@ -187,8 +199,7 @@ def search(conn, ns: str, query: str, limit: int = 3, include_archive: bool = Fa
         ranks, top = _ranks(conn, ns, [r["id"] for r in rows])
         scored = []
         for r in rows:
-            words = set(_WORD.findall(("%s %s %s" % (r["title"], r["body"], r["tags"])).lower()))
-            matched = sum(1 for t in ts if any(w.startswith(t) for w in words))
+            matched = _matches(r, ts)
             if not matched:
                 continue
             rank = ranks.get(r["id"], 0.0) / top if top else 0.0
@@ -197,8 +208,9 @@ def search(conn, ns: str, query: str, limit: int = 3, include_archive: bool = Fa
             scored.append((score, r, _reason(matched, len(ts), rank, used)))
         scored.sort(key=lambda x: (-x[0], -(x[1]["created"] or 0), x[1]["id"]))
         hits = scored[:limit]
-    _touch(conn, [r["id"] for _, r, _ in hits], session)
-    return {"results": [_result(r, s, why) for s, r, why in hits], "patterns": patterns_for(conn, ns, ts),
+    if ts:
+        _touch(conn, [r["id"] for _, r, _ in hits], session)
+    return {"results": [_result(r, s, why, MAX_BODY) for s, r, why in hits], "patterns": patterns_for(conn, ns, ts),
             "fts": bool(conn.fts)}
 
 

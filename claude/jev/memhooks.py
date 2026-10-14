@@ -161,7 +161,7 @@ def sweep(conn, ns: str, root: Optional[str], active: List[str]) -> int:
 
 def on_task(conn, event: Dict[str, Any]) -> int:
     cwd = _cwd(event)
-    ns, now, root, ids = projns.project_ns(cwd), time.time(), _orch_root(_cwd(event)), _task_ids(cwd)
+    ns, now, root, ids = projns.project_ns(cwd), time.time(), _orch_root(cwd), _task_ids(cwd)
     for tid in ids:
         d = _dispatches(tid)
         tiers = [str(r["tier"]) for r in d if r.get("tier")]

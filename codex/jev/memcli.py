@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Dryas memory CLI (owned core, sub-project B). The `dryas memory ...` wrapper (sub-project D) runs this.
 
-  memcli.py [--db PATH] import-ruflo [--from PATH]   import Ruflo memory read-only; exit 1 if a namespace's
-                                                     count does not verify, 2 if there is no Ruflo memory
+  memcli.py [--db PATH] import-ruflo [--from PATH]   import Ruflo memory read-only; exit 1 if a source row
+                                                     is missing from the store, 2 if there is no Ruflo memory
   memcli.py [--db PATH] stats [--ns NS]              rows per namespace and kind
 --db (or DRYAS_DB) picks the store; the default is ~/.dryas/dryas.db."""
 import argparse
@@ -30,27 +30,34 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not os.path.isfile(src):
             print("no Ruflo memory at %s; nothing to import" % src)
             return 2
-        conn = memdb.connect(a.db)
+        conn = None
         try:
+            conn = memdb.connect(a.db)
             rep = ruflo_import.import_ruflo(conn, src)
-        except (sqlite3.Error, ValueError) as e:
+        except (sqlite3.Error, OSError, ValueError) as e:
             print("import failed: %s" % e, file=sys.stderr)
             return 1
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
         for ns, c in rep["namespaces"].items():
             print("%-24s %7d source %7d imported %5d forgotten%s" % (
                 ns, c["source"], c["imported"], c["forgotten"], " (archive)" if ns in ruflo_import.ARCHIVE_NS else ""))
-        print("%d new rows, %d bodies redacted: %s" % (rep["new"], rep["redacted"],
-                                                        "verified" if rep["ok"] else "COUNT MISMATCH"))
+        print("%d new rows, %d updated, %d rows redacted: %s" % (
+            rep["new"], rep["updated"], rep["redacted"], "verified" if rep["ok"] else "MISSING ROWS"))
         return 0 if rep["ok"] else 1
-    conn = memdb.connect(a.db)
+    conn = None
     try:
+        conn = memdb.connect(a.db)
         sql = "SELECT ns, kind, COUNT(*) FROM memory" + (" WHERE ns = ?" if a.ns else "") + " GROUP BY ns, kind ORDER BY ns, kind"
         for ns, kind, n in conn.execute(sql, (a.ns,) if a.ns else ()):
             print("%-24s %-8s %7d" % (ns, kind, n))
+    except (sqlite3.Error, OSError, ValueError) as e:
+        print("stats failed: %s" % e, file=sys.stderr)
+        return 1
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
     return 0
 
 
