@@ -1,7 +1,8 @@
 ---
 name: orchestrate
-description: Run a multi-step coding task as strong-tier orchestrator with fast-first executors (standard, strong, frontier on escalation), Jev routing/gates, Ruflo memory and Superpowers process. Use when the user runs /orchestrate, asks to orchestrate or dispatch executors, or has approved a multi-step plan to execute. Not for single-file fixes or ordinary edits that do not ask for orchestration.
-allowed-tools: Read, Edit, Write, Glob, Grep, Agent, ToolSearch, Skill(superpowers:brainstorming), Skill(superpowers:using-git-worktrees), Skill(superpowers:systematic-debugging), Skill(superpowers:verification-before-completion), Bash(git worktree:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git merge:*), Bash(git merge-base:*), Bash("${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section:*), mcp__plugin_dryas_jev__jev_judge, mcp__plugin_dryas_jev__log_override, mcp__plugin_dryas_jev__log_escalation, mcp__plugin_dryas_jev__log_dispatch, mcp__plugin_dryas_jev__log_merge, mcp__plugin_ruflo-core_ruflo__memory_search, mcp__plugin_ruflo-core_ruflo__memory_store, mcp__plugin_ruflo-core_ruflo__swarm_init
+description: Run a multi-step coding task as strong-tier orchestrator with fast-first executors (standard, strong, frontier on escalation), Jev routing/gates, Ruflo memory and the Dryas process skills. Use when the user runs /orchestrate, asks to orchestrate or dispatch executors, or has approved a multi-step plan to execute. Not for single-file fixes or ordinary edits that do not ask for orchestration.
+allowed-tools: Read, Edit, Write, Glob, Grep, Agent, ToolSearch, Skill(dryas:brainstorm), Skill(dryas:worktree), Skill(dryas:debug), Skill(dryas:verify), Skill(dryas:review-request), Skill(dryas:review-receive), Bash(git worktree:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git merge:*), Bash(git merge-base:*), Bash("${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section:*), mcp__plugin_dryas_jev__jev_judge, mcp__plugin_dryas_jev__log_override, mcp__plugin_dryas_jev__log_escalation, mcp__plugin_dryas_jev__log_dispatch, mcp__plugin_dryas_jev__log_merge, mcp__plugin_dryas_jev__log_review, mcp__plugin_ruflo-core_ruflo__memory_search, mcp__plugin_ruflo-core_ruflo__memory_store, mcp__plugin_ruflo-core_ruflo__swarm_init, Bash(git add:*), Bash(git commit:*), Bash(grep:*), Read(~/.dryas/jev/thresholds.json)
+disable-model-invocation: true
 ---
 
 # Orchestrate
@@ -9,7 +10,7 @@ allowed-tools: Read, Edit, Write, Glob, Grep, Agent, ToolSearch, Skill(superpowe
 Ruflo and Jev MCP tools may be deferred — load them with ToolSearch (e.g. `select:mcp__plugin_ruflo-core_ruflo__memory_search`) before first use.
 
 ## 0. Brainstorm first (always)
-Unless the request points at an already-approved design/spec, invoke superpowers:brainstorming first and finish its gates (design approved by the user) before step 1. Orchestration plans from the approved design, never from the raw request.
+Unless the request points at an already-approved design/spec, invoke dryas:brainstorm first and finish its gates (design approved by the user) before step 1. Orchestration plans from the approved design, never from the raw request.
 
 You (the strong tier) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.dryas/jev/thresholds.json` (defaults in `${CLAUDE_PLUGIN_ROOT}/jev/thresholds.py`). Ruflo tool names: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/ruflo-tools.md`. Exact Jev call shapes and question rules: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/jev-questions.md`.
 
@@ -17,7 +18,7 @@ You (the strong tier) plan, dispatch, judge and integrate. You never edit projec
 Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project folder name) for tasks similar to the request. Take the top 3 outcomes and write them down as `Past: <what worked> / <what failed>` before planning. None found → say so.
 
 ## 2. Plan as a file
-1. Create a worktree with superpowers:using-git-worktrees. One agent per worktree: this session owns it alone. Never reuse a worktree another session is working in; parallel loops on the same project each get their own worktree and branch.
+1. Create a worktree with dryas:worktree. One agent per worktree: this session owns it alone. Never reuse a worktree another session is working in; parallel loops on the same project each get their own worktree and branch.
 2. Write `.orchestrate/PLAN.md` in the worktree, one section per task, exactly:
 
    ```
@@ -53,7 +54,7 @@ If `failing_test_exists` is not confidently true: dispatch a **tester** executor
 ## 5. Dispatch
 1. Initialise the Ruflo swarm once (swarm_init from ruflo-tools.md). Call it with topology "hierarchical" (the plugin default is hierarchical-mesh).
 2. Write `.orchestrate/active.json` = `{"active": [<task ids being dispatched now>]}` before dispatching; this arms the scope lock. On EVERY exit path — success, failure handed to the user (§7.3/§7.4), user abort, or any error — delete `.orchestrate/active.json` before stopping; the scope lock stays armed while it exists.
-3. Give each executor ONLY its section: `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the absolute worktree path. Never the whole plan.
+3. Give each executor ONLY its section: `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>` plus the plan's Global Constraints section, when the plan document has one, plus the absolute worktree path. Never the whole plan. Name the test-first and debugging skills in the prompt: `${CLAUDE_PLUGIN_ROOT}/skills/tdd/SKILL.md` and `${CLAUDE_PLUGIN_ROOT}/skills/debug/SKILL.md` (executors read them; they have no Skill tool).
 4. Dispatch with the Agent tool, `subagent_type: dryas:executor`. Pick the start tier per task, first match wins:
    1. `needs_opus` true at confidence ≥ threshold, or your own judgment → `model: opus`, after `mcp__plugin_dryas_jev__log_escalation` (from_model sonnet, to_model opus, reason "skip-up: <why>", whatever `dispatch.haiku_default` says, so ESC-M1 counts it the same way as before the fast tier; the skip-up reason tells observers it is a start tier, not a climb).
    2. `dispatch.haiku_default` false → no `model` (standard tier from the agent's frontmatter). Do not ask `needs_sonnet`.
@@ -82,7 +83,7 @@ Each re-dispatch is logged with `mcp__plugin_dryas_jev__log_dispatch` (§5.6).
 5. A frontier failure comes to the user with every tier's report.
 
 ## 8. Finish
-Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then call `mcp__plugin_dryas_jev__log_merge` with task and branch (the worktree branch name), tasks_merged (the number of task sections in .orchestrate/PLAN.md) and cost_usd when you have the session cost from /cost or a cost notice; if `log_merge` replies with a warning (no review recorded for the branch), tell the user; then remove the worktree.
+Delete `.orchestrate/active.json`. Review the worktree diff with the `dryas:review-request` skill (three-stage, reports kept separate) and handle findings with `dryas:review-receive`; after each review round call `mcp__plugin_dryas_jev__log_review` (task = the worktree branch, round, counts of critical, important and minor findings). Then run `dryas:verify`. Then commit by reading `${CLAUDE_PLUGIN_ROOT}/commands/commit.md` and following its Jev-gated steps (the same pattern as interrogate in §7b). Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then call `mcp__plugin_dryas_jev__log_merge` with task and branch (the worktree branch name), tasks_merged (the number of task sections in .orchestrate/PLAN.md) and cost_usd when you have the session cost from /cost or a cost notice; if `log_merge` replies with a warning (no review recorded for the branch), tell the user; then remove the worktree.
 
 ## Question rules
 Full rules in `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/jev-questions.md`: one narrow judgment per question, named JSON fields in state, every choice has `none_of_these`, batch independent questions into one call. When one call covers several tasks, name each question `<question>.<task>` (for example `needs_opus.t3`); /tune groups calls by the part before the dot.

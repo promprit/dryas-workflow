@@ -17,8 +17,6 @@ RECORD = ".dryas-installed.json"
 TOML_START, TOML_END = "# >>> dryas-workflow >>>", "# <<< dryas-workflow <<<"
 RUFLO_ENV_KEYS = ("DRYAS_DATA_ROOT", "RUFLO_JS", "RUFLO_NO_AUTO_ENABLE", "RUFLO_DAEMON_AUTOSTART", "RUFLO_MCP_SKIP_NPX",
                   "CLAUDE_FLOW_MEMORY_PATH", "CLAUDE_FLOW_DB_PATH", "CLAUDE_FLOW_SWARM_DIR", "RUFLO_STATE_DIR")
-SP_HINT = ("Superpowers was not found for Codex. Install it with the Codex steps in the Superpowers README "
-           "(https://github.com/obra/superpowers); this installer does not fetch it.")
 
 
 def codex_dir() -> Path:

@@ -13,6 +13,7 @@ Check the diff against the base branch and remove AI-generated slop introduced i
 - Casts to `any` used only to bypass type issues
 - Deeply nested code that should be simplified with early returns
 - Other patterns inconsistent with the file and surrounding codebase
+- Code a higher rung of this ladder would have avoided (stop at the first rung that works): YAGNI (is it needed at all?), reuse of code the repo already has, the language stdlib, a native platform feature, an existing dependency, a one-liner, and only then minimum new code. Remove it.
 
 ### Guardrails
 

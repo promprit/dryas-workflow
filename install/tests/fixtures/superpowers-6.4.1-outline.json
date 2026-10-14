@@ -1,0 +1,152 @@
+{
+ "brainstorming": {
+  "files": [
+   "scripts/",
+   "spec-document-reviewer-prompt.md",
+   "visual-companion.md"
+  ],
+  "headings": [
+   "Establish Shared Understanding",
+   "Three Paths",
+   "Anti-Pattern: \"Too Simple To Need Approval\"",
+   "Red Flags",
+   "Checklist",
+   "Process Flow",
+   "The Process",
+   "After the Design (architectural path)",
+   "Visual Companion"
+  ]
+ },
+ "receiving-code-review": {
+  "files": [],
+  "headings": [
+   "Overview",
+   "The Response Pattern",
+   "Forbidden Responses",
+   "Handling Unclear Feedback",
+   "Source-Specific Handling",
+   "From your human partner",
+   "From External Reviewers",
+   "YAGNI Check for \"Professional\" Features",
+   "Implementation Order",
+   "When To Push Back",
+   "Acknowledging Correct Feedback",
+   "Gracefully Correcting Your Pushback",
+   "Common Mistakes",
+   "Real Examples",
+   "GitHub Thread Replies"
+  ]
+ },
+ "requesting-code-review": {
+  "files": [
+   "code-reviewer.md"
+  ],
+  "headings": [
+   "When to Request Review",
+   "How to Request",
+   "Example",
+   "Common Rationalizations",
+   "Red Flags"
+  ]
+ },
+ "systematic-debugging": {
+  "files": [
+   "CREATION-LOG.md",
+   "condition-based-waiting-example.ts",
+   "condition-based-waiting.md",
+   "defense-in-depth.md",
+   "find-polluter.sh",
+   "root-cause-tracing.md",
+   "test-academic.md",
+   "test-pressure-1.md",
+   "test-pressure-2.md",
+   "test-pressure-3.md"
+  ],
+  "headings": [
+   "Overview",
+   "The Iron Law",
+   "When to Use",
+   "The Four Phases",
+   "Phase 1: Root Cause Investigation",
+   "Phase 2: Pattern Analysis",
+   "Phase 3: Hypothesis and Testing",
+   "Phase 4: Implementation",
+   "Red Flags - STOP and Follow Process",
+   "your human partner's Signals You're Doing It Wrong",
+   "Common Rationalizations",
+   "Quick Reference",
+   "When Process Reveals \"No Root Cause\"",
+   "Supporting Techniques"
+  ]
+ },
+ "test-driven-development": {
+  "files": [
+   "writing-good-tests.md"
+  ],
+  "headings": [
+   "Overview",
+   "When to Use",
+   "The Iron Law",
+   "Red-Green-Refactor",
+   "RED - Write Failing Test",
+   "Verify RED - Watch It Fail",
+   "GREEN - Minimal Code",
+   "Verify GREEN - Watch It Pass",
+   "REFACTOR - Clean Up",
+   "Repeat",
+   "Good Tests",
+   "Common Rationalizations",
+   "Red Flags - STOP and Start Over",
+   "Example: Bug Fix",
+   "Verification Checklist",
+   "When Stuck",
+   "Debugging Integration",
+   "Final Rule"
+  ]
+ },
+ "using-git-worktrees": {
+  "files": [],
+  "headings": [
+   "Overview",
+   "Step 0: Detect Existing Isolation",
+   "Step 1: Create Isolated Workspace",
+   "1a. Native Worktree Tools (preferred)",
+   "1b. Git Worktree Fallback",
+   "Step 2: Project Setup",
+   "Step 3: Verify Clean Baseline",
+   "Report",
+   "Quick Reference",
+   "Common Rationalizations"
+  ]
+ },
+ "verification-before-completion": {
+  "files": [],
+  "headings": [
+   "Overview",
+   "The Iron Law",
+   "The Gate Function",
+   "Common Failures",
+   "Red Flags - STOP",
+   "Rationalization Prevention",
+   "Key Patterns",
+   "When To Apply"
+  ]
+ },
+ "writing-plans": {
+  "files": [
+   "plan-document-reviewer-prompt.md"
+  ],
+  "headings": [
+   "Overview",
+   "Scope Check",
+   "File Structure",
+   "Task Right-Sizing",
+   "Bite-Sized Task Granularity",
+   "Plan Document Header",
+   "Task Structure",
+   "No Placeholders",
+   "Self-Review",
+   "Execution Handoff"
+  ]
+ }
+}
