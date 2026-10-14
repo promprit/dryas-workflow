@@ -6,9 +6,10 @@ tasks against the current window, per task (medians), with PASS or FAIL per line
   Escalation rate         current <= baseline
 Windows: tasks first dispatched before thresholds baseline.until (YYYY-MM-DD) against the rest, or, when it is "",
 the earlier half of the logged tasks against the later half (ordered by first dispatch time). A window with fewer
-than WINDOW_MIN tasks gives n/a."""
-import datetime
+than WINDOW_MIN tasks gives n/a. Each window states its task-type mix (a shift in mix moves the medians).
+baseline.until is validated by thresholds (a real YYYY-MM-DD date); this module trusts it."""
 import statistics
+from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
 WINDOW_MIN = 10
@@ -16,20 +17,23 @@ Rows = Dict[str, Dict[str, Any]]
 
 
 def _until(until: Any) -> str:
-    """The baseline.until date, or "" (earlier half) when it is not a real YYYY-MM-DD string."""
-    try:
-        return until if isinstance(until, str) and datetime.datetime.strptime(until, "%Y-%m-%d") and len(until) == 10 else ""
-    except ValueError:
-        return ""
+    """The baseline.until date thresholds validated, or "" (earlier half) when it is not a string."""
+    return until if isinstance(until, str) else ""
 
 
-def windows(task_rows: Rows, until: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def windows(task_rows: Rows, until: Any) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], str]:
+    """(baseline rows, current rows, the until date used or "")."""
     until = _until(until)
     timed = sorted((r for r in task_rows.values() if isinstance(r.get("first_ts"), str)), key=lambda r: r["first_ts"])
     if until:
-        return [r for r in timed if r["first_ts"] < until], [r for r in timed if r["first_ts"] >= until]
+        return [r for r in timed if r["first_ts"] < until], [r for r in timed if r["first_ts"] >= until], until
     half = len(timed) // 2
-    return timed[:half], timed[half:]
+    return timed[:half], timed[half:], until
+
+
+def _types(rows: List[Dict[str, Any]]) -> Dict[str, int]:
+    mix = Counter(r["task_type"] if isinstance(r.get("task_type"), str) else "unknown" for r in rows)
+    return dict(sorted(mix.items()))
 
 
 def _median(rows: List[Dict[str, Any]], key: str) -> Optional[float]:
@@ -49,11 +53,10 @@ CHECKS = (
 )
 
 
-def check(task_rows: Rows, until: str) -> Dict[str, Any]:
-    until = _until(until)
-    base, cur = windows(task_rows, until)
+def check(task_rows: Rows, until: Any) -> Dict[str, Any]:
+    base, cur, until = windows(task_rows, until)
     out = {"basis": ("before %s" % until) if until else "earlier half", "base_tasks": len(base),
-           "current_tasks": len(cur), "lines": []}
+           "current_tasks": len(cur), "base_types": _types(base), "current_types": _types(cur), "lines": []}
     enough = len(base) >= WINDOW_MIN and len(cur) >= WINDOW_MIN
     for name, key, target, ok in CHECKS:
         b = _median(base, key) if key else _rate(base)
@@ -68,8 +71,10 @@ def _v(x: Optional[float]) -> str:
 
 
 def lines(res: Dict[str, Any]) -> List[str]:
-    out = ["- Done-when check (baseline %s: %d tasks; current: %d tasks; n/a below %d each)" % (
-        res["basis"], res["base_tasks"], res["current_tasks"], WINDOW_MIN)]
+    mix = lambda m: ", ".join("%s %d" % kv for kv in m.items()) or "none"
+    out = ["- Done-when check (baseline %s: %d tasks [%s]; current: %d tasks [%s]; n/a below %d each)" % (
+        res["basis"], res["base_tasks"], mix(res["base_types"]), res["current_tasks"], mix(res["current_types"]),
+        WINDOW_MIN)]
     out += ["- Done-when %s: baseline %s, current %s (target: %s): %s" % (
         l["name"], _v(l["base"]), _v(l["current"]), l["target"], l["verdict"]) for l in res["lines"]]
     return out

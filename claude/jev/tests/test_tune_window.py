@@ -33,10 +33,10 @@ class WindowTest(unittest.TestCase):
 
     def test_until_date_splits_windows(self):
         r = rows((8, 900.0, 50000.0), (3, 400.0, 48000.0))
-        base, cur = tw.windows(r, "2026-10-15")
-        self.assertEqual((len(base), len(cur)), (10, 10))
+        base, cur, until = tw.windows(r, "2026-10-15")
+        self.assertEqual((len(base), len(cur), until), (10, 10, "2026-10-15"))
         self.assertEqual(tw.check(r, "2026-10-15")["basis"], "before 2026-10-15")
-        base, cur = tw.windows(r, "2026-10-05")
+        base, cur, _ = tw.windows(r, "2026-10-05")
         self.assertEqual(len(base), 5)
 
     def test_small_windows_are_na(self):
@@ -48,9 +48,19 @@ class WindowTest(unittest.TestCase):
         line = [l for l in tw.check(r, "")["lines"] if l["name"] == "Executor tokens per task"][0]
         self.assertEqual((line["base"], line["verdict"]), (None, "n/a"))
 
+    def test_lines_state_the_task_type_mix_of_each_window(self):
+        r = rows((8, 900.0, 50000.0), (3, 400.0, 48000.0))
+        for i, k in enumerate(sorted(r)):
+            r[k]["task_type"] = ("code", "docs")[i % 2] if k.startswith("b") else ("code" if i < 13 else None)
+        res = tw.check(r, "")
+        self.assertEqual((res["base_types"], res["current_types"]), ({"code": 5, "docs": 5}, {"code": 3, "unknown": 7}))
+        self.assertIn("baseline earlier half: 10 tasks [code 5, docs 5]; current: 10 tasks [code 3, unknown 7]",
+                      "\n".join(tw.lines(res)))
+
     def test_lines_text(self):
         text = "\n".join(tw.lines(tw.check(rows((8, 900.0, 50000.0), (3, 400.0, 48000.0)), "")))
-        self.assertIn("- Done-when check (baseline earlier half: 10 tasks; current: 10 tasks; n/a below 10 each)", text)
+        self.assertIn("- Done-when check (baseline earlier half: 10 tasks [unknown 10]; current: 10 tasks [unknown 10]; "
+                      "n/a below 10 each)", text)
         self.assertIn("- Done-when Jev calls per task: baseline 8, current 3 (target: at most half): PASS", text)
 
 
@@ -76,12 +86,12 @@ class TuneWiringTest(unittest.TestCase):
     def test_report_carries_task_numbers_and_proposals(self):
         self.write("dispatch", [{"task": "b:%d" % i, "tier": "haiku", "role": "coder", "attempt": 1, "tokens": 1000,
                                  "ts": "2026-10-%02dT09:00:00+0700" % (i + 1)} for i in range(3)])
-        self.write("gate", [{"tool": "Write", "decision": "none", "provider": "local", "task": "b:%d" % i,
-                             "local_ms": 1.0, "task_review": "skip", "false_skip": False} for i in range(3)])
+        self.write("gate", [{"tool": "Write", "decision": "none", "provider": "jev", "task": "b:%d" % i,
+                             "latency_ms": 100, "task_review": "skip", "false_skip": False} for i in range(3)])
         with open(os.environ["JEV_THRESHOLDS"], "w") as f:
             json.dump({"review": {"min_tasks": 3}}, f)
         rep = tune.build(self.tmp)
-        self.assertEqual((rep["tasks"]["tasks"], rep["tasks"]["review_tasks"]), (3, 3))
+        self.assertEqual((rep["tasks"]["tasks"], rep["tasks"]["skip_tasks"], rep["tasks"]["false_skip_rate"]), (3, 3, 0.0))
         props = tune.proposals(rep, tune.thresholds.load())
         self.assertIn({"key": "review.task_skip", "old": False, "new": True}, [{k: p[k] for k in ("key", "old", "new")} for p in props])
 
@@ -127,13 +137,13 @@ class WindowMinTest(unittest.TestCase):
 class UntilFallbackTest(unittest.TestCase):
     def test_bad_until_values_fall_back_to_earlier_half(self):
         r = rows((8, 900.0, 5.0), (3, 400.0, 4.0))
-        for bad in (None, 5, ["x"], "garbage", "2026-13-99"):
+        for bad in (None, 5, ["x"]):
             res = tw.check(r, bad)
             self.assertEqual((res["basis"], res["base_tasks"], res["current_tasks"]), ("earlier half", 10, 10), bad)
 
     def test_windows_alone_also_tolerates_bad_until(self):
-        base, cur = tw.windows(rows((8, 900.0, 5.0), (3, 400.0, 4.0)), 5)
-        self.assertEqual((len(base), len(cur)), (10, 10))
+        base, cur, until = tw.windows(rows((8, 900.0, 5.0), (3, 400.0, 4.0)), 5)
+        self.assertEqual((len(base), len(cur), until), (10, 10, ""))
 
     def test_rows_without_first_ts_are_ignored(self):
         r = rows((8, 900.0, 5.0), (3, 400.0, 4.0))
@@ -142,12 +152,14 @@ class UntilFallbackTest(unittest.TestCase):
         res = tw.check(r, "")
         self.assertEqual((res["base_tasks"], res["current_tasks"]), (10, 10))
 
-    def test_build_with_non_string_until_in_thresholds_file(self):
-        tmp = tempfile.mkdtemp()
-        with open(os.path.join(tmp, "t.json"), "w") as f:
-            json.dump({"baseline": {"until": 7}}, f)
-        with mock.patch.dict(os.environ, {"JEV_LOG_DIR": tmp, "JEV_THRESHOLDS": os.path.join(tmp, "t.json")}):
-            self.assertEqual(tune.build(tmp)["done_check"]["basis"], "earlier half")
+    def test_build_with_bad_until_in_thresholds_file(self):
+        # thresholds.load validates the date (strptime); tune_window trusts what it gets.
+        for bad in (7, "garbage", "2026-13-99"):
+            tmp = tempfile.mkdtemp()
+            with open(os.path.join(tmp, "t.json"), "w") as f:
+                json.dump({"baseline": {"until": bad}}, f)
+            with mock.patch.dict(os.environ, {"JEV_LOG_DIR": tmp, "JEV_THRESHOLDS": os.path.join(tmp, "t.json")}):
+                self.assertEqual(tune.build(tmp)["done_check"]["basis"], "earlier half", bad)
 
 
 class ZeroBaseTest(unittest.TestCase):

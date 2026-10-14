@@ -1,6 +1,7 @@
 """All tunable Jev thresholds. Defaults here and in the shipped thresholds.json; user overrides in
 ~/.dryas/jev/thresholds.json (written by /tune after approval)."""
 import copy
+import datetime
 import json
 import math
 import os
@@ -93,6 +94,15 @@ def _type_check(value: Any, default_value: Any) -> bool:
     return type(value) == type(default_value)
 
 
+def _is_date(value: str) -> bool:
+    """A real calendar date written YYYY-MM-DD (strptime alone also takes 2026-1-5)."""
+    try:
+        datetime.datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is not None
+
+
 def validate(dotted: str, value: Any) -> Optional[str]:
     """Validate a threshold value against DEFAULTS. Returns error message if invalid, None if valid."""
     keys = dotted.split(".")
@@ -172,7 +182,7 @@ def validate(dotted: str, value: Any) -> Optional[str]:
     if key == "max_false_skip_rate" and not 0.0 <= value <= 1.0:
         return f"{dotted} must be a float in [0.0, 1.0]"
 
-    if dotted == "baseline.until" and value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+    if dotted == "baseline.until" and value and not _is_date(value):
         return f"{dotted} must be \"\" or a date YYYY-MM-DD"
 
     if section == "judge":

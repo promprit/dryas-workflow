@@ -44,8 +44,8 @@ class ScoreTest(unittest.TestCase):
                 f.write(json.dumps(r) + "\n")
 
     def test_size_counts_files_and_lines_in_scope_only(self):
-        self.assertEqual(ts.scope_size(self.root, ["src/app.py", "src/util/**"]), (3, 400))
-        self.assertEqual(ts.scope_size(self.root, ["src/new.py"]), (1, 0))
+        self.assertEqual(ts.scope_size(self.root, ["src/app.py", "src/util/**"]), (3, 400, False))
+        self.assertEqual(ts.scope_size(self.root, ["src/new.py"]), (1, 0, False))
 
     def test_done_check_runs_a_test(self):
         self.assertTrue(ts.runs_test(SECTION))
@@ -71,6 +71,7 @@ class ScoreTest(unittest.TestCase):
         self.assertEqual([ts.bucket(s) for s in (5, 45, 75)], ["0-29", "30-59", "60-100"])
 
     def test_history_counts_only_after_min_tasks(self):
+        self.log("dispatch", [{"task": "b:%d" % i, "tier": "sonnet", "role": "coder", "attempt": 1} for i in range(4)])
         self.log("mcp", [{"tool": "task_review", "task": "b:%d" % i, "task_type": "code+tests"} for i in range(2)])
         self.log("escalations", [{"task": "b:0", "reason": "failed twice", "from_model": "sonnet", "to_model": "opus"}])
         self.assertIsNone(ts.history("code+tests", 3, self.logs))
@@ -82,11 +83,12 @@ class ScoreTest(unittest.TestCase):
     def test_answer_combines_signals(self):
         a = ts.answer(self.root, SECTION, "b:2", TH, self.logs)
         self.assertEqual((a["files"], a["lines"], a["task_type"]), (3, 400, "code"))
-        self.assertEqual(a["parts"], {"size": 13, "risk": 0, "tests": 0, "history": 0, "total": 13})
+        self.assertEqual(a["parts"], {"size": 13, "risk": 0, "tests": 0, "history": 0, "total": 13, "truncated": False})
         self.assertEqual((a["score"], a["tier"]), (13, "haiku"))
         self.assertEqual((a["skip"], a["review"]), (["src/app.py"], ["src/util/**"]))
 
     def test_answer_reads_history_min_tasks_from_thresholds(self):
+        self.log("dispatch", [{"task": "b:%d" % i, "tier": "sonnet"} for i in range(2)])
         self.log("mcp", [{"tool": "task_review", "task": "b:%d" % i, "task_type": "code"} for i in range(2)])
         self.log("escalations", [{"task": "b:0", "reason": "failed twice"}])
         base = ts.answer(self.root, SECTION, "b:2", thresholds.load(), self.logs)
@@ -119,6 +121,46 @@ class ScoreTest(unittest.TestCase):
     def test_task_type_tests_only_and_mixed_docs_code(self):
         self.assertEqual(ts.task_type(["tests/test_a.py", "tests/test_b.py"]), "tests")
         self.assertEqual(ts.task_type(["docs/x.md", "src/a.py"]), "code+docs")
+
+    def test_history_counts_only_tasks_that_were_dispatched(self):
+        # A task_review answer for a task that never ran (asked, then abandoned) is not history.
+        self.log("mcp", [{"tool": "task_review", "task": "b:%d" % i, "task_type": "code"} for i in range(4)])
+        self.log("dispatch", [{"task": "b:0", "tier": "sonnet"}, {"task": "b:1", "tier": "sonnet", "phase": "return"}])
+        self.log("escalations", [{"task": "b:0", "reason": "failed twice"}, {"task": "b:3", "reason": "failed"}])
+        self.assertIsNone(ts.history("code", 3, self.logs))
+        self.assertEqual(ts.history("code", 2, self.logs), 0.5)
+
+    def test_test_words_match_whole_words(self):
+        for line, want in (("the toxicity check passes", False), ("`tox -e py` passes", True),
+                           ("pytester notes are tidy", False), ("`make test` passes", True),
+                           ("make testing docs", False), ("`go test ./...` passes", True)):
+            sec = "## Task 1: d\nScope:\n- a.py\nDone:\n- %s\n" % line
+            self.assertEqual(ts.runs_test(sec), want, line)
+
+    def test_task_type_tests_by_path_parts_not_substring(self):
+        for globs, want in ((["src/contest.py"], "code"), (["src/latest/**"], "code"), (["src/testing/x.py"], "code"),
+                            (["tests/**"], "tests"), (["pkg/test/x.go"], "tests"), (["src/test_a.py"], "tests"),
+                            (["pkg/foo_test.go"], "tests"), (["**/test_*.py"], "tests"), (["src/attest_x.py"], "code")):
+            self.assertEqual(ts.task_type(globs), want, globs)
+
+    def test_scope_size_walks_only_the_literal_prefix(self):
+        for i in range(20):
+            self.put("elsewhere/f%02d.py" % i, 1)
+        with mock.patch.object(ts, "MAX_FILES", 5):
+            self.assertEqual(ts.scope_size(self.root, ["src/app.py", "src/util/**"]), (3, 400, False))
+            self.assertEqual(ts.scope_size(self.root, ["elsewhere/*.py"])[2], True)
+
+    def test_truncated_walk_is_reported_in_parts(self):
+        for i in range(8):
+            self.put("src/util/z%d.py" % i, 1)
+        with mock.patch.object(ts, "MAX_FILES", 5):
+            a = ts.answer(self.root, SECTION, "b:2", TH, self.logs)
+        self.assertIs(a["parts"]["truncated"], True)
+        self.assertIs(ts.answer(self.root, SECTION, "b:2", TH, self.logs)["parts"]["truncated"], False)
+
+    def test_scope_never_leaves_the_root(self):
+        self.assertEqual(ts.scope_size(os.path.join(self.root, "src", "util"), ["../app.py", "/etc/hosts", "../*.py"]),
+                         (0, 0, False))
 
 
 class CliTest(unittest.TestCase):

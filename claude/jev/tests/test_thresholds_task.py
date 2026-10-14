@@ -59,6 +59,12 @@ class TaskThresholdsTest(unittest.TestCase):
         self.assertIsNone(thresholds.validate("baseline.until", "2026-11-01"))
         self.assertIsNone(thresholds.validate("baseline.until", ""))
         self.assertIn("YYYY-MM-DD", thresholds.validate("baseline.until", "next week"))
+        for impossible in ("2026-13-99", "2026-02-30", "2026-1-05"):
+            self.assertIn("YYYY-MM-DD", thresholds.validate("baseline.until", impossible), impossible)
+
+    def test_impossible_until_date_falls_back(self):
+        self.write({"baseline": {"until": "2026-13-99"}})
+        self.assertEqual(thresholds.load()["baseline"]["until"], "")
 
 
 if __name__ == "__main__":
