@@ -238,6 +238,15 @@ def decide(answers: Dict[str, Dict[str, Any]], t: Dict[str, Any]) -> Optional[Tu
     return None
 
 
+def _local_decision(local: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """The local judge's own verdict; gate thresholds apply to Jev answers only."""
+    if local["decision"] == "deny":
+        return "deny", "Local judge: blocked (%s)" % local["reasons"][0]
+    if local["decision"] == "ask":
+        return "ask", "Local judge: looks destructive (%s) - please confirm" % local["reasons"][0]
+    return None
+
+
 def _head(tool: str, ti: Dict[str, Any]) -> Dict[str, Any]:
     if tool != "Bash":
         return {}
@@ -275,18 +284,21 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     ti = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
     cwd = str(event.get("cwd") or "")
     base = dict({"tool": tool}, **_head(tool, ti), **taskctx.context(cwd))
-    if tool != "Bash" and local_file(tool, ti, str(event.get("cwd") or "")):
+    if tool != "Bash" and local_file(tool, ti, cwd):
         jevlog.append("gate", dict(base, decision="skipped", via="local_file"))
         return None
+    cmd = str(ti.get("command", "")) if tool == "Bash" else ""
+    risky = True
     if tool == "Bash":
-        cmd = str(ti.get("command", ""))
         ok = allowlisted(cmd, t["allowlist"]) and _plain(cmd)
         via, extra = "allowlist", {}
         if not ok and t.get("compound", True):
-            ok, n = allowlisted_compound(cmd, t["allowlist"], str(event.get("cwd") or ""))
+            ok, n = allowlisted_compound(cmd, t["allowlist"], cwd)
             via, extra = "compound", {"parts": n}
-        if not ok and t.get("prescreen", True) and not _risky(cmd):
-            ok, via, extra = True, "prescreen", {}
+        if not ok:
+            risky = _risky(cmd)
+            if t.get("prescreen", True) and not risky:
+                ok, via, extra = True, "prescreen", {}
         if ok:
             jevlog.append("gate", dict(base, decision="skipped", via=via, **extra))
             return None
@@ -294,21 +306,18 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     if ssd and not os.path.isdir(ssd):
         jevlog.append("gate", dict(base, decision="none", error="ssd_missing"))
         return None
-    cmd = str(ti.get("command", "")) if tool == "Bash" else ""
     t0 = time.monotonic()
-    local = local_judge.gate_answers(tool, cmd, _risky(cmd) if tool == "Bash" else True)
+    local = local_judge.gate_answers(tool, cmd, risky)
     local_ms = round((time.monotonic() - t0) * 1000, 2)
     state = {"environment": os.environ.get("JEV_GATE_STATE", DEFAULT_STATE), "cwd": str(event.get("cwd", "")),
              "action": describe(tool, ti)}
     try:
         v = providers.ask(state, QUESTIONS, local, t_all, judge_fn)
         a = v["answers"]
-        d = decide(a, t)
-        if d and v["provider"] == "local":
-            d = (d[0], d[1].replace("Jev gate:", "Local judge:", 1))
+        d = _local_decision(local) if v["provider"] == "local" else decide(a, t)
         # Try to log and format decision, but don't let logging failure suppress a computed decision
         try:
-            jevlog.append("gate", _record(base, d, a, v, t, local_ms))
+            jevlog.append("gate", _record(base, d, a, v, t, local, local_ms))
         except Exception:
             try:
                 jevlog.append("gate", dict(base, decision=d[0] if d else "none", error="logging_failed"))
@@ -323,11 +332,11 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
 
 
 def _record(base: Dict[str, Any], d: Optional[Tuple[str, str]], a: Dict[str, Any], v: Dict[str, Any],
-            t: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
+            t: Dict[str, Any], local: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
     # Returned as dict(...) built from helpers so tools/inventory.py can trace the log fields.
     return dict(base, decision=d[0] if d else "none", p_safe=round(a["safe"]["value"], 3), risk=a["risk"]["value"],
                 risk_conf=round(a["risk"]["confidence"], 3), provider=v["provider"],
-                **_provider_fields(v, local_ms), **_shadow_fields(v, t))
+                **_provider_fields(v, local_ms), **_shadow_fields(v, t, local))
 
 
 def _provider_fields(v: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
@@ -339,14 +348,18 @@ def _provider_fields(v: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
     return dict(local_ms=local_ms, reasons=list(v.get("reasons", []))[:4])
 
 
-def _shadow_fields(v: Dict[str, Any], t: Dict[str, Any]) -> Dict[str, Any]:
+def _shadow_fields(v: Dict[str, Any], t: Dict[str, Any], local: Dict[str, Any]) -> Dict[str, Any]:
     sa = v.get("shadow_answers")
     if not sa:
         if v.get("shadow_error"):
             return dict(shadow_provider=v["shadow_provider"], shadow_error=v["shadow_error"])
         return {}
-    sd = decide(sa, t)
-    out = dict(shadow_provider=v["shadow_provider"], shadow_decision=sd[0] if sd else "none",
+    if v["shadow_provider"] == "local":
+        sd = local["decision"] or "none"
+    else:
+        jd = decide(sa, t)
+        sd = jd[0] if jd else "none"
+    out = dict(shadow_provider=v["shadow_provider"], shadow_decision=sd,
                shadow_p_safe=round(sa["safe"]["value"], 3), shadow_risk=sa["risk"]["value"])
     if v.get("shadow_reasons"):
         out["shadow_reasons"] = list(v["shadow_reasons"])[:4]

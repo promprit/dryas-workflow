@@ -238,15 +238,23 @@ def _validate_questions(questions: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _local(mid: Any, args: Dict[str, Any]) -> Dict[str, Any]:
-    """Local judge provider: no model answers. Validate as Jev would, then escalate every question."""
+def _checked_questions(mid: Any, args: Dict[str, Any]) -> Any:
+    """Return (normalized_questions, None), or (None, error_reply) when state or a question is invalid."""
     if "state" not in args or not isinstance(args.get("questions"), dict) or not args["questions"]:
-        return _text(mid, "jev_judge needs 'state' and a non-empty 'questions' map", True)
-    normalized_questions = _normalize_questions(args["questions"])
-    validation_error = _validate_questions(normalized_questions)
+        return None, _text(mid, "jev_judge needs 'state' and a non-empty 'questions' map", True)
+    normalized = _normalize_questions(args["questions"])
+    validation_error = _validate_questions(normalized)
     if validation_error:
         jevlog.append("mcp", {"tool": "jev_judge", "error": "invalid_question"})
-        return _text(mid, validation_error, True)
+        return None, _text(mid, validation_error, True)
+    return normalized, None
+
+
+def _local(mid: Any, args: Dict[str, Any]) -> Dict[str, Any]:
+    """Local judge provider: no model answers. Validate as Jev would, then escalate every question."""
+    normalized_questions, reply = _checked_questions(mid, args)
+    if reply:
+        return reply
     names = sorted(q[:64] for q in normalized_questions)[:64]
     jevlog.append("mcp", {"tool": "jev_judge", "provider": "local", "escalate": names})
     return _text(mid, {"answers": {}, "escalate": names, "provider": "local",
@@ -254,17 +262,9 @@ def _local(mid: Any, args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _judge(mid: Any, args: Dict[str, Any], judge_fn) -> Dict[str, Any]:
-    if "state" not in args or not isinstance(args.get("questions"), dict) or not args["questions"]:
-        return _text(mid, "jev_judge needs 'state' and a non-empty 'questions' map", True)
-
-    # Normalize questions first
-    normalized_questions = _normalize_questions(args["questions"])
-
-    # Validate normalized questions
-    validation_error = _validate_questions(normalized_questions)
-    if validation_error:
-        jevlog.append("mcp", {"tool": "jev_judge", "error": "invalid_question"})
-        return _text(mid, validation_error, True)
+    normalized_questions, reply = _checked_questions(mid, args)
+    if reply:
+        return reply
 
     try:
         res = judge_fn(args["state"], normalized_questions)

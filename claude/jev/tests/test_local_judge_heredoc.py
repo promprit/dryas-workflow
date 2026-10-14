@@ -66,6 +66,14 @@ class HeredocTest(unittest.TestCase):
         self.check(('cat <<< "rm -rf /"',), "none")
         self.check(('bash <<< "rm -rf /"',), "deny")
 
+    def test_arithmetic_shift_is_not_a_heredoc(self):
+        self.check((
+            "x=$((1<<2))\nrm -rf /",
+            "((x=1<<2))\nrm -rf /",
+            "echo $(( (1<<2) ))\nrm -rf /",
+        ), "deny")
+        self.check(("(cat <<EOF\nrm -rf /\nEOF\n)",), "none")
+
     def test_unterminated_heredoc_is_body(self):
         self.check(("cat <<EOF\nrm -rf /",), "none")
 

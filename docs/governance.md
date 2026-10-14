@@ -41,6 +41,8 @@ The gate, the route hint and the `jev_judge` tool ask a judge. Two providers ans
 
 `judge.provider` chooses who decides; `judge.shadow` names a second provider whose answer is only logged (`shadow_*` fields in `gate.jsonl`). Both default to `auto`: Jev decides when a key is set, with the local judge as its shadow; without a key the local judge decides. When Jev is unreachable the local judge decides that call (`fallback` in the log). `/tune` reports providers, fallbacks, shadow agreement and judged gate calls per task; change a setting with `/tune apply judge.provider '"local"'`.
 
+Setting `judge.shadow` to `jev` while the local judge decides makes a Jev call on every judged gate call (latency up to Jev's 3 s deadline, and its spend), so leave it at `auto` unless you are collecting comparison data. The local judge does not judge interpreter code (`python -c`, heredoc bodies fed to non-shell programs) and does not cover deletes of system folders such as `/usr` or `/etc`.
+
 ## Reference binding
 
 Jev (TypeSafe, via OpenRouter) is the judge and gate. The scope lock is `claude/jev/scope_lock.py`, armed by `.orchestrate/active.json`. Hook order comes from `claude/jev/chain.json` (local choices in `~/.dryas/chain.local.json`). Thresholds live in `~/.dryas/jev/thresholds.json`; `/tune` proposes changes. Details: [workflow.md §1, §5–6](workflow.md).

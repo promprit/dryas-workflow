@@ -6,10 +6,12 @@ from typing import Any, Dict, Optional
 
 
 def _root(start: str) -> Optional[str]:
-    d = os.path.abspath(start or ".")
+    d = os.path.realpath(start or ".")
     while True:
         if os.path.isfile(os.path.join(d, ".orchestrate", "active.json")):
             return d
+        if os.path.exists(os.path.join(d, ".git")):
+            return None
         parent = os.path.dirname(d)
         if parent == d:
             return None
