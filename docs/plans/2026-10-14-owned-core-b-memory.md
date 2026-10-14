@@ -2573,6 +2573,7 @@ In `claude/jev/tests/test_jev_mcp.py`, `McpTest.test_tools_list` (the one named 
 - The `dryas memory …` wrapper for `memcli.py`, the cut-over step "run `dryas memory import-ruflo`", and the uninstall offer for `~/.dryas/ruflo`.
 - `docs/memory-model.md` and `docs/architecture.md` describing the store, the tables and the ranking; FlowObserve's reducer told about `memory.jsonl` (new file, no new fields in existing logs).
 - The local judge's history signal (plan A2) reads `patterns` kind `tier` and the `tasks` table.
+- Consolidation outside the hook budget (decided 2026-10-14, spec commit abf32e5): the session-end hook keeps a bounded attempt (deadline 1.2 s, watchdog 1.8 s) as the fast path and logs `ConsolidateSkipped` when it cannot finish; D adds an unbounded `memcli.py consolidate` run that never blocks a hook (detached from mem-session-end or at the next session start, with a lock so runs never overlap), and `/tune` counts the skips. A dense store (about 600k edges, ~3.3 s per run) only ever consolidates that way.
 
 ## Self-review (done while writing)
 
