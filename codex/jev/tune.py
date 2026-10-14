@@ -171,6 +171,10 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
     dispatch, scope = read("dispatch", log_dir), read("scope", log_dir)
     review, merge = read("review", log_dir), read("merge", log_dir)
     judged = [r for r in gate if "latency_ms" in r]
+    decided = [r for r in gate if r.get("provider") in ("jev", "local") and r.get("decision") != "skipped"]
+    shadowed = [r for r in decided if "shadow_decision" in r]
+    per_task = Counter(r["task"] for r in decided if isinstance(r.get("task"), str))
+    shadow_spend = sum(v for v in (_num(r.get("shadow_cost")) for r in gate) if v is not None)
     q_calls: Counter = Counter()
     q_below: Counter = Counter()
     for r in mcp:
@@ -232,7 +236,13 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "delivery": delivery(dispatch, scope, esc, review, merge),
         "compare_count": len(ratios),
         "swarm_vs_plain": round(sum(ratios) / len(ratios), 3) if ratios else None,
-        "jev_spend_usd": _cost(gate) + _cost(route) + _cost(mcp) + _cost(compact),
+        "jev_spend_usd": _cost(gate) + _cost(route) + _cost(mcp) + _cost(compact) + shadow_spend,
+        "judge_providers": dict(Counter(r["provider"] for r in decided)),
+        "judge_fallbacks": sum(1 for r in decided if r.get("fallback")),
+        "shadow": {"calls": len(shadowed), "agree": sum(1 for r in shadowed if r["shadow_decision"] == r.get("decision")),
+                   "by_provider": dict(Counter(r.get("shadow_provider") for r in shadowed))},
+        "gate_judged_per_task_median": statistics.median(per_task.values()) if per_task else None,
+        "shadow_spend_usd": shadow_spend,
         "top_judged_heads": [h for h, _ in heads.most_common() if h not in risky][:3],
     }
 
@@ -308,6 +318,10 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
              "- Judge latency median (healthy < 500 ms): %s" % ("n/a" if rep["judge_latency_ms_median"] is None else "%d ms" % rep["judge_latency_ms_median"]),
              "- Gate decisions: %s" % json.dumps(rep["gate_decisions"]),
              "- gate skips: allowlist %(allowlist)d, compound %(compound)d, prescreen %(prescreen)d, legacy %(legacy)d" % rep["gate_skips_by_via"],
+             "- Judge providers (gate): %s, fallbacks to local: %d" % (json.dumps(rep["judge_providers"], sort_keys=True), rep["judge_fallbacks"]),
+             "- Shadow agreement (gate): %s" % ("n/a" if not rep["shadow"]["calls"] else "%.0f%% of %d %s" % (
+                 rep["shadow"]["agree"] * 100.0 / rep["shadow"]["calls"], rep["shadow"]["calls"], json.dumps(rep["shadow"]["by_provider"], sort_keys=True))),
+             "- Judged gate calls per task (median): %s" % na(rep["gate_judged_per_task_median"]),
              "- Route: %d calls, %d injected" % (rep["route_calls"], rep["route_injected"]),
              "- Escalations sonnet->opus: %d %s" % (rep["opus_escalations"]["count"], json.dumps(rep["opus_escalations"]["reasons"])),
              "- Fable dispatches (opus->fable only): %d %s" % (rep["fable"]["count"], json.dumps(rep["fable"]["reasons"])),
