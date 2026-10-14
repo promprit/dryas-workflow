@@ -21,6 +21,8 @@ MIN_SUPPORT = 2
 MAX_GROUP = 50  # files or memories per group that form pairs; caps the n^2 growth of one huge task
 ACCESS_DAYS = 180
 EDIT_DAYS = 365
+MAX_EDITS = 20000  # newest rows read per run
+MAX_ACCESS = 20000
 KINDS = ("rank", "file_fail", "coedit", "tier")
 _TYPE = re.compile(r"\s*([A-Za-z]+)")
 
@@ -77,8 +79,24 @@ def _pairs(items: Set[str]) -> List[Tuple[str, str]]:
     return list(combinations(sorted(items)[:MAX_GROUP], 2))
 
 
-def consolidate(conn, ns: str, now: Optional[float] = None) -> Dict[str, int]:
+class _Late(Exception):
+    pass
+
+
+def consolidate(conn, ns: str, now: Optional[float] = None, deadline: Optional[float] = None) -> Dict[str, Any]:
+    """deadline is a time.monotonic() value; past it the run rolls back and reports skipped."""
     now = time.time() if now is None else now
+
+    def check() -> None:
+        if deadline is not None and time.monotonic() > deadline:
+            raise _Late()
+    try:
+        return _consolidate(conn, ns, now, check)
+    except _Late:
+        return {"skipped": "deadline", "deduped": 0, "edges": 0, "ranked": 0, "patterns": 0}
+
+
+def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
     with memdb.tx(conn):
         deduped = _dedupe(conn, ns)
         conn.execute("DELETE FROM access WHERE ts < ?", (now - ACCESS_DAYS * 86400,))
@@ -86,8 +104,9 @@ def consolidate(conn, ns: str, now: Optional[float] = None) -> Dict[str, int]:
 
         by_session: Dict[str, Set[str]] = defaultdict(set)
         for s, mid in conn.execute("SELECT a.session, a.memory_id FROM access a JOIN memory m ON m.id = a.memory_id "
-                                   "WHERE m.ns = ?", (ns,)):
+                                   "WHERE m.ns = ? ORDER BY a.ts DESC LIMIT ?", (ns, MAX_ACCESS)).fetchall():
             by_session[s].add("m:%d" % mid)
+        check()
         for ids in by_session.values():
             for pair in _pairs(ids):
                 edges[pair] += 1
@@ -95,11 +114,12 @@ def consolidate(conn, ns: str, now: Optional[float] = None) -> Dict[str, int]:
         groups: Dict[Tuple[str, str], Set[str]] = defaultdict(set)
         totals: Counter = Counter()
         fails: Counter = Counter()
-        for s, t, f, ok in conn.execute("SELECT session, task_id, file, ok FROM edits WHERE ns = ? AND ts >= ?",
-                                        (ns, now - EDIT_DAYS * 86400)):
+        for s, t, f, ok in conn.execute("SELECT session, task_id, file, ok FROM edits WHERE ns = ? AND ts >= ? "
+                                        "ORDER BY ts DESC LIMIT ?", (ns, now - EDIT_DAYS * 86400, MAX_EDITS)).fetchall():
             groups[("task", t) if t else ("session", s or "")].add(f)
             totals[f] += 1
             fails[f] += 0 if ok else 1
+        check()
         coedit: Counter = Counter()
         for files in groups.values():
             for a, b in _pairs(files):
@@ -109,6 +129,7 @@ def consolidate(conn, ns: str, now: Optional[float] = None) -> Dict[str, int]:
             for f in sorted(groups.get(("task", tid), ()))[:MAX_GROUP]:
                 edges[tuple(sorted(("m:%d" % mid, "f:" + f)))] += 1
 
+        check()
         ranks = pagerank(dict(edges))
         degree: Counter = Counter()
         for a, b in edges:
@@ -129,6 +150,7 @@ def consolidate(conn, ns: str, now: Optional[float] = None) -> Dict[str, int]:
             tier, n = sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[0]
             if n >= MIN_SUPPORT:
                 rows.append((ns, "tier", typ, tier, n, now))
+        check()
         conn.execute("DELETE FROM patterns WHERE ns = ? AND kind IN (%s)" % ",".join("?" * len(KINDS)), (ns,) + KINDS)
         conn.executemany("INSERT INTO patterns (ns, kind, key, value, support, updated) VALUES (?, ?, ?, ?, ?, ?)", rows)
     return {"deduped": deduped, "edges": len(edges), "ranked": ranked, "patterns": len(rows)}

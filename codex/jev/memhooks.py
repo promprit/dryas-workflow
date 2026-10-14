@@ -28,6 +28,7 @@ import redact
 import taskctx
 
 HOOK_BUSY_MS = 500
+CONSOLIDATE_DEADLINE_S = 1.5  # consolidation must finish this long after the stage began (watchdog: 1.8)
 CONSOLIDATE_BEFORE_S = 1.0  # consolidate only if the stage has used less than this of its 2 s budget
 NOTE_MAX_BYTES = 64 * 1024
 BUDGET_S = 1.8  # the watchdog fires here, inside the 2 s hook budget
@@ -166,6 +167,7 @@ def on_task(conn, event: Dict[str, Any]) -> int:
         d = _dispatches(tid)
         tiers = [str(r["tier"]) for r in d if r.get("tier")]
         title, scope = _plan_section(cwd, tid)
+        title, scope = redact.redact(title), [redact.redact(s) for s in scope]
         with memdb.tx(conn):
             conn.execute(
                 "INSERT INTO tasks (task_id, ns, title, scope, tier_start, tier_end, outcome, started, ended, meta) "
@@ -282,8 +284,16 @@ def on_session_end(conn, event: Dict[str, Any], mode: Optional[str], t0: float) 
     if root:
         sweep(conn, ns, root, _task_ids(cwd))
     out: Dict[str, Any] = {"summary": text}
-    if mode is None and time.monotonic() - t0 < CONSOLIDATE_BEFORE_S:
-        out["consolidated"] = memlearn.consolidate(conn, ns)
+    if mode is None:
+        reason = "budget"
+        if time.monotonic() - t0 < CONSOLIDATE_BEFORE_S:
+            res = memlearn.consolidate(conn, ns, deadline=t0 + CONSOLIDATE_DEADLINE_S)
+            reason = res.get("skipped")
+            if not reason:
+                out["consolidated"] = res
+        if reason:
+            jevlog.append("memory", dict(stage="session-end", error="ConsolidateSkipped", detail=reason))
+            out["consolidate_skipped"] = reason
     return out
 
 
