@@ -90,7 +90,7 @@ def _usage(dispatch: List[Any]) -> Dict[Tuple[str, Any, Optional[int]], Dict[str
 def _row() -> Dict[str, Any]:
     return dict(start_tier=None, final_tier=None, tokens=None, duration_ms=None, wasted_tokens=0.0, jev_calls=0,
                 judge_spend=0.0, gate_wait_ms=0.0, escalated=False, score=None, score_tier=None, first_ts=None,
-                task_type=None)
+                task_type=None, lines=None)
 
 
 def rows(gate: List[Any], dispatch: List[Any], esc: List[Any], mcp: List[Any]) -> Dict[str, Dict[str, Any]]:
@@ -107,6 +107,10 @@ def rows(gate: List[Any], dispatch: List[Any], esc: List[Any], mcp: List[Any]) -
             row["task_type"] = r["task_type"]
         if isinstance(r.get("ts"), str) and (row["first_ts"] is None or r["ts"] < row["first_ts"]):
             row["first_ts"] = r["ts"]
+    for r in dispatch:
+        if isinstance(r, dict) and r.get("phase") == "return" and r.get("task") in out and as_int(r.get("lines")) is not None \
+                and 0 <= as_int(r["lines"]) <= 1000000:
+            out[r["task"]]["lines"] = as_int(r["lines"])
     usage = _usage(dispatch)
     top: Dict[Tuple[str, Any], int] = {}
     for task, role, attempt in usage:
@@ -219,6 +223,8 @@ def summary(task_rows: Dict[str, Dict[str, Any]], gate: List[Any], review: List[
         dur = [r["duration_ms"] for r in mine if r["duration_ms"] is not None]
         by_tier[tier] = dict(tasks=len(mine), tokens_median=_med(tok), tokens_p90=_p90(tok),
                              duration_ms_median=_med(dur), duration_ms_p90=_p90(dur))
+    lines_by_tier = {t: _med([r["lines"] for r in rs if r["start_tier"] == t and r["lines"] is not None])
+                     for t in sorted({r["start_tier"] for r in rs if r["start_tier"] and r["lines"] is not None}, key=RANK.get)}
     edits = [r for r in gate if isinstance(r, dict) and r.get("tool") in pathclass.FILE_TOOLS]
     findings: Dict[str, float] = {}
     for r in (x for x in review if isinstance(x, dict) and isinstance(x.get("task"), (str, int))):
@@ -230,7 +236,8 @@ def summary(task_rows: Dict[str, Dict[str, Any]], gate: List[Any], review: List[
         b["tasks"] += 1
         b["escalated"] += r["escalated"]
     return dict(
-        tasks=len(rs), per_task=per, by_tier=by_tier,
+        tasks=len(rs), per_task=per, by_tier=by_tier, lines_by_tier=lines_by_tier,
+        lines_median=_med([r["lines"] for r in rs if r["lines"] is not None]),
         wasted_tokens=sum(r["wasted_tokens"] for r in rs),
         edits=len(edits),
         deny_per_edit=round(sum(1 for r in edits if r.get("decision") == "deny") / len(edits), 4) if edits else None,
@@ -271,6 +278,9 @@ def lines(s: Dict[str, Any]) -> List[str]:
             tier, t["tasks"], _f(t["tokens_median"]), _f(t["tokens_p90"]),
             _f(None if t["duration_ms_median"] is None else t["duration_ms_median"] / 1000, "%.1f"),
             _f(None if t["duration_ms_p90"] is None else t["duration_ms_p90"] / 1000, "%.1f")))
+    out.append("- Lines changed per task (median): %s" % _f(s["lines_median"]))
+    out.append("- Lines per task by start tier: %s" % (
+        ", ".join("%s %s" % (t, _f(v)) for t, v in s["lines_by_tier"].items()) or "n/a"))
     sc, qs = s["score_starts"], s["question_starts"]
     out += ["- Tokens of failed attempts (escalation waste): %.0f" % s["wasted_tokens"],
             "- Edits: deny rate %s, ask rate %s (%d edits)" % (_pct(s["deny_per_edit"]), _pct(s["ask_per_edit"]), s["edits"]),
