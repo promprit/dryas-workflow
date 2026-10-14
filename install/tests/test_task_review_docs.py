@@ -53,6 +53,13 @@ class TaskReviewDocsTest(unittest.TestCase):
                   "`git checkout -f`", "`git switch -f`", "directory pathspecs", "local_file"):
             self.assertIn(s, t, s)
 
+    def test_governance_lists_all_six_done_when_lines(self):
+        t = read("docs/governance.md")
+        for s in ("Jev calls per task at most half", "gate wait per task lower", "executor tokens per task no higher",
+                  "escalation rate no higher", "review findings per reviewed branch no higher",
+                  "no enforced false skip on an always-judged file", "helps are at least 2 x hurts and at least one"):
+            self.assertIn(s, t, s)
+
 
 if __name__ == "__main__":
     unittest.main()

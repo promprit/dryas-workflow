@@ -281,7 +281,7 @@ def lines(s: Dict[str, Any]) -> List[str]:
             "- Start tier from the score: %d tasks, escalation %s, tokens median %s; from the tier questions: %d tasks, "
             "escalation %s, tokens median %s" % (sc["tasks"], _pct(sc["escalation_rate"]), _f(sc["tokens_median"]),
                                                  qs["tasks"], _pct(qs["escalation_rate"]), _f(qs["tokens_median"])),
-            "- Score in shadow (%d scored tasks): would help %d, would hurt %d (ON needs help >= 2 x hurt, at least 1)" % (
+            "- Score in shadow (%d scored tasks): would help %d, would hurt %d (ON needs helps >= 2 x hurts and helps >= 1)" % (
                 s["scored_tasks"], s["shadow_helps"], s["shadow_hurts"]),
             _skip_line(s)]
     return out

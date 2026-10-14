@@ -80,24 +80,42 @@ class ReviewFindingsTest(unittest.TestCase):
 
     def line(self, review, gate=None, until=""):
         res = tw.check(self.R, until, review, gate)
-        return [l for l in res["lines"] if l["name"] == "Review findings per merged branch"][0]
+        return [l for l in res["lines"] if l["name"] == "Review findings per reviewed branch"][0]
 
     def test_review_findings_line(self):
         base = [rev(2, "a", 1, 1), rev(3, "b", 0, 2), rev(4, "c", 3, 0)]  # 2, 2, 3 -> median 2 (minor ignored)
-        l = self.line(base + [rev(21, "d", 0, 1), rev(22, "e", 0, 2)])  # 1, 2 -> 1.5
-        self.assertEqual((l["base"], l["current"], l["verdict"]), (2.0, 1.5, "PASS"))
-        l = self.line(base + [rev(21, "d", 1, 2), rev(22, "e", 0, 3)])  # 3, 3
+        cur = [rev(21, "d", 0, 1), rev(22, "e", 0, 2), rev(23, "f", 0, 1)]  # 1, 2, 1 -> 1
+        l = self.line(base + cur)
+        self.assertEqual((l["base"], l["current"], l["verdict"]), (2.0, 1.0, "PASS"))
+        l = self.line(base + [rev(21, "d", 1, 2), rev(22, "e", 0, 3), rev(23, "f", 0, 4)])  # 3, 3, 4
         self.assertEqual((l["base"], l["current"], l["verdict"]), (2.0, 3.0, "FAIL"))
-        self.assertEqual(self.line(base + [rev(21, "d", 0, 2)])["verdict"], "PASS")  # equal passes
-        text = "\n".join(tw.lines(tw.check(self.R, "", base + [rev(21, "d", 0, 1)], [])))
-        self.assertIn("- Done-when Review findings per merged branch: baseline 2, current 1 (target: no higher): PASS", text)
+        eq = [rev(21, "d", 0, 2), rev(22, "e", 0, 2), rev(23, "f", 0, 2)]
+        self.assertEqual(self.line(base + eq)["verdict"], "PASS")  # equal passes
+        text = "\n".join(tw.lines(tw.check(self.R, "", base + cur, [])))
+        self.assertIn("- Done-when Review findings per reviewed branch: baseline 2, current 1 (target: no higher): PASS", text)
 
     def test_records_of_one_branch_sum_and_until_splits_by_ts(self):
-        review = [rev(2, "a", 0, 1), rev(3, "a", 0, 1), rev(25, "b", 0, 1)]
+        review = [rev(2, "a", 0, 1), rev(3, "a", 0, 1), rev(4, "x", 0, 2), rev(5, "y", 0, 2),
+                  rev(25, "b", 0, 1), rev(26, "c", 0, 1), rev(27, "d", 0, 1)]
         l = self.line(review, until="2026-10-15")
         self.assertEqual((l["base"], l["current"]), (2.0, 1.0))
-        l = self.line([rev(14, "a", 0, 5), rev(15, "b", 0, 7)], until="2026-10-15")
+        l = self.line([rev(13, "a", 0, 5), rev(14, "b", 0, 5), rev(14, "c", 0, 5),
+                       rev(15, "d", 0, 7), rev(16, "e", 0, 7), rev(17, "f", 0, 7)], until="2026-10-15")
         self.assertEqual((l["base"], l["current"]), (5.0, 7.0))
+
+    def test_fewer_than_three_reviewed_branches_per_window_is_na(self):
+        base = [rev(2, "a", 0, 1), rev(3, "b", 0, 1), rev(4, "c", 0, 1)]
+        two = [rev(21, "d", 0, 5), rev(22, "e", 0, 5)]
+        self.assertEqual(self.line(base + two)["verdict"], "n/a")
+        self.assertEqual(self.line(two + base[:0] + [rev(23, "f", 0, 5)] + [])["verdict"], "n/a")  # no baseline
+        l = self.line(base[:2] + [rev(21, "d", 0, 1), rev(22, "e", 0, 1), rev(23, "f", 0, 1)])
+        self.assertEqual(l["verdict"], "n/a")
+
+    def test_non_finite_counts_are_ignored(self):
+        base = [rev(2, "a", 0, 1), rev(3, "b", 0, 1), rev(4, "c", 0, 1)]
+        cur = [rev(21, "d", 0, float("inf")), rev(22, "e", float("nan"), 1), rev(23, "f", 0, 1)]
+        l = self.line(base + cur)
+        self.assertEqual((l["current"], l["verdict"]), (1.0, "PASS"))
 
     def test_missing_review_data_is_na(self):
         self.assertEqual(self.line([])["verdict"], "n/a")
@@ -119,8 +137,13 @@ class FalseSkipLineTest(unittest.TestCase):
     def test_rel_lists(self):
         self.assertEqual(self.fs([skip(rel=["src/a.py", "scripts/run.sh"])]), "FAIL")
         self.assertEqual(self.fs([skip(rel=["src/a.py", "lib/b.py"])]), "PASS")
-        self.assertEqual(self.fs([skip(rel=["<outside>"])]), "n/a")
+        self.assertEqual(self.fs([skip(rel=["<outside>"])]), "FAIL")
         self.assertEqual(self.fs([skip(rel=["<outside>", "scripts/run.sh"])]), "FAIL")
+
+    def test_outside_counts_as_always_judged(self):
+        self.assertEqual(self.fs([skip(rel="<outside>")]), "FAIL")
+        self.assertEqual(self.fs([skip(rel=["src/a.py", "../x/y.py"])]), "FAIL")
+        self.assertEqual(self.fs([skip("<outside>")]), "FAIL")
 
     def test_na_without_data(self):
         self.assertEqual(self.fs([]), "n/a")
@@ -155,7 +178,7 @@ class TuneWiringTest(unittest.TestCase):
         self.assertTrue(lines[i + 1].startswith("- Per task (median over 0 tasks):"))
         j = next(n for n, l in enumerate(lines) if l.startswith("- Swarm vs plain token ratio:"))
         self.assertTrue(lines[j - 1].startswith("- Done-when No enforced false skip on an always-judged file:"))
-        self.assertTrue(lines[j - 2].startswith("- Done-when Review findings per merged branch:"))
+        self.assertTrue(lines[j - 2].startswith("- Done-when Review findings per reviewed branch:"))
 
     def test_report_carries_task_numbers_and_proposals(self):
         self.write("dispatch", [{"task": "b:%d" % i, "tier": "haiku", "role": "coder", "attempt": 1, "tokens": 1000,

@@ -95,7 +95,7 @@ class TuneTasksTest(unittest.TestCase):
                      "- Score buckets (tasks, escalated): 0-29 1/1",
                      "- Start tier from the score: 2 tasks, escalation 50.0%, tokens median 7000; from the tier questions: "
                      "1 tasks, escalation 0.0%, tokens median 4000",
-                     "- Score in shadow (3 scored tasks): would help 0, would hurt 1 (ON needs help >= 2 x hurt, at least 1)",
+                     "- Score in shadow (3 scored tasks): would help 0, would hurt 1 (ON needs helps >= 2 x hurts and helps >= 1)",
                      "- Task review: false-skip rate 50.0% (1 of 2 judged would-skip edits, 3 tasks), enforced skips 0, "
                      "would-skip edits 2"):
             self.assertIn(part, text)

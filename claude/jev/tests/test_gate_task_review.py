@@ -362,6 +362,17 @@ class GateRelTest(GateTaskReviewTest):
         self.assertEqual(rel[:2], ["src/app.py", "lib/m0.py"])
         self.assertNotIn(self.tmp, json.dumps(rel))
 
+    def test_rels_helper_is_shared_and_edit_verdict_checks_every_path(self):
+        import task_review
+        ti = {"file_path": os.path.join(self.tmp, "elsewhere", "x.py"),
+              "paths": [os.path.join(self.wt, "lib", "m%d.py" % i) for i in range(20)]}
+        out = task_review.rels(self.wt, "Write", ti, cwd=self.wt)
+        self.assertEqual((len(out), out[0], out[1]), (16, "<outside>", "lib/m0.py"))
+        ti["paths"][18] = os.path.join(self.wt, "scripts", "run.sh")  # the 19th path is beyond the log cap
+        ev = self.edit("src/app.py")
+        ev["tool_input"] = dict(ti, content="x = 1\n")
+        self.assertEqual(task_review.edit_verdict(self.wt, "Write", ev["tool_input"])[0], "review")
+
     def test_records_without_a_task_verdict_are_unchanged(self):
         self.active({"active": []})
         gate.run(self.edit("src/app.py"), jev())
