@@ -57,22 +57,26 @@ Only once the spec is stable.
 - [ ] Pi, OpenCode, Roo and Cursor editions (later), by anyone, against the spec
 - [ ] Packaged plugins per harness, generated from the manifest (Claude Code and Codex done: plugin dryas@dryas-workflow)
 
-## Phase 4: Jev judges the task, not every edit
+## Phase 4: the owned core
 
-Today the Jev gate judges every `Write` and `Edit`, each as a remote call with no context beyond the one diff. The next change moves the judgement to the task, and scores the starting tier from signals that are logged. Both are guesses about safety and cost, so each runs in shadow mode first (computed and logged next to today's behaviour, changing nothing) and is enforced only once the logs show it is right.
+Dryas 2.0 owns its core: no third-party plugin is required, and the extras stay optional. Providers are slots (`judge: local | jev`, `memory: dryas | ruflo | none`, `process: dryas | superpowers`), chosen at install ([install.md](install.md#flags)). Delivered as sub-projects, each merged in turn:
 
-Order of work:
+- [x] **0, inventory.** `tools/inventory.py --check` and `reference/inventory-map.json`: nothing a 1.x install has disappears without a mapped replacement.
+- [x] **A1, judge providers.** The `local` judge (deterministic rules, no key) next to Jev, with the shadow comparison and fallback logged.
+- [x] **A2, task-level judge.** The review set, the score, the scored start tier and the Done-when check, all in shadow and off by default.
+- [x] **B, Dryas memory.** `~/.dryas/dryas.db` with search, consolidation and `dryas memory import-ruflo`, served by the `jev` MCP server.
+- [x] **C, Dryas process skills.** `dryas:brainstorm`, `dryas:worktree`, `dryas:tdd`, `dryas:review-request`, `dryas:review-receive`, `dryas:verify`, `dryas:plan` and `dryas:debug`, each mapped to its upstream in `UPSTREAM.md`.
+- [x] **D, integration.** The memory stages and `gate-outcome` in the hook chain, background consolidation, the installer flags and the `dryas` command, the legacy cleanup, `/tune` judge and memory lines, the judge scorecard (`reference/judge-corpus/`), `/retro`, `GLOSSARY.md` and `.out-of-scope/`.
 
-- [ ] **Spec first**, under `docs/specs/`: it changes the orchestrate skill, the `active.json` format, scope lock, the gate and the dispatch log.
-- [ ] **Baseline.** Add a task id to each gate record so calls group by task, then log a few days of normal use: Jev calls per task, seconds waiting on the gate per task, per-edit deny and ask rate, escalation rate per task.
-- [ ] **Scored starting tier, shadow.** At dispatch, compute locally from the plan task and the escalation log: size (files and lines in the scope), risk (paths touching auth, money, data, migrations), tests (the done check is a test). Write the signals, score and the tier it would pick into the dispatch record; dispatch as today. Compare score buckets with what actually escalated. Add a history signal (this task type escalated before) once the escalation log has volume.
-- [ ] **Task-level judgement, shadow.** At dispatch, one Jev question: given this plan step, scope and done check, which files need per-edit review, and does the task need a stronger tier? It answers the review set and the doubt-band tier question in one call. Store the answer in `active.json`; keep judging every edit. Log a false-skip whenever a per-edit judge denies or asks on a file the task verdict would have skipped.
-- [ ] **Enforce, on evidence.** Turn on the task-level skip when false-skips are near zero over a meaningful number of tasks, and the scored tier when its buckets predict escalation better than today's "stronger than the standard tier?" question. Each switch is a threshold in `thresholds.json`, reported by `/tune` and reversible.
+Task-level judgement runs shadow-then-enforce: it is computed and logged next to today's behaviour, and enforced only once the logs show it is right. A2's finding: `review.task_skip` usually reports "no evidence", because build files are always judged and plain edits inside the working folder are already skipped. The value is in the per-task numbers, the scored start tier and the Done-when check. Rules in [governance.md](governance.md#task-level-judgement).
+
+- [ ] **Enforce, on evidence.** Turn on `review.task_skip` and `dispatch.scored_tier` only when `/tune` proposes them, each a threshold in `thresholds.json`, reported and reversible.
+- [ ] **Flip judges.** Move an install from `--judge jev` to `--judge local` when `/tune` shows the local judge agreeing, and grow the corpus from the disagreements it lists.
 
 Design rules:
 
 - Fail safe on format: a missing, unreadable or older `active.json` review set means every edit is judged. No verdict never means skip.
-- Classes that are always judged (`.git/`, dotfiles, CI config, build manifests, key files; the gate's `SENSITIVE_*` lists) stay judged whatever Jev said.
+- Classes that are always judged (`.git/`, dotfiles, CI config, build manifests, key files; the gate's `SENSITIVE_*` lists) stay judged whatever the judge said.
 - Cheap local content signals (`subprocess`, `eval`, deletes, env and network access) still trigger a per-edit call inside a trusted scope, so an executor that drifts from its task is caught.
 - The score sets the first rung of the ladder only; escalation still happens after a failure. Doubt rounds up. Weights are thresholds, not constants.
 
@@ -83,5 +87,5 @@ Done when: Jev calls per task down by at least half and gate wait per task down,
 A cheap way for the orchestrator to see a large repo's structure without reading it. Separate from Phase 4: size and risk come from the plan's scope globs and path classes, not from the codebase.
 
 - [ ] A structural map, not embeddings: file tree, top-level symbols (stdlib `ast` for Python, `ctags` when installed) and doc headings. Built on demand, cached by commit SHA so each worktree gets its own branch's map, injected at Brainstorm and Plan under a token cap. Stdlib only, per [CONTRIBUTING.md](../CONTRIBUTING.md).
-- [ ] Measure planning turns and tokens with and without it, from the dispatch records. Only if the map is not enough on large repos, add semantic search as a pluggable component (off by default, like Ruflo).
+- [ ] Measure planning turns and tokens with and without it, from the dispatch records. Only if the map is not enough on large repos, add semantic search as a pluggable component (off by default; Ruflo is now an optional extra).
 - [ ] Say in [memory-model.md](memory-model.md) that a source index is not memory: derived, rebuildable, never authoritative, never in the memory layer (MEM-4 bars file contents there), and a missing index never blocks the loop (MEM-5).

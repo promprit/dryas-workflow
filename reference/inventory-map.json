@@ -1,4 +1,5 @@
 {
+  "permission:jev:allow:mcp__plugin_dryas_jev": "permission:core:allow:mcp__plugin_dryas_jev",
   "allowed_tool:claude:command/orchestrate:Skill(superpowers:brainstorming)": "allowed_tool:claude:command/orchestrate:Skill(dryas:brainstorm)",
   "allowed_tool:claude:command/orchestrate:Skill(superpowers:systematic-debugging)": "allowed_tool:claude:command/orchestrate:Skill(dryas:debug)",
   "allowed_tool:claude:command/orchestrate:Skill(superpowers:using-git-worktrees)": "allowed_tool:claude:command/orchestrate:Skill(dryas:worktree)",

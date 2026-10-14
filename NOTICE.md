@@ -8,6 +8,10 @@ This repository is MIT-licensed (see [LICENSE](LICENSE)). Third-party tools are 
 
 `claude/skills/{brainstorm,worktree,debug,verify,plan,review-request,review-receive,tdd}` are rewritten from [Superpowers](https://github.com/obra/superpowers) 6.4.1 at commit `5bf4e78` (MIT, (c) 2025 Jesse Vincent). License text, provenance and the coverage tables of every upstream rule: [claude/skills/LICENSE-superpowers](claude/skills/LICENSE-superpowers) and [claude/skills/UPSTREAM.md](claude/skills/UPSTREAM.md), which indexes one `UPSTREAM.md` per skill folder.
 
+## Original material
+
+`reference/judge-corpus/` is original to this repo.
+
 ## Generated copies
 
 `codex/jev` and `codex/pstack` are generated copies of `claude/jev` and `claude/pstack` (made by `tools/sync_codex_plugin.py`) for the Codex plugin; `codex/pstack` carries the same license texts, notice and provenance. The eight process skills in `codex/skills/`, with `codex/skills/UPSTREAM.md` and `LICENSE-superpowers`, are rendered from `claude/skills/` by the same tool. `claude/LICENSE` and `codex/LICENSE` are copies of [LICENSE](LICENSE), since Claude Code and Codex copy only the plugin folder.

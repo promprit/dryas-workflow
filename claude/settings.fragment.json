@@ -11,7 +11,9 @@
         "Read($DATA_RULE/**)",
         "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/planfile.py\":*)",
         "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/handoff.py\" save:*)",
-        "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/tune.py\" report)"
+        "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/tune.py\" report)",
+        "Bash(\"$CD/bin/dryas\" memory:*)",
+        "mcp__plugin_dryas_jev"
       ],
       "deny": [
         "Skill(superpowers:subagent-driven-development)",
@@ -19,13 +21,6 @@
         "Skill(superpowers:dispatching-parallel-agents)",
         "Skill(superpowers:finishing-a-development-branch)",
         "Skill(superpowers:diagnosing-superpowers)"
-      ]
-    }
-  },
-  "jev": {
-    "permissions": {
-      "allow": [
-        "mcp__plugin_dryas_jev"
       ]
     }
   },

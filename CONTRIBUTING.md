@@ -2,7 +2,7 @@
 
 ## Portability (macOS, Linux, WSL, Windows)
 
-- All scripts are Python 3.9+ standard library. Node is used only for the Ruflo MCP shim. There are no shell scripts except the two thin installer wrappers and the plugin's `claude/bin/dryas-py` launcher.
+- All scripts are Python 3.9+ standard library. The core needs no Node, npm or compiled component. Node is needed only to test the optional Ruflo component (`claude/ruflo/tests`). There are no shell scripts except the two thin installer wrappers and the plugin's `claude/bin/dryas-py` launcher.
 - Plugin hook commands (`claude/hooks/hooks.json`) use the form `"${DRYAS_PY:-python3}" -X utf8 "${CLAUDE_PLUGIN_ROOT}/..."`. Never hardcode an interpreter, a plugin path or `$HOME`.
 - Plugin Markdown (agents, commands, skills) names files as `${CLAUDE_PLUGIN_ROOT}/...` and runs Python through `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py"`.
 - The `{{CD}}` / `$CD` and `$PY` placeholders stay only for the settings fragment (`claude/settings.fragment.json`), the stage commands in `claude/jev/chain.json` (resolved by `chain.py` at run time) and the Codex edition.

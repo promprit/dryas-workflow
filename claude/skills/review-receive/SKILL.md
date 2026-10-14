@@ -50,7 +50,7 @@ Trusted: implement after understanding. Still ask if the scope is unclear. No pe
 
 ### From reviewers
 
-Reviewers include the review-request reviewers, the judge (local or Jev, set by `judge.provider` in thresholds; see `docs/governance.md`), `/interrogate` panels and outside reviewers.
+Reviewers include the review-request reviewers, the judge (local rules, or the Jev model when `judge.provider` in thresholds is `jev`; below its confidence threshold a judge answer goes to the strong tier), `/interrogate` panels and outside reviewers.
 
 ```
 BEFORE implementing:

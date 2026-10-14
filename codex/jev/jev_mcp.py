@@ -45,12 +45,13 @@ TOOLS = [
         "name": "log_dispatch",
         "description": ("Record one executor dispatch (first or re-dispatch) once the executor returns. Feeds /tune: tasks "
                         "dispatched, GOV-M4, ESC-M1. Optional: tokens and duration_ms from the Agent result's usage; "
-                        "score, score_tier and task_type from task_review.py answer; agent_id: the Agent result's agent id; "
+                        "lines: added plus deleted lines of the task's commit (on the return record); score, score_tier and task_type from task_review.py answer; agent_id: the Agent result's agent id; "
                         "phase \"return\" marks the second record, logged when the executor returns."),
         "inputSchema": {"type": "object", "properties": {"task": {"type": "string"}, "tier": {"type": "string"},
                                                          "role": {"type": "string"}, "attempt": {"type": "integer", "minimum": 1},
                                                          "tokens": {"type": "integer", "minimum": 0},
                                                          "duration_ms": {"type": "integer", "minimum": 0},
+                                                         "lines": {"type": "integer", "minimum": 0},
                                                          "score": {"type": "integer", "minimum": 0, "maximum": 100},
                                                          "score_tier": {"type": "string", "enum": ["haiku", "sonnet", "opus"]},
                                                          "task_type": {"type": "string"},
@@ -200,7 +201,9 @@ def _dispatch_extras(args: Dict[str, Any]) -> Dict[str, Any]:
     worked before still logs the same record."""
     tokens, duration, score = _as_int(args.get("tokens")), _as_int(args.get("duration_ms")), _as_int(args.get("score"))
     tier, ttype, agent = args.get("score_tier"), args.get("task_type"), args.get("agent_id")
-    return dict(tokens=tokens if tokens is not None and tokens >= 0 else None,
+    lines = _as_int(args.get("lines"))
+    return dict(lines=lines if lines is not None and 0 <= lines <= 1000000 else None,
+                tokens=tokens if tokens is not None and tokens >= 0 else None,
                 duration_ms=duration if duration is not None and duration >= 0 else None,
                 score=score if score is not None and 0 <= score <= 100 else None,
                 score_tier=tier if tier in ("haiku", "sonnet", "opus") else None,
@@ -356,7 +359,7 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
         if proto not in SUPPORTED_PROTOCOLS:
             proto = PROTOCOL
         return _ok(mid, {"protocolVersion": proto, "capabilities": {"tools": {}},
-                         "serverInfo": {"name": "jev", "version": "1.0.2"}})
+                         "serverInfo": {"name": "jev", "version": "2.0.0"}})
     if method == "ping":
         return _ok(mid, {})
     if method == "tools/list":

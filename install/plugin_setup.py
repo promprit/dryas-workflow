@@ -6,6 +6,7 @@
 import json
 import os
 import shutil
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -23,7 +24,7 @@ ID = PLUGIN + "@" + MARKET
 OFFICIAL_SOURCE = "anthropics/claude-plugins-official"  # marketplace of the optional superpowers component
 SUPERPOWERS = "superpowers@claude-plugins-official"
 RECORD = ".dryas-plugin.json"
-OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
+OPTIONAL = run_cmd.OPTIONAL
 WORKFLOW_DOC = ("docs/workflow.md", "docs/dryas-workflow.md")  # repo source -> data root target
 REPO = Path(__file__).resolve().parents[1]
 KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY")
@@ -108,8 +109,25 @@ def _save_json(p: Path, v) -> None:
     p.write_text(json.dumps(v, indent=2) + "\n", encoding="utf-8")
 
 
+def set_judge(provider: Optional[str]) -> None:
+    """--judge / --no-jev / --openrouter-key: the user's judge.provider. None leaves the current value (upgrade)."""
+    if provider is None:
+        return
+    sys.path.insert(0, str(REPO / "claude" / "jev"))
+    import thresholds
+    if thresholds.load()["judge"]["provider"] != provider:
+        thresholds.set_value("judge.provider", provider)
+
+
+def _judge_provider() -> str:
+    """The resolved judge.provider (after set_judge): local or jev."""
+    sys.path.insert(0, str(REPO / "claude" / "jev"))
+    import thresholds
+    return thresholds.load()["judge"]["provider"]
+
+
 def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool], repo: Optional[Path] = None,
-                      cd: Optional[Path] = None) -> None:
+                      cd: Optional[Path] = None, providers: Optional[dict] = None) -> None:
     """Unselected components: disabled stages and listed in "off". Core stages are never touched.
     Keeps the user's own stage entries; malformed shapes are replaced. Shared by all accounts and Codex:
     a changed "off" set is reported when another account (other than cd) or Codex uses it."""
@@ -117,6 +135,8 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool],
     loc = _load_json(p, {})
     old = loc.get("off")
     loc["off"] = sorted(c for c in OPTIONAL if c not in comps)
+    if providers is not None:
+        loc["providers"] = providers
     _shared_warning(root, old, loc["off"], cd)
     chain = json.loads((Path(repo or REPO) / "claude" / "jev" / "chain.json").read_text(encoding="utf-8"))
     stages = loc.get("stages") if isinstance(loc.get("stages"), dict) else {}
@@ -294,7 +314,8 @@ def repair_stale_jev(cd: Path, env: Dict[str, str], dry: bool) -> None:
         print("warning: `%s` failed (exit %d); remove the stale jev MCP server by hand" % (" ".join(argv), rc))
 
 
-def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: Optional[bool] = None, dry: bool = False) -> int:
+def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: Optional[bool] = None, dry: bool = False,
+          providers: Optional[dict] = None) -> int:
     repo, cd, root = Path(repo).resolve(), norm(cd), data_root()
     try:
         sm.load_settings(cd / "settings.json")  # malformed settings.json stops here, before any command runs
@@ -380,11 +401,15 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     rec["plugin_root"] = plugin_root
     _save_json(rec_path, rec)
     write_workflow_doc(repo, root)
-    write_chain_local(root, comps, flowobserve, repo, cd)
+    set_judge((providers or {}).get("judge"))
+    write_chain_local(root, comps, flowobserve, repo, cd, providers)
     add_account(root, cd)
     if "jev" in comps and not key and not any((os.environ.get(k) or "").strip() for k in KEY_VARS):
-        print("note: Jev needs an OpenRouter key: set OPENROUTER_API_KEY in your shell profile, or run "
-              "/plugin configure %s in Claude Code (or re-run with --openrouter-key)." % ID)
+        if _judge_provider() == "jev":
+            print("note: Jev needs an OpenRouter key: set OPENROUTER_API_KEY in your shell profile, or run "
+                  "/plugin configure %s in Claude Code (or re-run with --openrouter-key)." % ID)
+        else:
+            print("note: local judge in use; add a key (--openrouter-key) for the Jev upgrade.")
     print("Dryas set up in %s (plugin at %s, state in %s)" % (cd, plugin_root, root))
     return 0
 
@@ -561,6 +586,77 @@ def extras_commands(rec: dict, last_account: bool) -> List[List[str]]:
             if c[:3] == ["npm", "install", "-g"] and len(c) > 3 and ["npm", "uninstall", "-g", c[3]] not in out:
                 out.append(["npm", "uninstall", "-g", c[3]])
     return out
+
+
+RUFLO_PLUGINS = ("ruflo-core@ruflo", "ruflo-swarm@ruflo", "ruflo-testgen@ruflo", "ruflo-jujutsu@ruflo")
+
+
+def legacy_items(cd: Path, rec: dict, last_account: bool) -> list:
+    """Pre-2.0 Ruflo pieces still on the machine: (label, argv or None, path or None). Nothing here is removed
+    without a question (run_legacy). Commands extras_commands already offers are not repeated."""
+    offered = extras_commands(rec, last_account)
+    listed = _load_json(Path(cd) / "plugins" / "installed_plugins.json", {}).get("plugins", {})
+    items = []
+    for pid in RUFLO_PLUGINS:
+        argv = ["claude", "plugin", "uninstall", pid]
+        if pid in listed and argv not in offered:
+            items.append((" ".join(argv), argv, None))
+    argv = ["npm", "uninstall", "-g", "ruflo"]
+    if last_account and shutil.which("npm") and argv not in offered:
+        items.append((" ".join(argv), argv, None))
+    d = data_root() / "ruflo"
+    if last_account and d.exists() and not any(
+            "ruflo" in (_load_json(Path(o) / RECORD, {}).get("components") or []) for o in other_accounts(cd)):
+        items.append(("remove %s" % d, None, d))
+    return items
+
+
+def _ruflo_imported() -> bool:
+    """True when dryas.db holds rows imported from Ruflo."""
+    db = data_root() / "dryas.db"
+    if not db.is_file():
+        return False
+    try:
+        conn = sqlite3.connect(str(db))
+        try:
+            return conn.execute("SELECT 1 FROM memory WHERE source = 'ruflo' LIMIT 1").fetchone() is not None
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+
+
+def run_legacy(items: list, yes: bool, cd: Optional[Path] = None) -> int:
+    """Ask about each item, run it, return the number of failures. Items are pieces Dryas did not install
+    (legacy_items leaves out what extras_commands offers), so --yes never runs them: the command is printed.
+    Dryas-installed extras keep their 1.x --yes behaviour through extras_commands."""
+    failed = 0
+    for label, argv, path in items:
+        if yes and path is not None:
+            print("not removed with --yes: %s; run `rm -rf %s` yourself if you want it gone" % (label, path))
+            continue
+        if yes:
+            print("not run with --yes (Dryas did not install it): %s; run `%s` yourself if you want it gone"
+                  % (label, " ".join(argv or [])))
+            continue
+        q = "Remove %s?" % label
+        if path is not None and not _ruflo_imported():
+            q = ("The Ruflo memory in %s was never imported into Dryas (run `dryas memory import-ruflo` first "
+                 "to keep it). %s" % (path, q))
+        if not di.confirm(q):
+            continue
+        if argv:
+            rc = di.run(argv, env=child_env(cd)) if cd is not None else di.run(argv)
+            if rc != 0:
+                print("warning: %s failed (exit %d)" % (label, rc))
+                failed += 1
+        elif path is not None:
+            try:
+                shutil.rmtree(str(path))
+            except OSError as e:
+                print("warning: could not remove %s (%s)" % (path, e))
+                failed += 1
+    return failed
 
 
 def extras_marketplaces(rec: dict) -> List[str]:

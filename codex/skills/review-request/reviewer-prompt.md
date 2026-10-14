@@ -105,6 +105,7 @@ Stage 3 only (read [PLAN_OR_REQUIREMENTS] for intent). Flag, with file:line:
 - A wrapper around the stdlib that adds nothing.
 - A new dependency where the stdlib would do.
 - Code that a reuse of existing repo code would have avoided.
+- Unrelated change: a hunk that does not trace to the task or plan step (refactor, rename, reformat, drive-by fix). Report it as an "unrelated change" finding, Important, naming the hunk.
 
 Rank each finding critical, important or minor as in stage 2, and name the rung of the minimum-code ladder it skipped (YAGNI, reuse, stdlib, native feature, existing dependency, one-liner). Check each finding against the code before reporting it.
 

@@ -9,7 +9,7 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / "tools"))
 import sync_codex_plugin as scp
 NAMES = ("interrogate", "benchmark-checklist")
-OURS = {"orchestrate", "wplan", "wreview", "commit", "tune", "handoff"}
+OURS = {"orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "retro"}
 SUPERPOWERS = {"brainstorming", "using-git-worktrees", "test-driven-development", "requesting-code-review",
                "receiving-code-review", "verification-before-completion", "writing-plans", "systematic-debugging",
                "subagent-driven-development", "executing-plans", "dispatching-parallel-agents",

@@ -7,6 +7,8 @@ event on stdin, write the memory store, print nothing, always exit 0, stay insid
   memhooks.py task                       SubagentStop: upsert the active task rows (tiers from dispatch.jsonl), close finished ones
   memhooks.py session-start              SessionStart: session row; Claude memory files indexed as notes
   memhooks.py session-end [manual|auto]  SessionEnd (summary, consolidate) / PreCompact (summary only)
+A consolidation skipped inside the budget is marked pending and finished by a detached `memcli.py consolidate --ns`,
+one per pending namespace (at most MAX_SPAWNS per session start); a namespace that failed 3 times is left alone.
 Sub-project D wires these into chain.json (mem-edit, mem-task, mem-session-start, mem-session-end)."""
 import datetime
 import json
@@ -18,6 +20,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import consolidate_bg
 import jevlog
 import memdb
 import memlearn
@@ -32,6 +35,7 @@ CONSOLIDATE_DEADLINE_S = 1.2  # consolidation must finish this long after the st
 CONSOLIDATE_BEFORE_S = 1.0  # consolidate only if the stage has used less than this of its 2 s budget
 NOTE_MAX_BYTES = 64 * 1024
 BUDGET_S = 1.8  # the watchdog fires here, inside the 2 s hook budget
+MAX_SPAWNS = 5  # detached runs one session start may launch
 STDIN_MAX = 1024 * 1024
 TAIL_BYTES = 2 * 1024 * 1024
 EDIT_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
@@ -256,7 +260,10 @@ def on_session_start(conn, event: Dict[str, Any]) -> Dict[str, int]:
         conn.execute("INSERT OR IGNORE INTO sessions (id, ns, started) VALUES (?, ?, ?)",
                      (str(event.get("session_id") or "unknown"), ns, time.time()))
     d = notes_dir(cwd)
-    return index_notes(conn, ns, d) if d else {"indexed": 0, "unchanged": 0, "skipped": 0, "removed": 0}
+    counts = index_notes(conn, ns, d) if d else {"indexed": 0, "unchanged": 0, "skipped": 0, "removed": 0}
+    for pns in consolidate_bg.due(conn)[:MAX_SPAWNS]:
+        consolidate_bg.spawn(pns)  # the runs queue on memcli's lock
+    return counts
 
 
 def summary(conn, ns: str, sid: str) -> str:
@@ -293,6 +300,9 @@ def on_session_end(conn, event: Dict[str, Any], mode: Optional[str], t0: float) 
                 out["consolidated"] = res
         if reason:
             jevlog.append("memory", dict(stage="session-end", error="ConsolidateSkipped", detail=reason))
+            consolidate_bg.mark_pending(conn, ns)
+            if ns in consolidate_bg.due(conn):
+                consolidate_bg.spawn(ns)
             out["consolidate_skipped"] = reason
     return out
 

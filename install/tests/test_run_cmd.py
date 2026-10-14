@@ -17,8 +17,8 @@ class RunCmdTest(unittest.TestCase):
         pu.which, pu.space_free = self.orig
 
     def test_components(self):
-        self.assertEqual(run_cmd.components(run_cmd.parse(["--no-ruflo"])), ["core", "jev", "superpowers", "design", "pstack-picks"])
-        self.assertEqual(run_cmd.components(run_cmd.parse([])), ["core", "jev", "ruflo", "superpowers", "design", "pstack-picks"])
+        self.assertEqual(run_cmd.components(run_cmd.parse(["--no-ruflo"])), ["core", "jev", "memory", "design", "pstack-picks"])
+        self.assertEqual(run_cmd.components(run_cmd.parse([])), ["core", "jev", "memory", "design", "pstack-picks"])
 
     def test_preflight_missing_lists_tools(self):
         pu.which = lambda n: ""
@@ -190,13 +190,18 @@ class MainTest(unittest.TestCase):
         st = MainStubs(self)
         st.copy = True
         cd = st.tmp / "acct"
+        from unittest import mock
+        p = mock.patch.dict(os.environ, {"JEV_THRESHOLDS": str(st.tmp / "thresholds.json")})
+        p.start()
+        self.addCleanup(p.stop)
         self.assertEqual(self.main("--claude-dir", str(cd), "--no-ruflo", "--flowobserve", "--yes"), 0)
         self.assertEqual(st.steps(), ["migrate", "ps.setup", "ps.verify"])
         a, k = st.call("migrate")
         self.assertEqual([Path(x) for x in a], [cd.resolve(), st.tmp / "data"])
         a, k = st.call("ps.setup")
         self.assertEqual(a[1], cd.resolve())
-        self.assertEqual(k, {"yes": True, "key": "", "flowobserve": True, "dry": False})
+        self.assertEqual(k, {"yes": True, "key": "", "flowobserve": True, "dry": False,
+                             "providers": {"judge": "auto", "memory": "dryas", "process": "dryas"}})
 
     def test_key_flag_and_default_dir(self):
         st = MainStubs(self)

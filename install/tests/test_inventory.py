@@ -28,7 +28,7 @@ class StaticTest(unittest.TestCase):
             "plugin_config:claude:openrouter_key",
             "command:claude:commit", "command:claude:wplan", "command:claude:orchestrate",
             "skill:claude:orchestrate", "skill:codex:wplan", "agent:claude:executor",
-            "allowed_tool:claude:skill/orchestrate:mcp__plugin_ruflo-core_ruflo__swarm_init",
+            "allowed_tool:claude:skill/orchestrate:mcp__plugin_dryas_jev__swarm_init",
             "allowed_tool:claude:skill/orchestrate:Skill(dryas:brainstorm)",
             "allowed_tool:claude:command/wplan:Skill(dryas:plan)",
             "skill:claude:brainstorm", "skill_ref:claude:superpowers:executing-plans", "tool_ref:codex:memory_search",

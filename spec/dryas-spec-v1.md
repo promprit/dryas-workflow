@@ -126,20 +126,21 @@ conformance: {level: core, table: CONFORMANCE.md}
 
 workflow:
   stages: [brainstorm, plan, judge, build, escalate, review, ship]
-  brainstorm: {required: true, approval: human}
+  brainstorm: {required: true, approval: human, provider: dryas:brainstorm}
   plan: {required: true, format: plan-file}
-  judge: {required: false}
+  judge: {required: false, provider: local}
 
 memory:
-  provider: ruflo
+  provider: dryas  # or ruflo, or none
   namespace: main-repo
   read: before-plan
   write: after-task
 
 governance:
   scope_lock: {required: true, provider: dryas-scope-lock}
-  gate: {provider: jev, auto_allow: false, on_failure: no-decision}
-  judge: {provider: jev, min_confidence: 0.7, below_threshold: orchestrator}
+  gate: {provider: local, auto_allow: false, on_failure: no-decision}
+  judge: {provider: local, shadow: none, min_confidence: 0.7, below_threshold: orchestrator}  # or jev
+  hook_order: [scope-lock, gate, memory, observer]
   human_approval: [design, install, move, delete, overwrite, settings, push, release]
 
 execution:
@@ -149,6 +150,7 @@ execution:
   isolation: worktree
   one_agent_per_worktree: true
   tdd: required
+  process: dryas  # or superpowers
 
 escalation:
   ladder: [haiku, sonnet, opus, fable]

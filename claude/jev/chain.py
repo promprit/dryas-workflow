@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run hook stages in order for one Claude Code event (pretool | prompt). Stages: chain.json.
+"""Run hook stages in order for one hook event. Kinds: pretool | prompt | the observe kinds. Stages: chain.json.
 
 PreToolUse: deny beats ask; a stage's allow is ignored (the chain never auto-allows);
 after a deny only observe stages run. UserPromptSubmit: additionalContext is concatenated.
@@ -279,6 +279,31 @@ def prompt(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Opt
     return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "\n".join(parts)}}
 
 
+OBSERVE_KINDS = ("post", "subagent-stop", "session-start", "session-end", "precompact")
+
+
+def observe(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> None:
+    """Observe-only events (memory, outcomes): every applicable stage runs in order; exit codes and output are
+    ignored and nothing is printed, so a slow, crashing or noisy stage never changes the session."""
+    for st in stages:
+        try:
+            if not _applies(st, event):
+                continue
+            if "inproc" in st:
+                _inproc(st, event)
+            else:
+                _run(st, raw)
+        except Exception:
+            continue
+
+
+def _inproc(stage: Dict[str, Any], event: Dict[str, Any]) -> None:
+    """A stage with an "inproc" module runs in this process (no subprocess). Only known modules; anything else is skipped."""
+    if stage["inproc"] == "gate_outcome":
+        import gate_outcome
+        gate_outcome.record(event)
+
+
 def main(argv: List[str]) -> int:
     kind = argv[1] if len(argv) > 1 else ""
     harness = _harness(argv)
@@ -300,6 +325,9 @@ def main(argv: List[str]) -> int:
         out = pretool_codex(event, stages) if harness == "codex" else pretool(event, raw, stages)
     elif kind == "prompt":
         out = prompt(event, raw, load_stages("prompt", harness))
+    elif kind in OBSERVE_KINDS:
+        observe(event, raw, load_stages(kind, harness))
+        return 0
     else:
         return 0
     if out:

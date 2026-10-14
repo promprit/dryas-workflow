@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Dryas command-line entry (owned core D). `dryas memory ...` runs the memory CLI with the Dryas Python.
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+case "$1" in
+  memory) shift; exec "$here/dryas-py" "$here/../jev/memcli.py" "$@" ;;
+  *) echo "usage: dryas memory {import-ruflo|consolidate|stats} [options]" >&2; exit 2 ;;
+esac

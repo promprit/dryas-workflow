@@ -46,6 +46,10 @@ _WRAPPERS: Dict[str, set] = {
     "ionice": {"-c", "-n", "-p", "-P", "-u"},
     "xargs": {"-I", "-n", "-P", "-L", "-d", "-s", "-E", "-a"},
 }
+# Command words whose risk _judge reads from their arguments (mkfs.* too, by prefix), and the wrappers it looks
+# through. Allowlisting one by its head would let every argument form skip the judge.
+ARG_JUDGED_HEADS = frozenset(_SHELLS | _SQL_CLIENTS | _POWERSHELL | set(_WRAPPERS)
+                             | {"eval", "rm", "mkfs", "dd", "format", "del", "erase", "chmod", "git"})
 
 
 class _Cmd:

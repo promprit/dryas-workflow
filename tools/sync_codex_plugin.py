@@ -50,7 +50,7 @@ HARNESS_REQUIRED: Dict[str, Tuple[str, ...]] = {
     "plan": ("`docs/superpowers/plans/` if the project uses that", "$dryas:orchestrate"),
     "review-request": ("Change nothing unless asked", "Codex sub-agent"),
 }
-COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate")
+COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "retro")
 COMMAND_RE = re.compile(r"(?<![\w$/.<-])/(" + "|".join(COMMANDS) + r")\b(?![/\w-]|\.\w)")
 _HARNESS = re.compile(r"^<!-- (/?)(claude|codex) -->\n?", re.M)
 _FRONT = re.compile(r"\A---\n(.*?\n)---\n", re.S)
