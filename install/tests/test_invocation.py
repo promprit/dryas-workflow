@@ -10,7 +10,8 @@ USER_RUNS = (r"(runs|run|invoke|invokes|logs)\s+`?/(wreview|commit|orchestrate|t
 sys.path.insert(0, str(ROOT / "tools"))
 import sync_codex_plugin as scp
 
-USER_INVOKED = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "benchmark-checklist")
+USER_INVOKED = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "benchmark-checklist",
+                "retro")
 
 
 class InvocationTest(unittest.TestCase):
