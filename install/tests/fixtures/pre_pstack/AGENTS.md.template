@@ -14,12 +14,12 @@ Process rules for coding sessions on this machine. Full reference: `{{CD}}/docs/
 ## Skills
 `$orchestrate` (multi-step tasks), `$wplan` (write a plan), `$wreview` (two-stage review), `$commit` (Jev-gated commit), `$tune` (weekly Jev calibration).
 
-## Jev and Ruflo (MCP servers `jev` and `ruflo`)
+## Jev and Dryas memory (MCP server `jev`; `ruflo` only with the Ruflo extra)
 - Jev answers narrow typed questions only (`jev_judge`); it never writes code or plans. When it is below threshold, escalates or is unavailable, you decide; log any disagreement with `log_override`.
 - Models: start a task on a cheaper model and move to a stronger one when it fails. Log every step with `log_escalation` (task, reason, decided_by, from_model, to_model).
-- Ruflo is the memory: `memory_search` before a task, `memory_store` after success; namespace = the main repo's folder name.
+- Dryas memory: `memory_search` before a task, `memory_store` after success; namespace = the main repo's folder name.
 - Hooks enforce the scope lock (while `.orchestrate/active.json` exists, edits outside the active tasks' Scope are denied), the Jev gate on risky commands, and a Jev route hint on each prompt.
 - On Windows PowerShell, put `& ` before a command that starts with a quoted path.
 
 ## Not available in Codex
-Context-window warnings, compaction handoff, `$handoff` and the Ruflo hooks run only in Claude Code.
+Context-window warnings, compaction handoff, `$handoff` and the memory hooks other than session start run only in Claude Code.

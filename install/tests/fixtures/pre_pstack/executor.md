@@ -12,7 +12,7 @@ Rules:
 2. Test first. If the section names a failing test, run it and confirm it fails for the right reason before writing code. If you are dispatched as a tester, write that failing test and stop once it fails correctly. Follow the test-first skill and, on any failure, the debugging skill whose paths your prompt names (`skills/tdd/SKILL.md`, `skills/debug/SKILL.md` in the Dryas plugin): failing test first, root cause before a fix. In those files, `${CLAUDE_PLUGIN_ROOT}` is the plugin folder that contains the `skills/` folder of the path you were given.
 3. Minimal change that meets Done. No refactors, renames or extras outside the goal. Before writing code, go down this ladder and stop at the first rung that works: YAGNI (is it needed at all?), reuse of code the repo already has, the language stdlib, a native platform feature, an existing dependency, a one-liner, and only then minimum new code.
 4. Run the tests named in Done before reporting. Never claim a pass you did not see.
-5. Do not commit, push, merge or create worktrees. Do not dispatch subagents.
+5. Commit your own task only when the dispatch prompt allows it (explicit paths, conventional message); never push, merge or create worktrees. Do not dispatch subagents.
 
 End with exactly this block:
 
