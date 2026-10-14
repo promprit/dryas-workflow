@@ -146,14 +146,64 @@ class EditVerdictTest(unittest.TestCase):
             "notebook_path": "docs/guide.md", "new_source": "import subprocess"}),
             ("review", "content:subprocess"))
 
-    def test_unreadable_active_json_is_not_a_task(self):
+    def test_unreadable_active_json_is_judged_unknown(self):
         self.active("{not json")
-        self.assertIsNone(self.v("docs/guide.md"))
+        self.assertEqual(self.v("docs/guide.md"), ("unknown", "no_review_set"))
 
     def test_outside_a_task_or_not_a_file_tool(self):
         self.assertIsNone(tr.edit_verdict(tempfile.mkdtemp(), "Write", {"file_path": "a.sh"}))
         self.assertIsNone(tr.edit_verdict(self.root, "Bash", {"command": "ls"}))
         self.assertEqual(tr.edit_verdict(self.root, "Write", {}), ("review", "no_path"))
+
+
+class HardeningTest(EditVerdictTest):
+    def test_glob_skip_entries_are_ignored(self):
+        for g in ("**", "docs/*", "docs/guide.m?", "docs/guide.m[d]", "*"):
+            self.active({"active": ["1"], "review_version": 1, "review": {"1": {"skip": [g], "review": []}}})
+            self.assertEqual(self.v("docs/guide.md"), ("review", "not_in_skip"), g)
+        self.active({"active": ["1"], "review_version": 1,
+                     "review": {"1": {"skip": ["**", "docs/guide.md"], "review": []}}})
+        self.assertEqual(self.v("docs/guide.md"), ("skip", "task_review"))
+
+    def test_too_long_text_is_a_signal(self):
+        self.assertEqual(tr.content_signal("a" * (tr.MAX_TEXT + 1)), "too_long")
+        self.assertEqual(self.v("docs/guide.md", content="a" * (tr.MAX_TEXT + 1)), ("review", "content:too_long"))
+        self.assertIsNone(tr.content_signal("a" * tr.MAX_TEXT))
+
+    def test_signal_after_the_old_cut_is_not_lost(self):
+        self.assertIsNotNone(tr.content_signal("a" * (tr.MAX_TEXT + 5) + "subprocess"))
+
+    def test_environ_and_from_os_import(self):
+        self.assertEqual(tr.content_signal("x = environ['A']"), "environ")
+        self.assertEqual(tr.content_signal("from os import system"), "from os import")
+        self.assertIsNone(tr.content_signal("the environment is fine"))
+
+    def test_main_bad_plan_exits_1(self):
+        import io
+        from unittest import mock
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "PLAN.md")
+        with open(p, "wb") as f:
+            f.write(b"\xff\xfe\x00bad")
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err):
+            self.assertEqual(tr.main(["x", "answer", p, "1"]), 1)
+        self.assertIn("cannot read", err.getvalue())
+
+    def test_mcp_record_has_shadow_answer_none(self):
+        from unittest import mock
+        import io
+        import jevlog
+        d = tempfile.mkdtemp()
+        p = os.path.join(d, "PLAN.md")
+        with open(p, "w") as f:
+            f.write("## Task 1: t\nGoal: g\nScope:\n- a.py\nDone:\n- x\n")
+        rec = []
+        with mock.patch.object(jevlog, "append", lambda k, r: rec.append((k, r))), \
+                mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(tr.main(["x", "answer", p, "1"]), 0)
+        self.assertIn("shadow_answer", rec[0][1])
+        self.assertIsNone(rec[0][1]["shadow_answer"])
 
 
 if __name__ == "__main__":

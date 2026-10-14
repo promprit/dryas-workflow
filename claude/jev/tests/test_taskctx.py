@@ -56,3 +56,7 @@ class TaskCtxTest(unittest.TestCase):
         for bad in ({"active": []}, "{not json", {"active": "1"}, [1, 2]):
             self.active(bad)
             self.assertEqual(taskctx.context(self.root), {}, bad)
+
+    def test_unreadable_active_json_keeps_root(self):
+        self.active("{not json")
+        self.assertEqual(taskctx.load(self.root), (os.path.realpath(self.root), None))
