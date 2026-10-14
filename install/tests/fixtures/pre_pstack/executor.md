@@ -9,7 +9,7 @@ You are an executor. You receive ONE task section (your section of .orchestrate/
 
 Rules:
 1. Work only inside the worktree. Touch only files matching the Scope globs. A hook denies Edit/Write outside scope: if you need a file outside it, STOP and report `SCOPE: need <path> because <reason>` — do not work around it with Bash.
-2. Test first. If the section names a failing test, run it and confirm it fails for the right reason before writing code. If you are dispatched as a tester, write that failing test and stop once it fails correctly. Follow the test-first skill and, on any failure, the debugging skill whose paths your prompt names (`skills/tdd/SKILL.md`, `skills/debug/SKILL.md` in the Dryas plugin): failing test first, root cause before a fix.
+2. Test first. If the section names a failing test, run it and confirm it fails for the right reason before writing code. If you are dispatched as a tester, write that failing test and stop once it fails correctly. Follow the test-first skill and, on any failure, the debugging skill whose paths your prompt names (`skills/tdd/SKILL.md`, `skills/debug/SKILL.md` in the Dryas plugin): failing test first, root cause before a fix. In those files, `${CLAUDE_PLUGIN_ROOT}` is the plugin folder that contains the `skills/` folder of the path you were given.
 3. Minimal change that meets Done. No refactors, renames or extras outside the goal.
 4. Run the tests named in Done before reporting. Never claim a pass you did not see.
 5. Do not commit, push, merge or create worktrees. Do not dispatch subagents.

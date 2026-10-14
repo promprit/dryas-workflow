@@ -4,6 +4,9 @@ import sys
 import unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
+USER_RUNS = (r"(runs|run|invoke|invokes|logs)\s+`?/(wreview|commit|orchestrate|tune|handoff|interrogate)\b",
+             r"`/(wreview|commit)` logs",
+             r"run\s+`?\$dryas:(wreview|commit|orchestrate|tune|handoff|interrogate)\b")
 sys.path.insert(0, str(ROOT / "tools"))
 import sync_codex_plugin as scp
 
@@ -36,6 +39,18 @@ class InvocationTest(unittest.TestCase):
         for want in ("dryas:review-request", "log_review", "commands/commit.md"):
             self.assertIn(want, text)
         self.assertNotIn("Run `/wreview`", text)
+
+    def test_bodies_never_run_user_invoked(self):
+        for n in scp.PROCESS_SKILLS:
+            for f in sorted((ROOT / "claude/skills" / n).glob("*.md")):
+                if f.name == "UPSTREAM.md":
+                    continue
+                text = f.read_text(encoding="utf-8")
+                for rx in USER_RUNS[:2]:
+                    self.assertIsNone(re.search(rx, text), (str(f), rx))
+        text = (ROOT / "codex/skills/orchestrate/SKILL.md").read_text(encoding="utf-8")
+        self.assertIsNone(re.search(USER_RUNS[2], text))
+        self.assertIn("skills/interrogate/SKILL.md", text)
 
     def test_drift_reports_disagreement(self):
         import shutil, tempfile

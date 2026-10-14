@@ -22,9 +22,13 @@ SP_NAME = re.compile(r"\bsuperpowers:[a-z]")
 CLAUDE_ONLY = ("${CLAUDE_PLUGIN_ROOT}", "mcp__plugin_", "Skill(", "subagent_type", "EnterWorktree")
 SHORT = set(scp.PROCESS_SKILLS)
 TECHNIQUES = {
-    "brainstorm": ("## Question rounds", "recommended answer", "look it up yourself"),
-    "debug": ("## Feedback loop first", "3-5 ranked", "prediction", "unique prefix", "commit message", "redact"),
+    "brainstorm": ("## Hard gate", "## Question rounds", "recommended answer", "look it up yourself"),
+    "debug": ("## Feedback loop first", "3-5 ranked", "prediction", "unique prefix", "commit message", "redact",
+              "NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST", "inside an executor"),
     "review-request": ("two reviewers in parallel", "separately", "do not merge or re-rank"),
+    "tdd": ("NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST",),
+    "verify": ("NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE",),
+    "plan": ("only its own `## Task N:` section",),
 }
 CLAUDE_COMMAND = re.compile(r"(?<![\w$/.<-])/(orchestrate|wplan|wreview|commit|tune|interrogate)\b(?![/\w-]|\.\w)")
 

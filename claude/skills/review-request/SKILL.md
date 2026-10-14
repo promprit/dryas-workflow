@@ -14,7 +14,7 @@ Have fresh reviewers check the work before problems cascade. Each reviewer gets 
 **Mandatory:**
 - After each task when a plan is executed by sub-agents
 - After completing a major feature
-- Before any merge to the base branch (`/orchestrate` runs `/wreview` on the worktree diff before `/commit` and the merge)
+- Before any merge to the base branch (inside `/orchestrate`, the finish step reviews the worktree diff before the commit and the merge)
 
 **Optional but valuable:**
 - When stuck (fresh perspective)
@@ -48,7 +48,7 @@ Have fresh reviewers check the work before problems cascade. Each reviewer gets 
    - Note minor issues for later
    - Push back if the reviewer is wrong (with reasoning)
 
-Report findings ranked by severity (critical, important, minor) with file:line. The reviewers change nothing unless asked. After each round `/wreview` logs the counts with `mcp__plugin_dryas_jev__log_review`.
+Report findings ranked by severity (critical, important, minor) with file:line. The reviewers change nothing unless asked. In Dryas: inside `/orchestrate`, the finish step runs this skill (then review-receive, then verify) and calls `mcp__plugin_dryas_jev__log_review` after each round; outside it, `/wreview` runs this skill and logs the round.
 
 ## Two stages
 

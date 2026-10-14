@@ -3,10 +3,10 @@ name: worktree
 description: Use when starting multi-step work or before running a plan. Creates or confirms the task's own git worktree and branch (one agent per worktree), sets it up, and checks a clean test baseline before any change.
 ---
 <!-- claude -->
-Prefer the harness's native worktree tool (`EnterWorktree`) when it is available; otherwise use git directly as below.
+Prefer the harness's native worktree tool (`EnterWorktree`) when it is available; otherwise use git directly as below. When `/orchestrate` created the worktree with the native tool, leave removal to that tool.
 <!-- /claude -->
 <!-- codex -->
-On Codex, create it with `git worktree add ../<repo>-<topic> -b <branch>` and work from that folder.
+On Codex, create it with `git worktree add ../<repo>-<topic> -b <branch>` and work from that folder. On Codex this is the location; skip Directory selection.
 <!-- /codex -->
 
 # Worktree

@@ -14,6 +14,8 @@ Assume a skilled developer who knows almost nothing about the toolset or the pro
 
 **Announce at start:** "I'm using the plan skill to write the implementation plan."
 
+**Dryas binding:** each executor receives only its own `## Task N:` section (cut by planfile.py), plus the plan's Global Constraints, which `$dryas:orchestrate` passes with every dispatch. Write each section so it stands alone: Scope, Done and steps name every path and command it needs.
+
 **Context:** the plan is written in the main checkout; at execution time `$dryas:orchestrate` creates the isolated worktree (the `$dryas:worktree` skill).
 
 **Save plans to:** see "Hand-off". User preferences for the plan location override the default.
@@ -86,7 +88,7 @@ Failing test first: <test file :: test name>   (or `none (review)` / `none (clea
 - [ ] **Step 2: Run it to see it fail.** Run: <command>. Expected: <failure>
 - [ ] **Step 3: Implement.** <code>
 - [ ] **Step 4: Run the tests.** Run: <command>. Expected: PASS
-- [ ] **Step 5: Commit.** <explicit paths, conventional message>
+- [ ] **Step 5: Commit** (explicit paths, conventional message) when the dispatch prompt allows it; otherwise report and the orchestrator commits.
 ````
 
 When filling in Scope, Interfaces or the steps, read `<dryas-root>/skills/plan/reference.md` § Task fields (exact paths, Consumes and Produces, what each step shows, non-overlapping Scope for parallel tasks).

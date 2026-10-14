@@ -25,7 +25,7 @@ Any technical issue: test failures, bugs in production, unexpected behavior, per
 
 **Do not skip it when:** the issue seems simple (simple bugs have root causes too); you are in a hurry (rushing guarantees rework); a manager wants it fixed NOW (systematic is faster than thrashing).
 
-In Dryas: `$dryas:orchestrate` runs this before every climb (fast → standard → strong → frontier) on the failing reports, read only. If the root cause is a plan defect (scope too narrow, Done vague or wrong, missing context), the fix is in that task's section of `.orchestrate/PLAN.md` and the task is re-dispatched on the same model; that is not a climb. Executors run Phase 1 before reporting a failure.
+In Dryas: `$dryas:orchestrate` runs this before every climb (fast → standard → strong → frontier) on the failing reports, read only. If the root cause is a plan defect (scope too narrow, Done vague or wrong, missing context), the fix is in that task's section of `.orchestrate/PLAN.md` and the task is re-dispatched on the same model; that is not a climb. Executors run Phase 1 before reporting a failure. When inside an executor (no user channel, no commits): put the ranked hypotheses and the confirmed one in your report instead of showing them to the user or writing a commit message; the orchestrator relays and commits.
 
 ## Feedback loop first
 

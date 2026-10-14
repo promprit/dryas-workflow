@@ -97,7 +97,7 @@ FOR multi-item feedback:
   4. Verify no regressions
 ```
 
-In Dryas: fix critical, then important findings before `/commit`; a re-review is a new `/wreview` round. When the strong tier decides against a finding the judge raised, log it with `mcp__plugin_dryas_jev__log_override`. Done when every finding is fixed, answered with pushback, or noted as minor for later.
+In Dryas: fix critical, then important findings before the commit; a re-review is a new review round (inside `/orchestrate`, the finish step runs review-request, then this skill, then verify, and calls `log_review` after each round; outside it, `/wreview` does). When the strong tier decides against a finding the judge raised, log it with `mcp__plugin_dryas_jev__log_override`. Done when every finding is fixed, answered with pushback, or noted as minor for later.
 
 ## When to push back
 

@@ -70,7 +70,7 @@ ALWAYS before:
 
 The rule covers exact phrases, paraphrases and synonyms, implications of success, and ANY communication that suggests completion or correctness.
 
-In Dryas: after `$dryas:wreview` and before `$dryas:commit` on every orchestrated branch, before every merge, and before reporting an executor's task done. A performance number also passes `<dryas-root>/pstack/benchmark-checklist.md` when pstack picks are on.
+In Dryas: after the review round and before the commit on every orchestrated branch (inside `$dryas:orchestrate`, the finish step runs it after review-receive and calls `log_review` after each round; outside it, the round is logged by `$dryas:wreview`), before every merge, and before reporting an executor's task done. A performance number also passes `<dryas-root>/pstack/benchmark-checklist.md` when pstack picks are on.
 
 ## Reference
 

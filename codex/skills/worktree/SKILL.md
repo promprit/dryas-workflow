@@ -2,7 +2,7 @@
 name: worktree
 description: Use when starting multi-step work or before running a plan. Creates or confirms the task's own git worktree and branch (one agent per worktree), sets it up, and checks a clean test baseline before any change.
 ---
-On Codex, create it with `git worktree add ../<repo>-<topic> -b <branch>` and work from that folder.
+On Codex, create it with `git worktree add ../<repo>-<topic> -b <branch>` and work from that folder. On Codex this is the location; skip Directory selection.
 
 # Worktree
 
