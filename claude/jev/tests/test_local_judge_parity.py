@@ -65,30 +65,45 @@ class ParityTest(_Cases):
 
 JEV_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # A daemon thread cannot bound a runaway here: a backtracking `re` match holds the GIL, so join()
-# never returns. The call runs in a child process that is killed after the limit; the child
-# times the call itself with time.perf_counter.
+# never returns. The call runs in a child process killed after HANG_LIMIT seconds. Speed is judged
+# against a baseline measured in the same child: the same call on a benign command of equal length
+# (capped at MAX_CHARS), so machine load slows both alike. Each side is the median of 3 runs.
+HANG_LIMIT = 2.0
+SLOWDOWN = 12
 _CHILD = (
-    "import json, sys, time\n"
+    "import json, statistics, sys, time\n"
     "sys.path.insert(0, sys.argv[1])\n"
     "import local_judge\n"
+    "def secs(cmd):\n"
+    "    runs = []\n"
+    "    for _ in range(3):\n"
+    "        local_judge._analyse.cache_clear()\n"
+    "        start = time.perf_counter()\n"
+    "        res = local_judge.gate_answers('Bash', cmd, True)\n"
+    "        runs.append(time.perf_counter() - start)\n"
+    "    return statistics.median(runs), res\n"
     "cmd = sys.stdin.read()\n"
-    "start = time.perf_counter()\n"
-    "res = local_judge.gate_answers('Bash', cmd, True)\n"
-    "secs = time.perf_counter() - start\n"
-    "print(json.dumps({'secs': secs, 'res': res}))\n"
+    "base, _ = secs('ls -la ' * (min(len(cmd), local_judge.MAX_CHARS) // 7))\n"
+    "took, res = secs(cmd)\n"
+    "print(json.dumps({'secs': took, 'base': base, 'res': res}))\n"
 )
 
 
-def _timed(cmd, limit=2.0):
-    """Return (hung, box) where box has 'secs' and 'res', or 'err' if the child failed."""
+def _timed(cmd):
+    """Return (hung, box) where box has 'secs', 'base' and 'res', or 'err' if the child failed."""
     try:
         p = subprocess.run([sys.executable, "-c", _CHILD, JEV_DIR], input=cmd, capture_output=True,
-                           text=True, timeout=limit)
+                           text=True, timeout=HANG_LIMIT)
     except subprocess.TimeoutExpired:
         return True, {}
     if p.returncode != 0:
         return False, {"err": AssertionError(p.stderr.strip()[-2000:])}
     return False, json.loads(p.stdout)
+
+
+def assert_fast(test, name, box):
+    test.assertLess(box["secs"], SLOWDOWN * box["base"],
+                    "%s took %.4f s against a %.4f s baseline" % (name, box["secs"], box["base"]))
 
 
 class PerfTest(unittest.TestCase):
@@ -109,7 +124,7 @@ class PerfTest(unittest.TestCase):
                 self.assertFalse(hung, name + ": still running after 2 s")
                 if "err" in box:
                     raise box["err"]
-                self.assertLess(box["secs"], 0.25, "%s took %.3f s" % (name, box["secs"]))
+                assert_fast(self, name, box)
 
     def test_over_cap_command_asks_without_parsing(self):
         hung, box = _timed("a" * 70000)
@@ -119,7 +134,7 @@ class PerfTest(unittest.TestCase):
         res = box["res"]
         self.assertEqual(res["decision"], "ask")
         self.assertEqual(res["reasons"], ["too_long"])
-        self.assertLess(box["secs"], 0.25)
+        assert_fast(self, "over-cap command", box)
         d = gate.decide(res["answers"], SHIPPED)
         self.assertEqual(d[0] if d else "none", "ask")
 

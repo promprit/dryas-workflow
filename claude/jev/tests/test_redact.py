@@ -159,12 +159,21 @@ def test_mysql_p_only_first_token():
 
 
 def test_mysql_redaction_is_linear():
+    import statistics
     import time
+
+    def median_secs(text):
+        runs = []
+        for _ in range(3):
+            t0 = time.perf_counter()
+            redact(text)
+            runs.append(time.perf_counter() - t0)
+        return statistics.median(runs)
+
     for payload in ("mysql " * 34000, "mysql " + "x" * 200000, "mysql -p " * 22000,
                     "mysqldump " + "-p " * 70000, "mariadb " * 25000 + "y" * 50000):
-        t0 = time.time()
-        redact(payload)
-        assert time.time() - t0 < 0.5, payload[:20]
+        baseline = median_secs("ls -la " * (len(payload) // 7))
+        assert median_secs(payload) < 12 * baseline, payload[:20]
 
 
 # (text, secret that must be gone or None, substring that must survive or None)
