@@ -142,10 +142,10 @@ def _call(conn, name: str, ns: str, args: Dict[str, Any]) -> Tuple[Any, bool]:
     if name == "swarm_init":
         sid, topo = _swarm_id(), _topology(args)
         scope = args.get("scope")
-        scope = [redact.redact(s) for s in scope if isinstance(s, str)][:64] if isinstance(scope, list) else []
+        scope = [redact.redact(s)[:200] for s in scope if isinstance(s, str)][:64] if isinstance(scope, list) else []
         with memdb.tx(conn):
             conn.execute("INSERT INTO tasks (task_id, ns, title, scope, started, meta) VALUES (?, ?, ?, ?, ?, ?)",
-                         (sid, ns, redact.redact(str(args.get("task") or "")[:200]), json.dumps(scope), time.time(),
+                         (sid, ns, redact.redact(str(args.get("task") or ""))[:200], json.dumps(scope), time.time(),
                           json.dumps({"topology": topo, "kind": "swarm"})))
         return {"swarmId": sid, "topology": topo, "namespace": ns}, False
     return {"error": "unknown memory tool"}, True

@@ -23,12 +23,16 @@ ACCESS_DAYS = 180
 EDIT_DAYS = 365
 MAX_EDITS = 20000  # newest rows read per run
 MAX_ACCESS = 20000
+MAX_EDGES = 50000  # heaviest edges that take part in PageRank
+MAX_RANK_ROWS = 5000
+MAX_COEDIT_ROWS = 5000
+CHECK_EVERY = 200  # groups between deadline checks in the pair loops
 KINDS = ("rank", "file_fail", "coedit", "tier")
 _TYPE = re.compile(r"\s*([A-Za-z]+)")
 
 
 def pagerank(edges: Dict[Tuple[str, str], float], damping: float = 0.85, iters: int = 100,
-             tol: float = 1e-10) -> Dict[str, float]:
+             tol: float = 1e-10, check=None) -> Dict[str, float]:
     nbrs: Dict[str, Dict[str, float]] = defaultdict(dict)
     for (a, b), w in edges.items():
         if a == b or w <= 0:
@@ -42,6 +46,8 @@ def pagerank(edges: Dict[Tuple[str, str], float], damping: float = 0.85, iters: 
     rank = {v: 1.0 / n for v in nodes}
     out_w = {v: sum(nbrs[v].values()) for v in nodes}
     for _ in range(iters):
+        if check is not None:
+            check()
         new = {v: (1.0 - damping) / n for v in nodes}
         for v in nodes:
             share = damping * rank[v] / out_w[v]
@@ -107,7 +113,9 @@ def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
                                    "WHERE m.ns = ? ORDER BY a.ts DESC LIMIT ?", (ns, MAX_ACCESS)).fetchall():
             by_session[s].add("m:%d" % mid)
         check()
-        for ids in by_session.values():
+        for i, ids in enumerate(by_session.values()):
+            if i % CHECK_EVERY == CHECK_EVERY - 1:
+                check()
             for pair in _pairs(ids):
                 edges[pair] += 1
 
@@ -121,7 +129,9 @@ def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
             fails[f] += 0 if ok else 1
         check()
         coedit: Counter = Counter()
-        for files in groups.values():
+        for i, files in enumerate(groups.values()):
+            if i % CHECK_EVERY == CHECK_EVERY - 1:
+                check()
             for a, b in _pairs(files):
                 coedit[(a, b)] += 1
                 edges[("f:" + a, "f:" + b)] += 1
@@ -130,9 +140,10 @@ def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
                 edges[tuple(sorted(("m:%d" % mid, "f:" + f)))] += 1
 
         check()
-        ranks = pagerank(dict(edges))
+        heavy = sorted(edges.items(), key=lambda kv: (-kv[1], kv[0]))[:MAX_EDGES]
+        ranks = pagerank(dict(heavy), check=check)
         degree: Counter = Counter()
-        for a, b in edges:
+        for a, b in dict(heavy):
             degree[a] += 1
             degree[b] += 1
         tiers: Dict[str, Counter] = defaultdict(Counter)
@@ -141,11 +152,13 @@ def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
             tiers[task_type(title)][tier] += 1
 
         rows: List[Tuple[Any, ...]] = []
-        rows += [(ns, "rank", v[2:], "%.6f" % r, degree[v], now) for v, r in sorted(ranks.items()) if v.startswith("m:")]
+        top = sorted(((v, r) for v, r in ranks.items() if v.startswith("m:")), key=lambda vr: (-vr[1], vr[0]))
+        rows += [(ns, "rank", v[2:], "%.6f" % r, degree[v], now) for v, r in sorted(top[:MAX_RANK_ROWS])]
         ranked = len(rows)
         rows += [(ns, "file_fail", f, "%.4f" % (fails[f] / float(n)), n, now) for f, n in sorted(totals.items())
                  if n >= MIN_EDITS]
-        rows += [(ns, "coedit", "%s|%s" % pair, "", c, now) for pair, c in sorted(coedit.items()) if c >= MIN_SUPPORT]
+        kept = sorted(((p, c) for p, c in coedit.items() if c >= MIN_SUPPORT), key=lambda pc: (-pc[1], pc[0]))
+        rows += [(ns, "coedit", "%s|%s" % pair, "", c, now) for pair, c in sorted(kept[:MAX_COEDIT_ROWS])]
         for typ, c in sorted(tiers.items()):
             tier, n = sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))[0]
             if n >= MIN_SUPPORT:

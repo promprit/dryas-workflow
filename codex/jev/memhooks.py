@@ -28,7 +28,7 @@ import redact
 import taskctx
 
 HOOK_BUSY_MS = 500
-CONSOLIDATE_DEADLINE_S = 1.5  # consolidation must finish this long after the stage began (watchdog: 1.8)
+CONSOLIDATE_DEADLINE_S = 1.2  # consolidation must finish this long after the stage began (watchdog: 1.8)
 CONSOLIDATE_BEFORE_S = 1.0  # consolidate only if the stage has used less than this of its 2 s budget
 NOTE_MAX_BYTES = 64 * 1024
 BUDGET_S = 1.8  # the watchdog fires here, inside the 2 s hook budget
