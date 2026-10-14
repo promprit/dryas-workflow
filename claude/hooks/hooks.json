@@ -1,7 +1,7 @@
 {
   "hooks": {
     "PreToolUse": [
-      {"matcher": "*", "hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/chain.py\" pretool", "timeout": 20}]}
+      {"matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit", "hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/chain.py\" pretool", "timeout": 20}]}
     ],
     "UserPromptSubmit": [
       {"hooks": [{"type": "command", "command": "\"${DRYAS_PY:-python3}\" -X utf8 \"${CLAUDE_PLUGIN_ROOT}/jev/chain.py\" prompt", "timeout": 15}]}

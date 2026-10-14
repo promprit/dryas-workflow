@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## 1.0.2 - 2026-10-13
+
+### Fixed
+
+- **Scope lock fails closed.** While a task is active, a scope-lock stage that times out, crashes or returns unreadable output now denies the edit instead of letting it through; malformed hook input is denied too. The stage is marked `fail_closed` in `chain.json`.
+- **Shell writes under scope lock.** With a task active, a Bash command that writes files (`rm`, `mv`, `cp`, `tee`, `sed -i`, redirects, mutating git subcommands, package installs) now asks for confirmation and is logged; the file scope never covered shell writes before. Non-writing commands are unaffected.
+- **Jev gate covers `MultiEdit` and `NotebookEdit`**, which skipped the judge before.
+- **Redaction** covers `gho_`/`ghu_`/`ghs_`/`ghr_` tokens, `sk_live_`/`sk_test_`, `glpat-`, `hf_`, `npm_`, and `token:`/`secret:` forms; `PGPASSWORD=x` now redacts to `PGPASSWORD=[REDACTED]`.
+- **`--yes`** answers every question, as the code always did; the docs said otherwise. `--uninstall` and `--purge` now list what they will remove and ask first (`--yes` skips).
+- **Uninstall** offers to remove the third-party plugins setup installed (Ruflo plugins, Impeccable, UI UX Pro Max) and the global `ruflo` npm package when no other account uses it; `--keep-extras` keeps them. Marketplaces are never removed; the commands are printed.
+- A missing Node.js now says only Ruflo needs it and suggests `--no-ruflo`.
+- `claude/bin/dryas-py` falls back to `python` when `python3` is absent (Windows Git Bash).
+- A Codex `apply_patch` touching several files reaches the Jev gate with every path, so a sensitive file in the patch is still judged. Build and packaging file names match case-insensitively and by prefix (`Dockerfile.dev`, `requirements-dev.txt`, `build.gradle.kts`). The log directory is made private on upgrade too, not only when created. A file tool call with no path is denied while a task is active.
+
+### Changed
+
+- **Less latency per tool call.** The PreToolUse hook matches only `Bash|Edit|Write|MultiEdit|NotebookEdit` instead of every tool, so Read, Grep, Glob and MCP calls no longer start Python. Edits to ordinary files inside the project skip the remote judge; `.git/`, dotfiles, CI config, build manifests, scripts and key files are still judged. `jev_client` is imported only when a call is made, and one deadline covers the whole request.
+- **Jev input is labelled untrusted.** The gate and handoff send commands, paths and session items under `untrusted_*` fields with an instruction to judge them as data.
+- `calls.jsonl` rotates at 5 MB (one backup, `calls.jsonl.1`); the log directory is created with mode 0700.
+- Commands and skills declare `allowed-tools`, so they work and prompt less without the setup script. The executor agent gets `Grep` and `Glob`.
+- The orchestrate skill triggers on `/orchestrate`, a request to dispatch executors or an approved multi-step plan rather than any multi-file task; its Jev question reference moved to `skills/orchestrate/jev-questions.md`.
+- The SessionStart rules add one line when the Dryas deny rules are missing from `settings.json`, that is when the plugin was added without running setup.
+- `tools/sync_codex_plugin.py --check` and CI also check the skills shared by both editions for drift.
+- `tools/release_check.py` and a CI test fail when the plugin, marketplace, Codex plugin, Jev MCP server and CHANGELOG versions disagree.
+- Roadmap: Phase 4, Jev judges the task instead of every edit.
+
 ## 1.0.1 - 2026-10-13
 
 ### Fixed

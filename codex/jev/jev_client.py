@@ -16,7 +16,8 @@ from redact import redact_obj
 
 ENDPOINT = "https://openrouter.ai/api/v1/systemone"
 MODEL = "typesafe/jev-1.13"
-TIMEOUT_S = 3.0
+TIMEOUT_S = 3.0  # one deadline for the whole call (connect + request + response), not per socket op
+_CHUNK = 64 * 1024
 
 
 class JevUnavailable(Exception):
@@ -59,6 +60,23 @@ def api_key() -> str:
     return ""
 
 
+def _read_by(resp: Any, deadline: float) -> bytes:
+    """Read the body in chunks, each socket op limited to the time left; past the deadline -> JevUnavailable."""
+    parts = []
+    while True:
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise JevUnavailable("deadline exceeded")
+        try:
+            resp.fp.raw._sock.settimeout(left)  # urllib exposes no per-call deadline; best effort, may not exist
+        except Exception:
+            pass
+        chunk = resp.read(_CHUNK)
+        if not chunk:
+            return b"".join(parts)
+        parts.append(chunk)
+
+
 def judge(state: Any, questions: Dict[str, Any], timeout: float = TIMEOUT_S,
           opener: Optional[Callable[..., Any]] = None) -> Dict[str, Any]:
     key = api_key()
@@ -66,12 +84,13 @@ def judge(state: Any, questions: Dict[str, Any], timeout: float = TIMEOUT_S,
         raise JevUnavailable("OPENROUTER_API_KEY not set")
 
     t0 = time.monotonic()
+    deadline = t0 + timeout
     try:
         body = json.dumps({"model": MODEL, "state": redact_obj(state), "questions": questions}).encode("utf-8")
         req = urllib.request.Request(ENDPOINT, data=body, method="POST",
                                      headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
         with (opener or urllib.request.urlopen)(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            data = json.loads(_read_by(resp, deadline).decode("utf-8"))
         if not isinstance(data, dict) or not isinstance(data.get("answers"), dict):
             raise JevUnavailable("no answers in response")
         usage = data.get("usage")

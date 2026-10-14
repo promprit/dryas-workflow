@@ -8,13 +8,13 @@ cd dryas-workflow
 
 On Windows, use `.\install\install.ps1` (see [Windows](#windows-native)).
 
-The installer asks before it changes anything. Use `--dry-run` first to see what it would do.
+The installer asks before it changes anything (`--yes` answers every question). Use `--dry-run` first to see what it would do.
 
 ## Claude Code: plugin plus setup
 
 For Claude Code, Dryas is a plugin, `dryas@dryas-workflow`, served from your clone (the repo is its own marketplace). The installer runs setup for one Claude config dir:
 
-1. `claude plugin marketplace add <clone>` and `claude plugin install dryas@dryas-workflow`, run against that dir. `CLAUDE_CONFIG_DIR` is set only for a non-default dir. For `~/.claude`, leave it unset: setting it makes Claude Code read `~/.claude/.claude.json` instead of `~/.claude.json`, which hides your user-scope MCP servers. The plugin brings the rules (injected at session start), the hooks, the scope lock, the Jev chain, the Jev MCP server, the agents, commands and skills.
+1. `claude plugin marketplace add <clone>` and `claude plugin install dryas@dryas-workflow`, run against that dir. `CLAUDE_CONFIG_DIR` is set only for a non-default dir. For `~/.claude`, leave it unset: setting it makes Claude Code read `~/.claude/.claude.json` instead of `~/.claude.json`, which hides your user-scope MCP servers. The plugin brings the rules (injected at session start), the hooks, the scope lock, the Jev chain, the Jev MCP server, the agents, commands and skills. The hooks run `"${DRYAS_PY:-python3}"`: setup records the Python it ran with as `DRYAS_PY` in that dir's `settings.json` env; change that value there to pick another interpreter.
 2. The third-party components you selected (Ruflo, Superpowers, design skills).
 3. A merge into that dir's `settings.json`: model, env and permission rules only (plus the Ruflo hooks when Ruflo is on). It asks first.
 4. Shared state in `~/.dryas`: the workflow reference (`docs/dryas-workflow.md`), `chain.local.json` (which optional stages are on) and `accounts.json` (the config dirs set up so far).
@@ -66,7 +66,9 @@ If an old Codex copy install still runs from that dir's runtime files, a `--harn
 ./install/install.sh --uninstall --purge                      # last account: also remove ~/.dryas
 ```
 
-`--uninstall` works on one config dir: it runs `claude plugin uninstall dryas@dryas-workflow` there, removes only the settings entries setup added, and drops that dir from `~/.dryas/accounts.json`. It leaves the shared `~/.dryas` state (logs, thresholds, handoffs, the Ruflo runtime) in place by design, since other accounts or Codex may use it. Superpowers was installed as a dependency of the plugin; `claude plugin prune` (same config dir, see step 1 above) removes it when nothing else needs it. The `dryas-workflow` marketplace stays registered in that dir; that is harmless, and `claude plugin marketplace remove dryas-workflow` (same config dir) removes it.
+`--uninstall` works on one config dir: it runs `claude plugin uninstall dryas@dryas-workflow` there, removes only the settings entries setup added, and drops that dir from `~/.dryas/accounts.json`. It first lists exactly what it will remove (the command, the settings file or the entries in it, the record, the `accounts.json` entry and, with `--purge`, each path under `~/.dryas`) and asks `Proceed?`; `--yes` answers yes. It leaves the shared `~/.dryas` state (logs, thresholds, handoffs, the Ruflo runtime) in place by design, since other accounts or Codex may use it. Superpowers was installed as a dependency of the plugin; `claude plugin prune` (same config dir, see step 1 above) removes it when nothing else needs it. The `dryas-workflow` marketplace stays registered in that dir; that is harmless, and `claude plugin marketplace remove dryas-workflow` (same config dir) removes it.
+
+The third-party plugins setup installed for that dir (the Ruflo plugins `ruflo-core`, `ruflo-swarm`, `ruflo-testgen` and `ruflo-jujutsu`, Impeccable and UI UX Pro Max) are recorded in the dir's `.dryas-plugin.json` as setup ran them. `--uninstall` lists the `claude plugin uninstall <id>` commands that undo them and asks `Remove them too?`; `--yes` runs them, `--keep-extras` leaves them without asking (the commands are printed for later). The global `npm uninstall -g ruflo` is offered only on the last account, when no other Claude config dir or Codex home is listed in `accounts.json` (every account and Codex share the npm package). Their marketplaces (`ruflo`, `impeccable`, `ui-ux-pro-max-skill`) are never removed, since you may have installed other plugins from them; the `claude plugin marketplace remove` commands are printed. A failed removal is a warning; the uninstall goes on.
 
 `--purge` also removes the entries Dryas owns in `~/.dryas` (`accounts.json`, `chain.local.json`, `docs`, `jev`, `ruflo`), and only when `accounts.json` lists no other Claude config dir and no Codex home (`claude_dirs` and `codex_dirs`) and no old Codex copy install uses it (uninstall each Codex home first, or in the same run with `--harness both`). That deletes your Jev logs, your `/tune` thresholds, saved handoffs and Ruflo memory. It keeps your notes in `~/.dryas/docs/dryas-local.md`. It refuses when `accounts.json` is missing or unreadable or the dir's record cannot be read (that dir then stays listed), and it never removes files Dryas did not create.
 
@@ -100,11 +102,12 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 | `--no-superpowers` | Superpowers is a required dependency of the Claude Code plugin: this flag changes nothing there (its conflicting skills stay denied) and prints a note. Codex never installs it |
 | `--no-design` | Do not install Impeccable or UI UX Pro Max |
 | `--no-pstack-picks` | Do not install the pstack picks |
-| `--yes` | Run the third-party install commands without asking |
+| `--yes` | Answer yes to every question: the third-party installs, the settings merge, the uninstall and purge confirmation, the removal of the third-party plugins and, for Codex, the hook trust |
 | `--force` | No effect: Claude Code and Codex both install a plugin, so there are no copied files to replace (kept so older scripts still run) |
 | `--dry-run` | Print the plan and the settings diff, change nothing (skips third-party installs and verify) |
 | `--uninstall` | Remove Dryas from one Claude config dir, or with `--harness codex\|both` from one Codex home (`--codex-dir`) |
-| `--purge` | With `--uninstall`: also remove Dryas's entries in `~/.dryas` (logs, `/tune` thresholds, handoffs; keeps `dryas-local.md`) when no other Claude config dir or Codex home uses it |
+| `--purge` | With `--uninstall`: also remove Dryas's entries in `~/.dryas` (logs, `/tune` thresholds, handoffs; keeps `dryas-local.md`) when no other Claude config dir or Codex home uses it. The paths are listed and confirmed first |
+| `--keep-extras` | With `--uninstall`: leave the third-party plugins setup installed (Ruflo plugins, Impeccable, UI UX Pro Max, the global `ruflo` npm package) in place without asking |
 | `--preflight-only` | Run the prerequisite checks and stop |
 | `--harness claude\|codex\|both` | Choose what to install for. Claude Code is the default |
 | `--claude-dir DIR` | The Claude config dir to set up (default `$CLAUDE_CONFIG_DIR`, else `~/.claude`) |
@@ -113,7 +116,7 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 | `--no-flowobserve` | Turn the FlowObserve stage off (not with `--flowobserve`) |
 | `--openrouter-key KEY` | Claude Code only: also store the key as the plugin option (explicit only; see [the key](#the-openrouter-key)). Codex ignores it |
 
-`--yes` does not skip the settings merge confirmation. The installer always asks before it edits a config dir's `settings.json`. For Codex, `--yes` also answers the hook trust question (see [Hook trust](#hook-trust)).
+`--yes` skips every confirmation: the third-party installs, the settings merge (the diff is still printed), the uninstall and purge confirmation, the removal of the third-party plugins on uninstall and, for Codex, the hook trust question (see [Hook trust](#hook-trust)). Without it the installer asks before each of these.
 
 ## Windows (native)
 
@@ -243,7 +246,7 @@ It ends with `verify: N failed`. The installer exits non-zero if any check faile
 ./install/install.sh --uninstall
 ```
 
-For Claude Code this removes the plugin and the settings entries setup added in one config dir; see [Uninstall and purge](#uninstall-and-purge). For Codex (`--harness codex|both`) it removes the plugin, the recorded hook trust and the config block from one Codex home; see [Codex uninstall and purge](#codex-uninstall-and-purge). A backup of your settings from before the merge (`<config dir>/settings.json.dryas-bak-<timestamp>`) is kept, and its path is printed. Use it as a manual fallback if something looks wrong.
+For Claude Code this lists what it will remove, asks, then removes the plugin and the settings entries setup added in one config dir, and offers to remove the third-party plugins setup installed (`--keep-extras` keeps them); see [Uninstall and purge](#uninstall-and-purge). For Codex (`--harness codex|both`) it removes the plugin, the recorded hook trust and the config block from one Codex home; see [Codex uninstall and purge](#codex-uninstall-and-purge). A backup of your settings from before the merge (`<config dir>/settings.json.dryas-bak-<timestamp>`) is kept, and its path is printed. Use it as a manual fallback if something looks wrong.
 
 Uninstall removes only settings values that still match what the installer wrote. A value changed afterwards, by you or by Claude Code itself (for example it may rewrite `"model": "opus"` to `"opus[1m]"`), counts as your edit and is kept.
 

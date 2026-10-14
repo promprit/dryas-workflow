@@ -81,5 +81,42 @@ class JevlogTest(unittest.TestCase):
         self.assertNotIn("cwd", rec)
 
 
+    def test_log_dir_is_private(self):
+        import stat
+        new_dir = os.path.join(self.d, "private", "logs")
+        os.environ["JEV_LOG_DIR"] = new_dir
+        jevlog.append("t", {"tool": "Bash"})
+        if os.name == "posix":
+            self.assertEqual(stat.S_IMODE(os.stat(new_dir).st_mode), 0o700)
+        self.assertTrue(os.path.isdir(new_dir))
+
+    def test_rotates_by_size_keeping_one_backup(self):
+        p = os.path.join(self.d, "calls.jsonl")
+        old = jevlog.MAX_BYTES
+        jevlog.MAX_BYTES = 100
+        try:
+            with open(p, "w") as f:
+                f.write("x" * 101 + "\n")
+            jevlog.append("calls", {"tool": "Bash"})
+            self.assertEqual(json.loads(open(p).readline())["tool"], "Bash")
+            self.assertEqual(len(open(p).readlines()), 1)
+            self.assertTrue(open(p + ".1").read().startswith("x" * 101))
+            with open(p, "a") as f:
+                f.write("y" * 200 + "\n")
+            jevlog.append("calls", {"tool": "Edit"})
+            self.assertEqual(json.loads(open(p).readline())["tool"], "Edit")
+            self.assertIn("y" * 200, open(p + ".1").read())  # only one backup: the older one is gone
+            self.assertFalse(os.path.exists(p + ".2"))
+        finally:
+            jevlog.MAX_BYTES = old
+
+    def test_no_rotation_below_limit(self):
+        p = os.path.join(self.d, "small.jsonl")
+        jevlog.append("small", {"a": 1})
+        jevlog.append("small", {"a": 2})
+        self.assertEqual(len(open(p).readlines()), 2)
+        self.assertFalse(os.path.exists(p + ".1"))
+
+
 if __name__ == "__main__":
     unittest.main()

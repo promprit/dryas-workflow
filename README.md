@@ -88,9 +88,11 @@ Manual route, inside Claude Code:
 /plugin install dryas@dryas-workflow
 ```
 
-(Shell form: `claude plugin install dryas --marketplace promprit/dryas-workflow`.) This gives you the plugin only. Superpowers must also be installed from `claude-plugins-official`, and you still need setup for the settings, permissions and shared state in `~/.dryas`.
+(Shell form: `claude plugin install dryas --marketplace promprit/dryas-workflow`.) This gives you the plugin only: the rules, hooks, scope lock, Jev chain, agents, commands and skills. It does not give you what setup merges into that dir's `settings.json`: the `model` setting, the `env` the hooks need (`DRYAS_PY`, `DRYAS_DATA_ROOT`, the Ruflo paths), the `permissions.allow` rules that let `/tune`, `/handoff` and the Jev scripts run without a prompt, and the `permissions.deny` rules that keep the Superpowers skills Dryas replaces out of the way. Without them the hooks run with your default Python and the skills compete again. Superpowers must also be installed from `claude-plugins-official`, and the shared state in `~/.dryas` is not set up. Run `install/install.sh` for all of that.
 
-`--uninstall` removes Dryas from one config dir and keeps `~/.dryas`; adding `--purge` on the last account also deletes the logs, `/tune` thresholds and handoffs there, but keeps your notes in `~/.dryas/docs/dryas-local.md`.
+`--uninstall` lists what it will remove and asks (`--yes` answers every question), removes Dryas from one config dir and keeps `~/.dryas`; adding `--purge` on the last account also deletes the logs, `/tune` thresholds and handoffs there, but keeps your notes in `~/.dryas/docs/dryas-local.md`. It also offers to remove the third-party plugins setup installed (`--keep-extras` leaves them).
+
+After installing on a new machine, run the [release check](docs/release-check.md).
 
 ### Codex
 
@@ -145,7 +147,7 @@ Optional, installed separately: [FlowObserve](https://github.com/promprit/flowob
 - A Claude subscription with Claude Code, or the Codex CLI (0.162.1 or newer).
 - An OpenRouter API key for Jev. Jev is bring-your-own-key: set `OPENROUTER_API_KEY` in your shell, or pass `--openrouter-key` to setup (stored in Claude Code's secure storage; Codex reads the key from the shell only). Without a key, Jev checks are skipped and the workflow still runs.
 - macOS, Linux, WSL or Windows.
-- Python 3.9+, Node and npm (for Ruflo), git.
+- Python 3.9+, Node and npm (for Ruflo), git. The hooks run `${DRYAS_PY:-python3}`; setup sets `DRYAS_PY` to the Python it ran with (in `settings.json` for Claude Code), and you can point it at another interpreter.
 
 ## Credits
 
@@ -161,5 +163,3 @@ Third-party code is fetched from upstream by the installer, except a few adapted
 ## License
 
 MIT. See [LICENSE](LICENSE).
-
-After installing on a new machine, run the [release check](docs/release-check.md).

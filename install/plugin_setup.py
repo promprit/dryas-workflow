@@ -351,8 +351,12 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
         print("error: %s does not load in %s: %s; settings not changed" % (ID, cd, "; ".join(errs)))
         return 1
     repair_stale_jev(cd, env, dry)
-    rc = run_cmd.thirdparty([c for c in comps if c in ("ruflo", "design", "superpowers")], yes, cd, env)
+    ran = []  # what thirdparty installed: recorded so uninstall can offer to remove it
+    rc = run_cmd.thirdparty([c for c in comps if c in ("ruflo", "design", "superpowers")], yes, cd, env, ran=ran)
+    old = [c for c in rec.get("thirdparty", []) if isinstance(c, list)]
+    rec["thirdparty"] = old + [c for c in ran if c not in old]
     if rc:
+        _save_json(rec_path, rec)  # a partial run is still recorded
         return rc
     mapping = _mapping(plugin_root, comps_all, detected)  # covers old components too, so stale entries render
     if "ruflo" in comps:
@@ -460,6 +464,29 @@ def _rm_owned(p: Path) -> None:
 KEEP = "docs/dryas-local.md"  # the user's own notes: --purge never deletes them
 
 
+def _remove_extras(cd: Path, rec: dict, extras: List[List[str]]) -> None:
+    """Run the confirmed third-party removal commands (failures warn, the uninstall goes on); say how to remove
+    what stays: the plugins not removed and the marketplaces, which are never removed here."""
+    for argv in extras:
+        print(shown(cd, argv))
+        rc = di.run(argv, env=child_env(cd))
+        if rc != 0:
+            print("warning: `%s` failed (exit %d); remove it by hand" % (" ".join(argv), rc))
+    left = [c for c in extras_commands(rec, False) if c not in extras]
+    if left:
+        print("kept the third-party plugins setup installed; to remove them:")
+        for argv in left:
+            print("  " + shown(cd, argv))
+    npm = [c for c in extras_commands(rec, True) if c[:1] == ["npm"] and c not in extras]
+    if npm:
+        print("kept the global npm package(s) setup installed (every account and Codex share them); to remove them: %s"
+              % "; ".join(" ".join(c) for c in npm))
+    markets = extras_marketplaces(rec)
+    if markets:
+        print("their marketplaces stay registered (harmless); to remove them: %s"
+              % "; ".join(shown(cd, ["claude", "plugin", "marketplace", "remove", m]) for m in markets))
+
+
 def _purge(root: Path) -> None:
     for name in OWNED:
         p = root / name
@@ -511,7 +538,88 @@ def purge_shared() -> bool:
     return True
 
 
-def uninstall(cd: Path, purge: bool) -> int:
+def shown(cd: Path, argv: List[str]) -> str:
+    """A command line as printed: `claude` ones carry the CLAUDE_CONFIG_DIR prefix of cd."""
+    return "%s%s" % (env_prefix(cd) if argv[:1] == ["claude"] else "", " ".join(argv))
+
+
+def extras_commands(rec: dict, last_account: bool) -> List[List[str]]:
+    """The commands that undo the third-party installs setup recorded in rec["thirdparty"] (components.json runs):
+    `claude plugin uninstall <id>` for each plugin it installed and, only for the last account (the package is
+    machine-wide), `npm uninstall -g <pkg>` for each global npm install. Marketplaces are not removed here: a
+    marketplace the user installed other plugins from must stay (see extras_marketplaces)."""
+    ran = [c for c in rec.get("thirdparty", []) if isinstance(c, list) and all(isinstance(x, str) for x in c)]
+    out = []
+    for c in ran:
+        if c[:3] == ["claude", "plugin", "install"] and len(c) > 3 and ["claude", "plugin", "uninstall", c[3]] not in out:
+            out.append(["claude", "plugin", "uninstall", c[3]])
+    if last_account:
+        for c in ran:
+            if c[:3] == ["npm", "install", "-g"] and len(c) > 3 and ["npm", "uninstall", "-g", c[3]] not in out:
+                out.append(["npm", "uninstall", "-g", c[3]])
+    return out
+
+
+def extras_marketplaces(rec: dict) -> List[str]:
+    """The marketplaces (the `@<name>` of each recorded plugin install) setup added; left for the user to remove."""
+    names = []
+    for c in rec.get("thirdparty", []):
+        if isinstance(c, list) and c[:3] == ["claude", "plugin", "install"] and len(c) > 3 and "@" in str(c[3]):
+            m = str(c[3]).split("@", 1)[1]
+            if m and m not in names:
+                names.append(m)
+    return names
+
+
+def other_accounts(cd: Path, cdx: Optional[Path] = None) -> List[str]:
+    """Config dirs and Codex homes listed in accounts.json other than cd (and cdx, uninstalled in the same run)."""
+    acc = _load_json(norm(data_root()) / "accounts.json", {})
+    cd = norm(cd)
+    # entries are stored resolved, but compare resolved anyway: a symlinked temp dir (macOS /var), an 8.3 short
+    # name (Windows) or a hand-edited entry must not count as another account forever
+    out = [d for d in _dirs(acc, "claude_dirs") if not pu.same_path(str(norm(d)), str(cd))]
+    out += [d for d in _dirs(acc, "codex_dirs") if not (cdx is not None and pu.same_path(str(norm(d)), str(norm(cdx))))]
+    return out
+
+
+def purge_plan() -> List[str]:
+    """What --purge deletes under the data root (when no other account or Codex home uses it), one path per line."""
+    root = norm(data_root())
+    paths = []
+    for name in OWNED:
+        p = root / name
+        if name == "docs" and p.is_dir() and not p.is_symlink():
+            paths += [c for c in sorted(p.iterdir()) if c.name != Path(KEEP).name]
+        elif os.path.lexists(str(p)):
+            paths.append(p)
+    if not paths:
+        return []
+    return ["with --purge, when no other Claude config dir or Codex home uses %s:" % root] + \
+        ["  %s" % p for p in paths] + ["  (kept: %s)" % (root / KEEP)]
+
+
+def uninstall_plan(cd: Path, purge: bool) -> List[str]:
+    """What uninstall(cd, purge) removes, one line each; [] when there is nothing to remove (no record)."""
+    cd = norm(cd)
+    rec_path = cd / RECORD
+    if not rec_path.exists():
+        return []
+    rec = _load_json(rec_path, {})
+    out = [shown(cd, ["claude", "plugin", "uninstall", ID, "--scope", "user", "--keep-data"])]
+    spath = cd / "settings.json"
+    if spath.exists():
+        out.append(("%s (Dryas created it)" % spath) if rec.get("settings_created")
+                   else "the Dryas entries (model, env, permissions, hooks) in %s" % spath)
+    out.append(str(rec_path))
+    acc = norm(data_root()) / "accounts.json"
+    if acc.exists():
+        out.append("the entry for %s in %s" % (cd, acc))
+    return out + (purge_plan() if purge else [])
+
+
+def uninstall(cd: Path, purge: bool, extras: Optional[List[List[str]]] = None) -> int:
+    """extras: third-party removal commands (from extras_commands) to run after the plugin uninstall; None or []
+    leaves the third-party tools in place and prints how to remove them."""
     cd, raw = norm(cd), data_root()
     root = norm(raw)
     rec_path = cd / RECORD
@@ -534,6 +642,7 @@ def uninstall(cd: Path, purge: bool) -> int:
     rc = di.run(argv, env=child_env(cd))
     if rc != 0:  # settings cleanup still runs
         print("warning: `claude plugin uninstall` failed (exit %d); remove %s by hand with /plugin" % (rc, ID))
+    _remove_extras(cd, rec, extras or [])
     added = rec.get("settings") if isinstance(rec, dict) else None
     if not isinstance(added, dict):
         print("warning: %s is unreadable or has no settings entry; %s left untouched and the record kept" % (rec_path, spath))

@@ -1,7 +1,13 @@
 name: ci
 on:
   push:
+    branches: [main]
   pull_request:
+# One run per branch: a new push cancels the previous run, and a PR branch no longer runs twice
+# (push + pull_request), which doubled the demand on the scarce macOS runners.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     strategy:

@@ -3,7 +3,9 @@
 
 PreToolUse: deny beats ask; a stage's allow is ignored (the chain never auto-allows);
 after a deny only observe stages run. UserPromptSubmit: additionalContext is concatenated.
-Any failure of a stage is skipped; the chain itself always exits 0.
+Any failure of a stage is skipped, except a "fail_closed" stage while a task is active
+(.orchestrate/active.json): its timeout, crash or unparseable output becomes a deny.
+The chain itself always exits 0.
 """
 import json
 import os
@@ -134,6 +136,34 @@ def _json(out: str) -> Optional[Dict[str, Any]]:
     return v if isinstance(v, dict) else None
 
 
+def _task_active(event: Dict[str, Any]) -> bool:
+    """Mirror of scope_lock.task_active: cwd (or a parent) has .orchestrate/active.json with a non-empty
+    "active" list; an unreadable file counts as active. Replicated so chain never depends on importing the stage."""
+    try:
+        d = os.path.realpath(str(event.get("cwd") or os.getcwd()))
+        while True:
+            p = os.path.join(d, ".orchestrate", "active.json")
+            if os.path.isfile(p):
+                try:
+                    with open(p, encoding="utf-8") as f:
+                        return bool(json.load(f).get("active"))
+                except Exception:
+                    return True
+            parent = os.path.dirname(d)
+            if parent == d:
+                return False
+            d = parent
+    except Exception:
+        return False
+
+
+def _fail_closed(st: Dict[str, Any], event: Dict[str, Any], what: str) -> Optional[Tuple[str, str]]:
+    """Deny for a failed fail_closed stage while a task is active; None otherwise (stage skipped)."""
+    if st.get("fail_closed") is True and _task_active(event):
+        return "deny", "stage %s while tasks are active (fail closed)" % what
+    return None
+
+
 def pretool(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     decision: Optional[str] = None
     reason = ""
@@ -147,12 +177,17 @@ def pretool(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Op
             if decision == "deny":
                 continue
             code, out, err = _run(st, raw)
-            if code is None:
-                continue
-            if code == 2:
+            if code is None or code not in (0, 2):
+                fc = _fail_closed(st, event, "timed out or failed to run" if code is None else "exited %d" % code)
+                if fc is None:
+                    continue
+                d, r = fc
+            elif code == 2:
                 d, r = "deny", (err.strip() or "blocked")
             else:
                 j = _json(out)
+                if j is None and out.strip() and (fc := _fail_closed(st, event, "wrote unparseable output")):
+                    j = {"hookSpecificOutput": {"permissionDecision": fc[0], "permissionDecisionReason": fc[1]}}
                 hso = (j or {}).get("hookSpecificOutput") if isinstance(j, dict) else None
                 if not isinstance(hso, dict):
                     hso = {}
@@ -198,7 +233,8 @@ def pretool_codex(event: Dict[str, Any], stages: List[Dict[str, Any]]) -> Option
     rest = [s for s in stages if not is_pf(s)]
     combined = {k: v for k, v in event.items() if k not in ("tool_name", "tool_input")}
     combined["tool_name"] = "Write"
-    combined["tool_input"] = {"file_path": events[0]["tool_input"]["file_path"], "content": patch}
+    combined["tool_input"] = {"file_path": events[0]["tool_input"]["file_path"], "content": patch,
+                              "paths": [e["tool_input"]["file_path"] for e in events]}  # gate checks them all
     best = None
     for ev in events:
         best = _stricter(best, pretool(ev, json.dumps(ev), per_file))

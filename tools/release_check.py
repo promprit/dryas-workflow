@@ -194,6 +194,53 @@ def codex_manifest_problems(repo: Path) -> list:
     return bad
 
 
+VERSION_FILES = ("claude/.claude-plugin/plugin.json", "codex/.codex-plugin/plugin.json",
+                 ".claude-plugin/marketplace.json", "CHANGELOG.md", "claude/jev/jev_mcp.py")
+
+
+def versions(repo: Path) -> dict:
+    """The release version as each shipped file states it: the two plugin manifests, the dryas entry in the
+    Claude marketplace, the first `## X.Y.Z` heading in CHANGELOG.md and the Jev MCP serverInfo version.
+    A file that cannot be read or has no version maps to None."""
+    repo = Path(repo)
+    out = {}
+    for rel in VERSION_FILES[:2]:
+        d = _json(repo / rel)
+        out[rel] = d.get("version") if isinstance(d, dict) else None
+    d = _json(repo / VERSION_FILES[2])
+    ours = [p for p in (d.get("plugins") or []) if isinstance(p, dict) and p.get("name") == PLUGIN_ID.split("@")[0]] \
+        if isinstance(d, dict) else []
+    out[VERSION_FILES[2]] = ours[0].get("version") if ours else None
+    try:
+        m = re.search(r"^## (\d+\.\d+\.\d+)\b", (repo / VERSION_FILES[3]).read_text(encoding="utf-8"), re.M)
+        out[VERSION_FILES[3]] = m.group(1) if m else None
+    except OSError:
+        out[VERSION_FILES[3]] = None
+    try:
+        m = re.search(r'"serverInfo"\s*:\s*\{[^}]*"version"\s*:\s*"([^"]+)"',
+                      (repo / VERSION_FILES[4]).read_text(encoding="utf-8"))
+        out[VERSION_FILES[4]] = m.group(1) if m else None
+    except OSError:
+        out[VERSION_FILES[4]] = None
+    return out
+
+
+def version_problems(repo: Path) -> list:
+    """[] when every file in VERSION_FILES states the same version; else one line per disagreeing file."""
+    found = versions(repo)
+    if None in found.values():
+        return ["%s: no version found" % rel for rel, v in found.items() if v is None]
+    if len(set(found.values())) == 1:
+        return []
+    return ["%s: %s" % (rel, v) for rel, v in found.items()]
+
+
+def release_versions(rep):
+    bad = version_problems(REPO)
+    rep.say("FAIL" if bad else "PASS", "release versions agree", "; ".join(bad) if bad else
+            next(iter(versions(REPO).values())))
+
+
 def manifests(rep, claude):
     """`claude plugin validate` on the marketplace and the plugin (schema is not checked anywhere else), plus a light
     shape check of the Codex manifest and marketplace."""
@@ -409,6 +456,7 @@ def main(argv=None):
         rep.say("PASS" if p else "SKIP", t, p or "not on PATH")
     rep.say("PASS" if api_key(env) else "SKIP", "OpenRouter key", "set" if api_key(env) else "not set in this shell")
     manifests(rep, shutil.which("claude"))
+    release_versions(rep)
     bash = find_bash()
     tmp = tempfile.mkdtemp(prefix="dryas-release-check-")
     try:

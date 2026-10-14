@@ -43,10 +43,34 @@ class E2ETest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(str(self.tmp), ignore_errors=True)
 
-    def installer(self, *args):
-        return subprocess.run([sys.executable, str(REPO / "install" / "dryas_install.py"), "run", "--repo", str(REPO),
-                               "--yes", "--no-ruflo", "--no-superpowers", "--no-design"] + list(args),
-                              capture_output=True, text=True, env=self.env, timeout=900)
+    def installer(self, *args, yes=True, answer=""):
+        """answer: stdin text for the installer's questions when run without --yes."""
+        return subprocess.run([sys.executable, str(REPO / "install" / "dryas_install.py"), "run", "--repo", str(REPO)]
+                              + (["--yes"] if yes else []) + ["--no-ruflo", "--no-superpowers", "--no-design"] + list(args),
+                              capture_output=True, text=True, env=self.env, timeout=900, input=answer)
+
+    def test_uninstall_asks_and_yes_bypasses(self):
+        self.assertEqual(self.installer().returncode, 0)
+        cd = self.home / ".claude"
+        u = self.installer("--uninstall", "--purge", yes=False, answer="n\n")
+        self.assertEqual(u.returncode, 1, u.stdout + u.stderr)
+        self.assertIn("--uninstall will remove:", u.stdout)
+        self.assertIn("claude plugin uninstall dryas@dryas-workflow", u.stdout)
+        self.assertIn("with --purge", u.stdout)
+        self.assertIn("Proceed? [y/N]", u.stdout)
+        self.assertIn("nothing removed", u.stdout)
+        self.assertTrue((cd / ".dryas-plugin.json").exists())
+        self.assertTrue((self.home / ".dryas" / "accounts.json").exists())
+        u = self.installer("--uninstall", "--purge", yes=False, answer="y\n")
+        self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
+        self.assertFalse((cd / ".dryas-plugin.json").exists())
+        self.assertFalse((self.home / ".dryas").exists())
+        self.assertEqual(self.installer().returncode, 0)
+        u = self.installer("--uninstall")  # --yes: listed, not asked
+        self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
+        self.assertIn("--uninstall will remove:", u.stdout)
+        self.assertNotIn("[y/N]", u.stdout)
+        self.assertFalse((cd / ".dryas-plugin.json").exists())
 
     def test_plugin_setup_and_hooks_run(self):
         p = self.installer()

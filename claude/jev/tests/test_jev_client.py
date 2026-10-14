@@ -23,11 +23,18 @@ RESPONSE = {
 
 
 class FakeResp:
-    def __init__(self, body):
-        self.body = body
+    def __init__(self, body, clock=None, step=0.0):
+        self.body, self.clock, self.step, self.reads = body, clock, step, 0
 
-    def read(self):
-        return self.body
+    def read(self, n=-1):
+        self.reads += 1
+        if self.clock is not None:
+            self.clock[0] += self.step  # each read "takes" step seconds
+        if n is None or n < 0:
+            out, self.body = self.body, b""
+        else:
+            out, self.body = self.body[:n], self.body[n:]
+        return out
 
     def __enter__(self):
         return self
@@ -87,6 +94,41 @@ class ClientTest(unittest.TestCase):
     def test_timeout(self):
         with self.assertRaises(JevUnavailable):
             judge({}, {}, opener=opener_raising(socket.timeout("timed out")))
+
+    def test_overall_deadline_covers_slow_body(self):
+        # connect succeeds within the socket timeout, but the body dribbles in: the call must still give up at the deadline
+        clock = [100.0]
+        body = json.dumps(RESPONSE).encode()
+        resp = FakeResp(body, clock, step=2.0)
+        old = jev_client._CHUNK
+        jev_client._CHUNK = 8
+        try:
+            with mock.patch.object(jev_client.time, "monotonic", lambda: clock[0]):
+                with self.assertRaises(JevUnavailable) as cm:
+                    judge({}, {}, timeout=3.0, opener=lambda req, timeout: resp)
+        finally:
+            jev_client._CHUNK = old
+        self.assertIn("deadline", str(cm.exception))
+        self.assertLess(resp.reads, len(body) // 8)
+
+    def test_slow_connect_leaves_no_time_for_body(self):
+        clock = [0.0]
+
+        def slow_open(req, timeout):
+            clock[0] += timeout + 0.5  # the socket op itself stayed under its timeout; the budget is still gone
+            return FakeResp(json.dumps(RESPONSE).encode())
+        with mock.patch.object(jev_client.time, "monotonic", lambda: clock[0]):
+            with self.assertRaises(JevUnavailable):
+                judge({}, {}, opener=slow_open)
+
+    def test_chunked_body_is_reassembled(self):
+        old = jev_client._CHUNK
+        jev_client._CHUNK = 7
+        try:
+            res = judge({}, {}, opener=opener_returning(json.dumps(RESPONSE).encode(), []))
+        finally:
+            jev_client._CHUNK = old
+        self.assertEqual(res["answers"]["is_bug"]["value"], 0.96)
 
     def test_garbage_json(self):
         with self.assertRaises(JevUnavailable):

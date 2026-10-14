@@ -132,7 +132,7 @@ class CompactTest(unittest.TestCase):
         texts = []
 
         def j(state, q):
-            texts.append(state["items"]["i0"]["text"])
+            texts.append(state["untrusted_items"]["i0"]["text"])
             return keep_all(state, q)
         compact_keep.run(self.ev(), j)
         self.assertLessEqual(len(texts[0]), 1000)
@@ -144,7 +144,7 @@ class CompactTest(unittest.TestCase):
         seen = {}
 
         def j(state, q):
-            seen.update(state["items"])
+            seen.update(state["untrusted_items"])
             return keep_all(state, q)
         self.assertGreaterEqual(compact_keep.run(self.ev(), j), 1)
         self.assertEqual(seen["i0"]["text"], "Bash ls -la: total 8")

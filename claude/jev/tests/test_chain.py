@@ -158,7 +158,7 @@ class ChainTest(unittest.TestCase):
         with open(seen) as f:
             e = json.load(f)
         self.assertEqual(e["tool_name"], "Write")
-        self.assertEqual(e["tool_input"], {"file_path": "a.py", "content": patch})
+        self.assertEqual(e["tool_input"], {"file_path": "a.py", "content": patch, "paths": ["a.py", "b.py", "c.py"]})
         self.assertEqual(e["cwd"], self.tmp)
 
     def test_codex_strictest_decision_across_passes(self):
@@ -237,6 +237,62 @@ class ChainTest(unittest.TestCase):
     def test_missing_binary_ignored(self):
         st = {"name": "gone", "cmd": ["/nonexistent/bin"]}
         self.assertIsNone(chain.pretool(self.ev, self.raw, [st]))
+
+    SLOW = "import time,sys;sys.stdin.read();time.sleep(5)"
+
+    def _ev_in(self, cwd):
+        ev = dict(self.ev, cwd=cwd)
+        return ev, json.dumps(ev)
+
+    def test_fail_closed_timeout_denies_while_task_active(self):
+        ev, raw = self._ev_in(os.path.join(self._worktree(), "src"))
+        out = chain.pretool(ev, raw, [stage("lock", self.SLOW, timeout=1, fail_closed=True)])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIn("[lock]", out["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIn("fail closed", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    def test_fail_closed_crash_and_garbage_output_deny_while_task_active(self):
+        ev, raw = self._ev_in(self._worktree())
+        crash = "import sys;sys.stdin.read();sys.exit(1)"
+        garbage = "import sys;sys.stdin.read();print('not json')"
+        missing = {"name": "gone", "cmd": ["/nonexistent/bin"], "fail_closed": True}
+        for st in (stage("a", crash, fail_closed=True), stage("b", garbage, fail_closed=True), missing):
+            out = chain.pretool(ev, raw, [st])
+            self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny", st["name"])
+
+    def test_fail_closed_silent_output_is_no_decision(self):
+        ev, raw = self._ev_in(self._worktree())
+        self.assertIsNone(chain.pretool(ev, raw, [stage("a", "import sys;sys.stdin.read()", fail_closed=True)]))
+
+    def test_fail_closed_timeout_ignored_without_task(self):
+        wt = self._worktree()
+        with open(os.path.join(wt, ".orchestrate", "active.json"), "w", encoding="utf-8") as f:
+            json.dump({"active": []}, f)
+        ev, raw = self._ev_in(wt)
+        self.assertIsNone(chain.pretool(ev, raw, [stage("lock", self.SLOW, timeout=1, fail_closed=True)]))
+        ev, raw = self._ev_in(tempfile.mkdtemp())
+        self.assertIsNone(chain.pretool(ev, raw, [stage("lock", self.SLOW, timeout=1, fail_closed=True)]))
+
+    def test_fail_closed_unreadable_active_json_denies(self):
+        wt = self._worktree()
+        with open(os.path.join(wt, ".orchestrate", "active.json"), "w", encoding="utf-8") as f:
+            f.write("{broken")
+        ev, raw = self._ev_in(wt)
+        out = chain.pretool(ev, raw, [stage("lock", self.SLOW, timeout=1, fail_closed=True)])
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_timeout_stage_without_flag_ignored_while_task_active(self):
+        ev, raw = self._ev_in(self._worktree())
+        self.assertIsNone(chain.pretool(ev, raw, [stage("slow", self.SLOW, timeout=1)]))
+
+    def test_real_chain_json_scope_lock_is_fail_closed_and_matches_bash(self):
+        with open(os.path.join(HERE, "chain.json"), encoding="utf-8") as f:
+            st = {s["name"]: s for s in json.load(f)["pretool"]}
+        self.assertIs(st["scope-lock"].get("fail_closed"), True)
+        for tool in ("Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"):
+            self.assertTrue(chain._applies(st["scope-lock"], {"tool_name": tool}), tool)
+            self.assertTrue(chain._applies(st["jev-gate"], {"tool_name": tool}), tool)
+        self.assertFalse(chain._applies(st["jev-gate"], {"tool_name": "Read"}))
 
     def test_prompt_concatenates_json_and_plain(self):
         a = emit({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "Jev route: swarm (0.82)"}})

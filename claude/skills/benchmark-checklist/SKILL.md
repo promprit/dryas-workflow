@@ -2,6 +2,7 @@
 name: benchmark-checklist
 description: Vet a performance number you measured (limiter, tuning, limits, errors, repeatability, relevance, whether the work ran) before you report or act on it. Runs from a PLAN.md Done line, the CLAUDE.md rule, or /benchmark-checklist.
 disable-model-invocation: true
+allowed-tools: Read
 ---
 
 # Benchmark checklist

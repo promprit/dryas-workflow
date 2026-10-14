@@ -79,6 +79,43 @@ class RulesInjectTest(unittest.TestCase):
         self.assertEqual(hso["hookEventName"], "SessionStart")
         self.assertIn(rules_inject.SKIP_LINE, hso["additionalContext"])
 
+    FRAGMENT = os.path.join(os.path.dirname(HERE), "settings.fragment.json")
+
+    def _settings(self, d, deny):
+        p = os.path.join(d, "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"permissions": {"deny": deny}}, f)
+        return p
+
+    def test_setup_missing(self):
+        with open(self.FRAGMENT, encoding="utf-8") as f:
+            deny = json.load(f)["core"]["permissions"]["deny"]
+        with tempfile.TemporaryDirectory() as d:
+            self.assertTrue(rules_inject.setup_missing(os.path.join(d, "settings.json"), self.FRAGMENT))  # no file
+            self.assertFalse(rules_inject.setup_missing(self._settings(d, deny + ["Bash(rm:*)"]), self.FRAGMENT))
+            self.assertTrue(rules_inject.setup_missing(self._settings(d, deny[1:]), self.FRAGMENT))
+            p = self._settings(d, deny)
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("{not json")
+            self.assertFalse(rules_inject.setup_missing(p, self.FRAGMENT))  # unreadable: silent
+            self.assertFalse(rules_inject.setup_missing(self._settings(d, []), "/no/such/fragment.json"))
+
+    def _main_ctx(self, cfg):
+        with mock.patch.dict(os.environ, {"JEV_CHAIN_LOCAL": os.path.join(cfg, "none.json"), "CLAUDE_CONFIG_DIR": cfg}), \
+                mock.patch("sys.stdin", io.StringIO('{"source":"resume"}')), \
+                mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+            rules_inject.main([])
+        return json.loads(out.getvalue())["hookSpecificOutput"]["additionalContext"]
+
+    def test_main_adds_setup_line_only_when_deny_rules_missing(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIn(rules_inject.SETUP_LINE, self._main_ctx(d))
+            with open(self.FRAGMENT, encoding="utf-8") as f:
+                self._settings(d, json.load(f)["core"]["permissions"]["deny"])
+            ctx = self._main_ctx(d)
+            self.assertNotIn(rules_inject.SETUP_LINE, ctx)
+            self.assertNotIn("Dryas paths:", ctx)
+
     def test_main_silent_when_template_missing(self):
         with mock.patch.object(rules_inject, "HERE", "/no/such/dir/jev"), \
                 mock.patch("sys.stdin", io.StringIO("{}")), \

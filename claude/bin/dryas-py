@@ -1,3 +1,10 @@
 #!/usr/bin/env sh
 # Dryas launcher for commands Claude runs from plugin Markdown: the interpreter setup chose (DRYAS_PY), UTF-8 mode.
-exec "${DRYAS_PY:-python3}" -X utf8 "$@"
+# Without DRYAS_PY it takes python3, else python (Windows Git Bash often ships only the latter).
+if [ -n "${DRYAS_PY:-}" ]; then
+  exec "$DRYAS_PY" -X utf8 "$@"
+elif command -v python3 >/dev/null 2>&1; then
+  exec python3 -X utf8 "$@"
+else
+  exec python -X utf8 "$@"
+fi

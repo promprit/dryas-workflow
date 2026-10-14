@@ -1,6 +1,7 @@
 ---
 name: orchestrate
-description: Run a multi-step coding task as strong-tier orchestrator with fast-first executors (standard, strong, frontier on escalation), Jev routing/gates, Ruflo memory and Superpowers process. Use for /orchestrate or any multi-file task. Not for single-file fixes.
+description: Run a multi-step coding task as strong-tier orchestrator with fast-first executors (standard, strong, frontier on escalation), Jev routing/gates, Ruflo memory and Superpowers process. Use when the user runs /orchestrate, asks to orchestrate or dispatch executors, or has approved a multi-step plan to execute. Not for single-file fixes or ordinary edits that do not ask for orchestration.
+allowed-tools: Read, Edit, Write, Glob, Grep, Agent, ToolSearch, Skill(superpowers:brainstorming), Skill(superpowers:using-git-worktrees), Skill(superpowers:systematic-debugging), Skill(superpowers:verification-before-completion), Bash(git worktree:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git merge:*), Bash(git merge-base:*), Bash("${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section:*), mcp__plugin_dryas_jev__jev_judge, mcp__plugin_dryas_jev__log_override, mcp__plugin_dryas_jev__log_escalation, mcp__plugin_dryas_jev__log_dispatch, mcp__plugin_dryas_jev__log_merge, mcp__plugin_ruflo-core_ruflo__memory_search, mcp__plugin_ruflo-core_ruflo__memory_store, mcp__plugin_ruflo-core_ruflo__swarm_init
 ---
 
 # Orchestrate
@@ -10,7 +11,7 @@ Ruflo and Jev MCP tools may be deferred — load them with ToolSearch (e.g. `sel
 ## 0. Brainstorm first (always)
 Unless the request points at an already-approved design/spec, invoke superpowers:brainstorming first and finish its gates (design approved by the user) before step 1. Orchestration plans from the approved design, never from the raw request.
 
-You (the strong tier) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.dryas/jev/thresholds.json` (defaults in `${CLAUDE_PLUGIN_ROOT}/jev/thresholds.py`). Ruflo tool names: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/ruflo-tools.md`.
+You (the strong tier) plan, dispatch, judge and integrate. You never edit project files yourself on a multi-step task. Jev answers narrow questions; you decide whenever Jev is below threshold, escalates, or is unavailable. Thresholds: `~/.dryas/jev/thresholds.json` (defaults in `${CLAUDE_PLUGIN_ROOT}/jev/thresholds.py`). Ruflo tool names: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/ruflo-tools.md`. Exact Jev call shapes and question rules: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/jev-questions.md`.
 
 <!-- pstack-picks -->
 Keep bulk output in executors and only summaries here (`${CLAUDE_PLUGIN_ROOT}/pstack/principles/guard-the-context-window.md`). Judge each report against the real artifact, not the self-report (`${CLAUDE_PLUGIN_ROOT}/pstack/principles/prove-it-works.md`).
@@ -47,20 +48,7 @@ Search Ruflo memory (memory_search from ruflo-tools.md, namespace = project fold
 - `needs_opus` noul: "Does this task need a model stronger than Sonnet (cross-cutting refactor, or concurrency- or security-sensitive code)?"
 - `needs_sonnet` noul (only when `dispatch.haiku_default` is true): "Does this task need a model stronger than Haiku (touches more than one file, non-mechanical logic, or test design beyond a single assertion)?"
 
-Exact shape (criteria for `choice` is a map option -> description; `noul` criteria is {"true": ..., "false": ...}; `score` criteria is an ordered list of 2–10 level descriptions):
-```json
-{"state": {"task_section": "...", "test_file_exists": false, "last_test_run_tail": "", "past_outcomes": []},
- "questions": {
-  "executor": {"type": "choice", "instructions": "Which kind of executor should take this .orchestrate/PLAN.md task (see `task_section`)?",
-               "criteria": {"coder": "Writes or changes production code", "tester": "Writes the failing test first", "reviewer": "Reviews existing changes only", "docs": "Documentation only", "none_of_these": "None of these fits"}},
-  "specific": {"type": "noul", "instructions": "Is the task in `task_section` specific enough for an executor to finish without asking questions?",
-               "criteria": {"true": "Goal, scope and done-criteria are concrete", "false": "Something essential is missing or ambiguous"}},
-  "failing_test_exists": {"type": "noul", "instructions": "Does a failing test for the task in `task_section` already exist (see `test_file_exists`, `last_test_run_tail`)?"},
-  "needs_opus": {"type": "noul", "instructions": "Does the task in `task_section` need a model stronger than Sonnet (cross-cutting refactor, concurrency- or security-sensitive code)?"},
-  "needs_sonnet": {"type": "noul", "instructions": "Does the task in `task_section` need a model stronger than Haiku (touches more than one file, non-mechanical logic, or test design beyond a single assertion)?"}}}
-```
-Omit `needs_sonnet` from the call when `dispatch.haiku_default` is false.
-Question names are never sent to Jev, so each `instructions` must be self-contained and reference state by backticked field names.
+Exact call shape: `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/jev-questions.md` (omit `needs_sonnet` when `dispatch.haiku_default` is false).
 
 Run tests with paths relative to the worktree when possible; if the project's venv lives only in the main checkout, use its absolute path.
 
@@ -90,8 +78,6 @@ For each report, one `jev_judge` call with state `{task_section, executor_report
 - `done` noul: "Are all done-criteria met according to the report?"
 - `risk` score: `["routine", "worth a look", "incident"]`
 
-Note: `risk` is a score question whose criteria is the list ["routine", "worth a look", "incident"]. Question names are never sent to Jev, so each `instructions` must be self-contained and reference state by backticked field names.
-
 Only an incident, a failure or an escalation reaches you in full; otherwise log one summary line per task. Remove a task id from `active.json` only when that task is finished or handed to the user; a task being re-dispatched stays active. If an executor reports `SCOPE: need <path> because <reason>`, you (main thread) decide; if justified, add the glob to that task's Scope in .orchestrate/PLAN.md (the scope lock lets only the main thread edit .orchestrate/PLAN.md), then re-dispatch. Store the outcome in Ruflo memory (memory_store, same namespace): task title, what worked, what failed.
 
 ## 7. Escalation
@@ -115,13 +101,7 @@ Before each climb (fast → standard, standard → strong, strong → frontier),
 ## 7b. Interrogate (gated), then cleanup
 Start only after every build task has left `.orchestrate/active.json`.
 
-1. One `mcp__plugin_dryas_jev__jev_judge` call:
-```json
-{"state": {"design_summary": "...", "diff_stat": "...", "files_touched": [], "contested": false},
- "questions": {
-  "needs_interrogate": {"type": "noul", "instructions": "Does the change described in `design_summary` and `diff_stat` restructure how components fit together, change an interface other modules depend on, or carry `contested: true`?",
-                        "criteria": {"true": "Architectural or contested change", "false": "Contained change with no shared-interface impact"}}}}
-```
+1. One `mcp__plugin_dryas_jev__jev_judge` call with state `{design_summary, diff_stat, files_touched, contested}` and the noul question "needs_interrogate": "Does the change described in `design_summary` and `diff_stat` restructure how components fit together, change an interface other modules depend on, or carry `contested: true`?" (exact shape in jev-questions.md).
 2. Run `${CLAUDE_PLUGIN_ROOT}/skills/interrogate/SKILL.md` (read it and follow it) when Jev says true at confidence ≥ `interrogate.min_confidence`, when the user asked, or when the approved design marked the change contested. Below threshold, escalated or Jev unavailable: you decide; call `mcp__plugin_dryas_jev__log_override` when you differ. Reviewer A runs on the executor's default (standard tier), reviewer B with `model: opus`. Never put the top rung on the panel. Act On findings become new tasks (§3-§6).
 3. Cleanup: unless the diff touches documentation only, add one task with Scope = the files in the diff, `Failing test first: none (cleanup)`, and Done = `follow ${CLAUDE_PLUGIN_ROOT}/pstack/cleanup.md; behavior unchanged; <project test command> passes`. Dispatch it on the standard tier (no `model`) with `active.json`, like any task otherwise.
 
@@ -129,5 +109,5 @@ Start only after every build task has left `.orchestrate/active.json`.
 ## 8. Finish
 Delete `.orchestrate/active.json`. Run `/wreview` on the worktree diff, then superpowers:verification-before-completion, then `/commit`. Merge only after review and verification pass: merge the worktree branch locally into the base branch (git merge --no-ff), never push; then call `mcp__plugin_dryas_jev__log_merge` with task and branch (the worktree branch name), tasks_merged (the number of task sections in .orchestrate/PLAN.md) and cost_usd when you have the session cost from /cost or a cost notice; if `log_merge` replies with a warning (no review recorded for the branch), tell the user; then remove the worktree.
 
-## Question rules (typesafe skill)
-One narrow judgment per question; named JSON fields in state; every choice has `none_of_these`; batch independent questions into one call; never ask Jev to write code or plans. When one call covers several tasks, name each question `<question>.<task>` (for example `needs_opus.t3`); /tune groups calls by the part before the dot.
+## Question rules
+Full rules in `${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/jev-questions.md`: one narrow judgment per question, named JSON fields in state, every choice has `none_of_these`, batch independent questions into one call. When one call covers several tasks, name each question `<question>.<task>` (for example `needs_opus.t3`); /tune groups calls by the part before the dot.

@@ -256,3 +256,42 @@ class TestPrescreen(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+WRITES = ["rm -rf build", "mv a b", "cp -r a b", "tee out.txt", "sed -i 's/a/b/' f", "sed -i '' 's/a/b/' f", "truncate -s 0 f",
+          "dd if=/dev/zero of=f", "echo x > f", "cat a >> b", "cmd 2>&1 > log", "git checkout -- f", "git restore .",
+          "git reset --hard", "git clean -fd", "git stash pop", "mkdir -p x", "touch f", "tar xf a.tgz", "unzip a.zip",
+          "chmod +x f", "npm install x", "pip install y", "cd /p && rm x", "ls; rm x", "/bin/rm x", "r\\m x", "'rm' x"]
+NOT_WRITES = ["ls -la", "git status", "git diff --stat", "git log --oneline -5", "grep -rn foo src", "cat f 2>/dev/null",
+              "cmd 2>&1", "python3 -m pytest -q", "echo '>' done", "make test", "curl https://x", "git push origin main",
+              "npm test", "pnpm lint", "find . -name '*.py'", "wc -l f", "sort f", "docker ps", ""]
+
+
+class TestWrites(unittest.TestCase):
+    def test_write_like_commands(self):
+        for c in WRITES:
+            self.assertTrue(prescreen.writes(c), c)
+
+    def test_inline_code_and_local_scripts_are_writes(self):
+        for c in ("python -c \"open('x','w').write('a')\"", "python3 -I -c 'import os'", "node -e 'fs.writeFileSync(1)'",
+                  "perl -e 'unlink shift'", "ruby -e 'File.delete(1)'", "php -r 'unlink(1);'", "./build.sh",
+                  "cd src && ./gen", "sh gen.sh", "bash -x scripts/x.sh", "../tools/run.sh --fast"):
+            self.assertTrue(prescreen.writes(c), c)
+        for c in ("python3 x.py", "python3 -m pytest -q", "node index.js", "npm run build", "make", "go build ./...",
+                  "echo ./x", "ls ./", "cat ./README.md"):
+            self.assertFalse(prescreen.writes(c), c)
+
+    def test_read_only_commands(self):
+        for c in NOT_WRITES:
+            self.assertFalse(prescreen.writes(c), c)
+
+    def test_writes_is_narrower_than_risky(self):
+        for c in ("curl https://x", "git push origin main", "python3 x.py", "make"):
+            self.assertTrue(prescreen.risky(c), c)
+            self.assertFalse(prescreen.writes(c), c)
+
+    def test_writes_is_linear(self):
+        for payload in ("rm " * 30000, "echo " + ">" * 50000, "git " * 20000 + "checkout"):
+            t0 = time.monotonic()
+            prescreen.writes(payload)
+            self.assertLess(time.monotonic() - t0, 0.5, payload[:10])
