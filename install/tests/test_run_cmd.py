@@ -454,7 +454,7 @@ class ThirdpartyWarnTest(unittest.TestCase):
     def test_warns_when_not_installed(self):
         self.assertIn("superpowers@claude-plugins-official is not installed", self.out(None))
 
-    def test_skips_superpowers_commands_and_passes_env(self):
+    def test_runs_superpowers_command_and_passes_env(self):
         import io
         from contextlib import redirect_stdout
         (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {}}))
@@ -463,9 +463,24 @@ class ThirdpartyWarnTest(unittest.TestCase):
         with redirect_stdout(buf):
             self.assertEqual(run_cmd.thirdparty(["superpowers", "design"], True, self.home / ".claude", env), 0)
         self.assertTrue(self.ran)
-        self.assertFalse(any("superpowers@claude-plugins-official" in argv for argv, _ in self.ran))
+        self.assertTrue(any("superpowers@claude-plugins-official" in argv for argv, _ in self.ran))
         self.assertTrue(all(e is env for _, e in self.ran))
         self.assertIn("superpowers@claude-plugins-official is not installed", buf.getvalue())
+
+    def test_superpowers_failure_does_not_abort(self):
+        import io
+        from contextlib import redirect_stdout
+        self.di.run = lambda argv, cwd=None, env=None: self.ran.append((argv, env)) or (
+            3 if any("superpowers@" in a for a in argv) else 0)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = run_cmd.thirdparty(["superpowers", "design"], True, self.home / ".claude")
+        self.assertEqual(rc, 0)
+        self.assertIn("failed (exit 3); Superpowers is optional, Dryas setup continues", buf.getvalue())
+        self.assertIn("warning:", buf.getvalue())
+        table = json.loads((HERE.parent / "components.json").read_text())
+        design = [list(a) for a in table["design"]["commands"]]
+        self.assertTrue(all(c in [a for a, _ in self.ran] for c in design))
 
 
 class WrapperTest(unittest.TestCase):
@@ -482,7 +497,8 @@ class WrapperTest(unittest.TestCase):
             path += [sysroot + r"\System32", sysroot + r"\System32\WindowsPowerShell\v1.0"]
         else:
             path += ["/usr/bin", "/bin"]
-        self.env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home), PATH=os.pathsep.join(path))
+        base = {k: v for k, v in os.environ.items() if k != "DRYAS_DATA_ROOT" and not k.startswith("JEV_")}
+        self.env = dict(base, HOME=str(self.home), USERPROFILE=str(self.home), PATH=os.pathsep.join(path))
 
     def tearDown(self):
         shutil.rmtree(str(self.tmp), ignore_errors=True)

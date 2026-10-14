@@ -1,1 +1,21 @@
-{}
+{
+  "allowed_tool:claude:command/orchestrate:Skill(superpowers:brainstorming)": "allowed_tool:claude:command/orchestrate:Skill(dryas:brainstorm)",
+  "allowed_tool:claude:command/orchestrate:Skill(superpowers:systematic-debugging)": "allowed_tool:claude:command/orchestrate:Skill(dryas:debug)",
+  "allowed_tool:claude:command/orchestrate:Skill(superpowers:using-git-worktrees)": "allowed_tool:claude:command/orchestrate:Skill(dryas:worktree)",
+  "allowed_tool:claude:command/orchestrate:Skill(superpowers:verification-before-completion)": "allowed_tool:claude:command/orchestrate:Skill(dryas:verify)",
+  "allowed_tool:claude:command/wplan:Skill(superpowers:writing-plans)": "allowed_tool:claude:command/wplan:Skill(dryas:plan)",
+  "allowed_tool:claude:command/wreview:Skill(superpowers:receiving-code-review)": "allowed_tool:claude:command/wreview:Skill(dryas:review-receive)",
+  "allowed_tool:claude:command/wreview:Skill(superpowers:requesting-code-review)": "allowed_tool:claude:command/wreview:Skill(dryas:review-request)",
+  "allowed_tool:claude:skill/orchestrate:Skill(superpowers:brainstorming)": "allowed_tool:claude:skill/orchestrate:Skill(dryas:brainstorm)",
+  "allowed_tool:claude:skill/orchestrate:Skill(superpowers:systematic-debugging)": "allowed_tool:claude:skill/orchestrate:Skill(dryas:debug)",
+  "allowed_tool:claude:skill/orchestrate:Skill(superpowers:using-git-worktrees)": "allowed_tool:claude:skill/orchestrate:Skill(dryas:worktree)",
+  "allowed_tool:claude:skill/orchestrate:Skill(superpowers:verification-before-completion)": "allowed_tool:claude:skill/orchestrate:Skill(dryas:verify)",
+  "plugin_dep:claude:superpowers": "extra:superpowers",
+  "skill_ref:claude:superpowers:brainstorming": "skill:claude:brainstorm",
+  "skill_ref:claude:superpowers:receiving-code-review": "skill:claude:review-receive",
+  "skill_ref:claude:superpowers:requesting-code-review": "skill:claude:review-request",
+  "skill_ref:claude:superpowers:systematic-debugging": "skill:claude:debug",
+  "skill_ref:claude:superpowers:using-git-worktrees": "skill:claude:worktree",
+  "skill_ref:claude:superpowers:verification-before-completion": "skill:claude:verify",
+  "skill_ref:claude:superpowers:writing-plans": "skill:claude:plan"
+}

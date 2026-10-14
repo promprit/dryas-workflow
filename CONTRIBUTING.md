@@ -26,3 +26,13 @@ python -m pytest -q claude/jev/tests install/tests claude/ruflo/tests
 node claude/ruflo/tests/test_ns.cjs
 python tools/sync_codex_plugin.py --check
 ```
+
+## Writing skills
+
+- Start a skill's description, and every pointer to another file, with its trigger: the words that decide when the agent reaches for it (`Use when …`, `Before …`, `On …`).
+- Always-loaded text spends context on every turn, and every choice put to the user spends their attention. Keep `SKILL.md` to the process (aim for 50–150 lines) and move reference material into companion files in the same folder, each behind a pointer that says when to read it.
+- End every step on something checkable: a command and the result it should give, a count, a named artifact. A vague end point invites stopping early.
+- Write what to do. Reserve "never" for hard guardrails, and pair each one with what to do instead.
+- Give each meaning one home: state a rule once (template, skill or companion) and point to it from elsewhere; delete lines that change nothing.
+- A rewrite of an upstream skill keeps every one of its rules; the coverage table in `<skill>/UPSTREAM.md` maps each rule to where it now lives.
+- User-invoked skills and commands (`/orchestrate`, `/wplan`, `/wreview`, `/commit`, `/tune`, `/handoff`, `/interrogate`) orchestrate; model-invoked skills (the eight process skills) hold reusable discipline. A user-invoked skill may call model-invoked skills, never another user-invoked one.

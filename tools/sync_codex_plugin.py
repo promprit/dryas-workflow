@@ -6,6 +6,9 @@ Codex installs a plugin by copying it and drops symlinks, so these are real copi
 The skills both editions ship (SKILLS) are hand-written per harness, so --check compares the names they share
 instead of bytes: pstack files, Jev and Ruflo tools, Jev questions, threshold keys and plan-file conventions must be
 named by both, except the harness-specific ones listed in SKILL_ALLOW. sync never rewrites a skill.
+The process skills (PROCESS_SKILLS) are one source in claude/skills: sync renders them into codex/skills (harness
+blocks kept or dropped, Claude names rewritten), and --check also fails when a Codex instruction carried over from 1.x
+(HARNESS_REQUIRED) is missing from a rendered copy.
 """
 import argparse
 import re
@@ -37,6 +40,26 @@ SKILL_ALLOW: Dict[str, Dict[str, Set[str]]] = {
         "codex": {"needs_stronger_model"},
     },
 }
+PROCESS_SKILLS = ("brainstorm", "worktree", "debug", "verify", "plan", "review-request", "review-receive", "tdd")
+SKILL_FILES = ("UPSTREAM.md", "LICENSE-superpowers")
+HARNESS_REQUIRED: Dict[str, Tuple[str, ...]] = {
+    "brainstorm": ("get the user's approval of a design",),
+    "worktree": ("git worktree add ../<repo>-<topic> -b <branch>",),
+    "debug": ("<dryas-root>/pstack/principles/fix-root-causes.md",),
+    "verify": ("run the tests and read the output",),
+    "plan": ("`docs/superpowers/plans/` if the project uses that", "$dryas:orchestrate"),
+    "review-request": ("Change nothing unless asked", "Codex sub-agent"),
+}
+COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate")
+COMMAND_RE = re.compile(r"(?<![\w$/.<-])/(" + "|".join(COMMANDS) + r")\b(?![/\w-]|\.\w)")
+_HARNESS = re.compile(r"^<!-- (/?)(claude|codex) -->\n?", re.M)
+_FRONT = re.compile(r"\A---\n(.*?\n)---\n", re.S)
+_CODEX_NAMES = (
+    (re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}"), "<dryas-root>"),
+    (re.compile(r"mcp__plugin_dryas_jev__"), ""),
+    (re.compile(r"(?<![\w$/.@-])dryas:([a-z][a-z-]*)"), r"$dryas:\1"),
+    (COMMAND_RE, r"$dryas:\1"),
+)
 
 
 def _files(base: Path) -> Iterator[Tuple[Path, Path]]:
@@ -78,6 +101,120 @@ def _existing(repo: Path) -> List[str]:
     return out
 
 
+def harness_blocks(text: str, harness: str) -> str:
+    """Keep the body of each <!-- HARNESS --> ... <!-- /HARNESS --> block for `harness`, drop the other's."""
+    out, pos, open_name = [], 0, None
+    for m in _HARNESS.finditer(text):
+        closing, name = m.group(1) == "/", m.group(2)
+        if closing != (open_name is not None) or (closing and name != open_name):
+            raise ValueError("unbalanced <!-- %s%s --> marker" % (m.group(1), name))
+        if not closing:
+            out.append(text[pos:m.start()])
+            open_name = name
+        else:
+            if open_name == harness:
+                out.append(text[pos:m.start()])
+            open_name = None
+        pos = m.end()
+    if open_name is not None:
+        raise ValueError("unclosed <!-- %s --> marker" % open_name)
+    out.append(text[pos:])
+    return "".join(out)
+
+
+def render_skill(text: str, harness: str) -> str:
+    out = harness_blocks(text, harness)
+    if harness != "codex":
+        return out
+    m = _FRONT.match(out)
+    if m:  # Codex reads name and description only
+        keep = [l for l in m.group(1).splitlines(True) if l.startswith(("name:", "description:"))]
+        out = "---\n" + "".join(keep) + "---\n" + out[m.end():]
+    for pat, rep in _CODEX_NAMES:
+        out = pat.sub(rep, out)
+    return out
+
+
+def _lf(p: Path) -> str:
+    return p.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def user_invoked(repo: Path, name: str) -> Optional[bool]:
+    for p in (Path(repo) / "claude/skills" / name / "SKILL.md", Path(repo) / "claude/commands" / (name + ".md")):
+        if p.is_file():
+            m = _FRONT.match(_lf(p))
+            return bool(m and re.search(r"^disable-model-invocation:\s*true\s*$", m.group(1), re.M))
+    return None
+
+
+def openai_yaml(implicit: bool) -> str:
+    return "policy:\n  allow_implicit_invocation: %s\n" % ("true" if implicit else "false")
+
+
+def invocation_drift(repo: Path) -> List[str]:
+    """One line per Codex skill whose implicit-invocation policy disagrees with its Claude counterpart."""
+    out = []
+    base = Path(repo) / "codex/skills"
+    for d in sorted(base.iterdir()) if base.is_dir() else []:
+        if not (d / "SKILL.md").is_file():
+            continue
+        y = d / "agents/openai.yaml"
+        ui = user_invoked(repo, d.name)
+        if not y.is_file():  # no policy file: Codex allows implicit invocation, which only a user-invoked skill forbids
+            if ui:
+                out.append("skill %s: codex agents/openai.yaml is missing" % d.name)
+            continue
+        m = re.search(r"^\s*allow_implicit_invocation:\s*(true|false)\s*$", y.read_text(encoding="utf-8"), re.M)
+        if m is None:
+            out.append("skill %s: codex agents/openai.yaml sets no allow_implicit_invocation" % d.name)
+        elif ui is None:
+            out.append("skill %s: no Claude counterpart" % d.name)
+        elif (m.group(1) == "true") == ui:
+            out.append("skill %s: codex allow_implicit_invocation is %s, claude says %s"
+                       % (d.name, m.group(1), "user-invoked" if ui else "model-invoked"))
+    return out
+
+
+def skill_plan(repo: Path) -> Dict[str, str]:
+    """Target rel path under codex/skills -> its text, for every process skill and provenance file in claude/skills."""
+    src, out = Path(repo) / "claude/skills", {}
+    for name in SKILL_FILES:
+        if (src / name).is_file():
+            out["codex/skills/" + name] = _lf(src / name)
+    for name in PROCESS_SKILLS:
+        for f in sorted((src / name).glob("*.md")) if (src / name).is_dir() else []:
+            try:
+                text = render_skill(_lf(f), "codex")
+            except ValueError as e:
+                raise ValueError("%s: %s" % (f.relative_to(repo).as_posix(), e))
+            out["codex/skills/%s/%s" % (name, f.name)] = text
+        if (src / name).is_dir():
+            out["codex/skills/%s/agents/openai.yaml" % name] = openai_yaml(not user_invoked(repo, name))
+    return out
+
+
+def _skill_existing(repo: Path) -> List[str]:
+    base, out = Path(repo) / "codex/skills", []
+    out += ["codex/skills/" + n for n in SKILL_FILES if (base / n).is_file()]
+    for name in PROCESS_SKILLS:
+        if (base / name).is_dir():
+            out += ["codex/skills/%s/%s" % (name, f.relative_to(base / name).as_posix())
+                    for f in sorted((base / name).rglob("*")) if f.is_file()]
+    return out
+
+
+def harness_drift(repo: Path) -> List[str]:
+    """One line per carried-over Codex instruction missing from a rendered process skill."""
+    out = []
+    for name, phrases in sorted(HARNESS_REQUIRED.items()):
+        f = Path(repo) / "claude/skills" / name / "SKILL.md"
+        if not f.is_file():
+            continue
+        text = render_skill(_lf(f), "codex")
+        out += ['skill %s: the Codex copy lacks "%s"' % (name, p) for p in phrases if p not in text]
+    return out
+
+
 def drift(repo: Path) -> List[str]:
     want, out = plan(repo), []
     for rel, src in want.items():
@@ -87,6 +224,14 @@ def drift(repo: Path) -> List[str]:
         elif not _same(src, dest):
             out.append("differs " + rel)
     out += ["extra " + rel for rel in _existing(repo) if rel not in want]
+    rendered = skill_plan(repo)
+    for rel, text in rendered.items():
+        dest = Path(repo) / rel
+        if not dest.is_file():
+            out.append("missing " + rel)
+        elif _lf(dest) != text:
+            out.append("differs " + rel)
+    out += ["extra " + rel for rel in _skill_existing(repo) if rel not in rendered]
     return sorted(out)
 
 
@@ -116,7 +261,7 @@ def skill_drift(repo: Path) -> List[str]:
 
 def sync(repo: Path) -> List[str]:
     """Make codex/ match claude/; return the changed rel paths."""
-    want, changed = plan(repo), []
+    want, rendered, changed = plan(repo), skill_plan(repo), []
     for line in drift(repo):
         kind, rel = line.split(" ", 1)
         dest = Path(repo) / rel
@@ -124,7 +269,10 @@ def sync(repo: Path) -> List[str]:
             dest.unlink()
         else:
             dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(str(want[rel]), str(dest))
+            if rel in rendered:
+                dest.write_bytes(rendered[rel].encode("utf-8"))
+            else:
+                shutil.copy2(str(want[rel]), str(dest))
         changed.append(rel)
     return changed
 
@@ -135,7 +283,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--repo", default=str(REPO))
     a = ap.parse_args(argv)
     repo = Path(a.repo)
-    if a.check:
+    try:
+        return _run(repo, a.check)
+    except ValueError as e:
+        print("error: %s" % e)
+        return 1
+
+
+def _run(repo: Path, check: bool) -> int:
+    if check:
         bad = drift(repo)
         for line in bad:
             print(line)
@@ -147,7 +303,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         if skills:
             print("codex/skills drifted from claude/skills: edit the Codex skill by hand, or list a harness-specific "
                   "name in SKILL_ALLOW in tools/sync_codex_plugin.py")
-        return 1 if bad or skills else 0
+        harness = harness_drift(repo)
+        for line in harness:
+            print(line)
+        if harness:
+            print("a Codex instruction carried over from 1.x is missing: restore it in claude/skills, inside a "
+                  "<!-- codex --> block if it is Codex-only (see HARNESS_REQUIRED in tools/sync_codex_plugin.py)")
+        inv = invocation_drift(repo)
+        for line in inv:
+            print(line)
+        if inv:
+            print("set disable-model-invocation in claude/ and allow_implicit_invocation in "
+                  "codex/skills/<name>/agents/openai.yaml to agree")
+        return 1 if bad or skills or harness or inv else 0
     for rel in sync(repo):
         print("synced " + rel)
     return 0
