@@ -128,6 +128,8 @@ The "brainstorm first, always" hard gate stays, with the same three paths (spike
 
 The docs say plainly that without Jev the safety checks are deterministic rules, that planning questions go to the user's own strong tier on their subscription, and that Jev is the upgrade for unclear cases.
 
+**Memory consolidation outside the hook budget** (decided in plan B, approved by Promprit 2026-10-14). On a dense store (about 600k co-edit/co-access edges) `memlearn.consolidate` takes about 3.3 s, but `mem-session-end` allows it 1.2 s (`CONSOLIDATE_DEADLINE_S`, watchdog at 1.8 s), so it skips and logs `ConsolidateSkipped` (detail `budget` or `deadline`) to `memory.jsonl`. D keeps the in-hook attempt as the fast path and adds an unbounded run of `python3 claude/jev/memcli.py consolidate [--ns NS]`, either detached from `mem-session-end` or started at the next session start outside any hook budget. The run never blocks a hook, exits 0 and takes a lock so two runs never overlap. `/tune` reports `ConsolidateSkipped` counts, and the session-start rules mention repeated skips.
+
 **No-loss inventory.** Before any sub-project starts, `tools/inventory.py` snapshots 1.x into `reference/inventory-1.x.json`: every MCP tool, slash command, skill, agent, hook stage and settings hook, installer flag, `thresholds.json` key, JSONL record field and `/tune` report line. A test asserts that each entry exists in 2.0 or maps to a named equivalent in the parity tables. It runs in CI on every sub-project branch, so a loss fails the build rather than a review.
 
 **Learning loop and shared language** (added 2026-10-14, approved by Promprit; ideas from mattpocock/skills, MIT, no text copied):
