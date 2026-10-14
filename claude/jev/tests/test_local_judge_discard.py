@@ -18,7 +18,15 @@ ASK = {
         "git checkout HEAD -- 'src/a b.py'", 'git checkout -- "."', "git 'checkout' -- .", '"git" checkout .',
         "git -C sub checkout -- .", "cd x && git checkout -- .", "sudo git checkout -- .",
         "sh -c 'git checkout -- .'", "/usr/bin/git checkout .",
-        "git checkout -f -- .", "env -i git checkout .", "git checkout -- a;git stash clear", "git checkout -B x ."],
+        "git checkout -f -- .", "env -i git checkout .", "git checkout -- a;git stash clear", "git checkout -B x .",
+        "git checkout -f", "git checkout --force", "git checkout -f main", "git checkout --force main",
+        "git checkout main -f", "git checkout -qf main", "git checkout -fb x", "git checkout --forc main",
+        "git checkout main a.py", "git checkout HEAD~1 src/a.py b.py", "git checkout origin/main 'a b.py'",
+        "git checkout src/", "git checkout ./", "git checkout -q ./", "git checkout -B x main a.py"],
+    "git_switch_discard": [
+        "git switch -f main", "git switch --force main", "git switch --discard-changes main",
+        "git switch main --discard-changes", "git switch -C x -f", "git switch -fC x", "git switch -C x --force",
+        "sudo git switch -f main", "git -C sub switch --discard-changes x", "git switch --discard main"],
     "git_restore_discard": [
         "git restore .", "git restore src/a.py", "git restore -- .", "git restore --worktree a.py",
         "git restore --staged --worktree a.py", "git restore -SW a.py", "git restore --source HEAD~1 a.py",
@@ -32,6 +40,9 @@ ASK = {
 NONE = [
     "git checkout main", "git checkout -b feat", "git checkout -b feat origin/main", "git checkout -- ",
     "git checkout -b new .x", "git checkout", "git switch main",
+    "git checkout -b x", "git checkout -q main", "git checkout --detach main", "git checkout -b x main",
+    "git checkout --orphan x", "git checkout -", "git switch x", "git switch -c x", "git switch -C x",
+    "git switch --detach main", "git switch -", "git checkout .x",
     "git restore --staged a.py", "git restore -S a.py", "git restore --staged .", "git restore",
     "git restore --staged",
     "git stash", "git stash list", "git stash pop", "git stash show -p", "git stash push -m drop",
@@ -57,7 +68,8 @@ class LocalJudgeDiscardTest(unittest.TestCase):
             self.assertIsNone(lj.gate_answers("Bash", cmd, True)["decision"], cmd)
 
     def test_long_inputs_stay_linear(self):
-        for cmd in ("git checkout " + "-- " * 20000 + ".", "git restore " + "a " * 30000,
+        for cmd in ("git checkout " + "-- " * 20000 + ".", "git checkout " + "a/ " * 30000,
+                    "git switch " + "-q " * 30000 + "-f", "git restore " + "a " * 30000,
                     "git stash " + "'x' " * 15000):
             t0 = time.monotonic()
             lj.gate_answers("Bash", cmd, True)

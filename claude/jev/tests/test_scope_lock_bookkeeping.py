@@ -100,6 +100,20 @@ class BookkeepingTest(unittest.TestCase):
         for path in (self.active, ".orchestrate/PLAN.md", ".orchestrate/other.txt"):
             self.assertIsNone(scope_lock.run(self.edit("Write", path, agent=False)), path)
         self.assertEqual(self.decision(scope_lock.run(self.bash("tee .orchestrate/PLAN.md", agent=False))), "ask")
+    def test_executor_denied_any_case_of_orchestrate(self):
+        for path in (".ORCHESTRATE/active.json", ".Orchestrate/PLAN.md", os.path.join(self.wt, ".orchestrate".upper()),
+                     "./.oRcHeStRaTe/other.txt"):
+            out = scope_lock.run(self.edit("Write", path))
+            self.assertEqual(self.decision(out), "deny", path)
+            self.assertIn("orchestrator bookkeeping", out["hookSpecificOutput"]["permissionDecisionReason"])
+        for cmd in ("echo x > .ORCHESTRATE/active.json", "rm .Orchestrate/PLAN.md", "cd .ORCHESTRATE && tee x"):
+            out = scope_lock.run(self.bash(cmd))
+            self.assertEqual(self.decision(out), "deny", cmd)
+            self.assertIn("orchestrator bookkeeping", out["hookSpecificOutput"]["permissionDecisionReason"])
+        # The main session keeps its bookkeeping rights in any case; a lookalike name is not bookkeeping.
+        self.assertIsNone(scope_lock.run(self.edit("Write", ".ORCHESTRATE/active.json", agent=False)))
+        self.assertIsNone(scope_lock.run(self.edit("Write", "src/.Orchestrate.txt")))
+
 
 if __name__ == "__main__":
     unittest.main()

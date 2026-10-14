@@ -11,8 +11,10 @@ recursively (depth 3); so is a heredoc or here-string fed to a shell without -c.
 is skipped up to its delimiter line (the whole rest if unterminated) and never judged as commands. Quoted text is one argument, so `grep "rm -rf /"` or `git commit -m 'reset --hard'` is
 not a hit.
 
-Discarding uncommitted work or stashes asks too (git checkout -- <path> / checkout ., git restore <path> without
---staged, git stash clear / drop): those changes have no other copy.
+Discarding uncommitted work or stashes asks too: those changes have no other copy. Covered: git checkout with
+-f/--force, with "--" and a path, with a path operand after a first operand (<tree-ish> <path...>), or with "." or
+a <dir>/ operand; git switch with -f/--force/--discard-changes (also with -C); git restore <path> without
+--staged; git stash clear / drop. A unique prefix of a long option (git accepts --forc) counts as the option.
 
 Boundary of the short list: rm -r is denied only for /, a glob in the first component, ~ / $HOME, the home roots
 /Users and /home and one user's whole home. Deletes of other system folders (/usr, /etc, /var, ...) are NOT on the
@@ -325,12 +327,26 @@ def _operands(args: List[str], takes: Tuple[str, ...] = ()) -> List[str]:
     return out
 
 
+def _long(rest: List[str], *names: str) -> bool:
+    """True when an option word is one of `names` or a prefix git would expand to it (at least "--" + 1 letter)."""
+    return any(len(a) > 2 and a.startswith("--") and n.startswith(a) for a in rest for n in names)
+
+
 def _git_discard(sub: str, rest: List[str], flags: str) -> Optional[str]:
     """Commands that throw away uncommitted work or stashes (user decision 2026-10-14: always ask)."""
     if sub == "checkout":
+        if "f" in flags or _long(rest, "--force"):
+            return "git_checkout_discard"
         if "--" in rest:
             return "git_checkout_discard" if rest[rest.index("--") + 1:] else None
-        return "git_checkout_discard" if "." in _operands(rest, ("-b", "-B", "--orphan")) else None
+        ops = _operands(rest, ("-b", "-B", "--orphan"))
+        if len(ops) > 1 or any(a == "." or a.endswith("/") for a in ops):
+            return "git_checkout_discard"
+        return None
+    if sub == "switch":
+        if "f" in flags or _long(rest, "--force", "--discard-changes"):
+            return "git_switch_discard"
+        return None
     if sub == "restore":
         staged = "--staged" in rest or "S" in flags
         worktree = "--worktree" in rest or "W" in flags
