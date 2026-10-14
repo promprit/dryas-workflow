@@ -19,6 +19,10 @@ class TaskReviewDocsTest(unittest.TestCase):
         for s in (CLI + " .orchestrate/PLAN.md <N>", '"review_version": 1', "dispatch.scored_tier", "review.task_skip",
                   "tokens and duration_ms", "score, score_tier and task_type", "agent_id"):
             self.assertIn(s, t, s)
+        for rel in ("claude/skills/orchestrate/SKILL.md", "install/tests/fixtures/pre_pstack/orchestrate-claude.md"):
+            d = read(rel)
+            for s in ("Right after every dispatch", 'phase "return"', "When it returns, call log_dispatch again with the same task, tier, role and attempt"):
+                self.assertIn(s, d, rel + ": " + s)
         for rel in ("claude/skills/orchestrate/SKILL.md", "claude/commands/orchestrate.md"):
             front = read(rel).split("---", 2)[1]
             self.assertIn('Bash(%s:*)' % CLI, front, rel)
@@ -29,12 +33,18 @@ class TaskReviewDocsTest(unittest.TestCase):
                   "dispatch.scored_tier", "tokens and duration_ms"):
             self.assertIn(s, t, s)
         self.assertEqual(sync_codex_plugin.skill_drift(REPO), [])
+        for rel in ("codex/skills/orchestrate/SKILL.md", "install/tests/fixtures/pre_pstack/orchestrate-codex.md"):
+            d = read(rel)
+            self.assertNotIn("the scope lock denies workers `.orchestrate/`", d, rel)
+            self.assertIn("carry no worker identity", d, rel)
+            self.assertIn("never enforced for them", d, rel)
 
     def test_governance_describes_switches_and_classes(self):
         t = read("docs/governance.md")
         for s in ("## Task-level judgement", "`review.task_skip`", "`dispatch.scored_tier`", "`history.min_tasks`",
                   "`review.max_false_skip_rate`", "`baseline.until`", "PASS or FAIL", "`git restore <path>` without `--staged`",
-                  "`git stash clear`", "every edit is judged", "build files and scripts"):
+                  "`git stash clear`", "every edit is judged", "build files and scripts",
+                  'phase: "return"', "carry no worker identity", "best-effort"):
             self.assertIn(s, t, s)
 
 

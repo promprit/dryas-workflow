@@ -16,6 +16,40 @@ def call(args):
                            "params": {"name": "log_dispatch", "arguments": args}})
 
 
+class ReturnPhaseTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        p = mock.patch.dict(os.environ, {"JEV_LOG_DIR": self.tmp, "JEV_THRESHOLDS": os.path.join(self.tmp, "t.json")})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def recs(self):
+        with open(os.path.join(self.tmp, "dispatch.jsonl")) as f:
+            return [json.loads(l) for l in f]
+
+    def test_return_phase_is_recorded(self):
+        # Defect: usage can only arrive on the dispatch-time record, so it is lost or the dispatch log moves.
+        call(dict(BASE, score=42))
+        r = call(dict(BASE, phase="return", tokens=900, duration_ms=5000, agent_id="a1"))
+        self.assertFalse(r["result"]["isError"])
+        first, second = self.recs()
+        self.assertNotIn("phase", first)
+        self.assertEqual((second["phase"], second["tokens"], second["duration_ms"], second["agent_id"]),
+                         ("return", 900, 5000, "a1"))
+
+    def test_invalid_phase_is_dropped_not_an_error(self):
+        for bad in ("dispatch", "RETURN", 1, None, ["return"]):
+            r = call(dict(BASE, phase=bad))
+            self.assertFalse(r["result"]["isError"])
+            self.assertNotIn("phase", self.recs()[-1])
+
+    def test_schema_lists_phase(self):
+        r = jev_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        tool = next(t for t in r["result"]["tools"] if t["name"] == "log_dispatch")
+        self.assertEqual(tool["inputSchema"]["properties"]["phase"]["enum"], ["return"])
+        self.assertNotIn("phase", tool["inputSchema"]["required"])
+
+
 class DispatchExtrasTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
