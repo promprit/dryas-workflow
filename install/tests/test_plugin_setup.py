@@ -121,8 +121,8 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(ps.install_path(e.a), str(REPO / "claude"))  # installed_plugins.json installPath
 
     def test_official_marketplace_added_before_install(self):
-        """[C2] the superpowers dependency needs claude-plugins-official, or dryas does not load. The CLI installs
-        the dependency itself (and can prune it later), so it is not installed by hand when nothing is missing."""
+        """claude-plugins-official is added before dryas is installed: the superpowers component installs from it
+        (and existing installs whose dependency never resolved still need it)."""
         e = Env(self)
         ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False)
         cmds = [c[1:5] for c in e.calls()]
@@ -151,8 +151,9 @@ class SetupTest(unittest.TestCase):
     def test_no_superpowers_note(self):
         e = Env(self)
         out = _out(lambda: ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=False))
-        self.assertIn("Superpowers is a required dependency", out)
+        self.assertIn("Superpowers is not installed; the Dryas process skills cover the loop", out)
         self.assertTrue(any(c[1:4] == ["plugin", "marketplace", "add"] and ps.OFFICIAL_SOURCE in c for c in e.calls()))
+        self.assertFalse(any(ps.SUPERPOWERS in c for c in e.calls()))
         s = json.loads((e.a / "settings.json").read_text())
         self.assertEqual(len([r for r in s["permissions"]["deny"] if r.startswith("Skill(superpowers:")]), 5)
 

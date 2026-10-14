@@ -313,10 +313,10 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
         return 1
     env = child_env(cd)
     if "superpowers" not in comps:
-        print("note: Superpowers is a required dependency of the Dryas plugin; its conflicting skills stay denied "
-              "(--no-superpowers has no effect on Claude Code).")
-    # superpowers comes from claude-plugins-official: without that marketplace dryas installs but does not load.
-    # The CLI installs the dependency itself (as a dependency, so `claude plugin prune` can remove it later).
+        print("note: Superpowers is not installed; the Dryas process skills cover the loop "
+              "(its conflicting skills stay denied if you add it later).")
+    # claude-plugins-official hosts the optional superpowers component; an install whose old superpowers dependency
+    # never resolved still installs it below.
     steps = [["claude", "plugin", "marketplace", "add", OFFICIAL_SOURCE, "--scope", "user"],
              ["claude", "plugin", "marketplace", "add", str(repo), "--scope", "user"],
              ["claude", "plugin", "install", ID, "--scope", "user", "-y"] + (["--config", "openrouter_key=" + key] if key else [])]

@@ -454,7 +454,7 @@ class ThirdpartyWarnTest(unittest.TestCase):
     def test_warns_when_not_installed(self):
         self.assertIn("superpowers@claude-plugins-official is not installed", self.out(None))
 
-    def test_skips_superpowers_commands_and_passes_env(self):
+    def test_runs_superpowers_command_and_passes_env(self):
         import io
         from contextlib import redirect_stdout
         (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {}}))
@@ -463,7 +463,7 @@ class ThirdpartyWarnTest(unittest.TestCase):
         with redirect_stdout(buf):
             self.assertEqual(run_cmd.thirdparty(["superpowers", "design"], True, self.home / ".claude", env), 0)
         self.assertTrue(self.ran)
-        self.assertFalse(any("superpowers@claude-plugins-official" in argv for argv, _ in self.ran))
+        self.assertTrue(any("superpowers@claude-plugins-official" in argv for argv, _ in self.ran))
         self.assertTrue(all(e is env for _, e in self.ran))
         self.assertIn("superpowers@claude-plugins-official is not installed", buf.getvalue())
 

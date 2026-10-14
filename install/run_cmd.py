@@ -119,12 +119,12 @@ def _vtuple(v) -> Optional[tuple]:
 def thirdparty(comps: List[str], yes: bool, claude_dir: Path, env: Optional[dict] = None,
                table_path: Optional[Path] = None, ran: Optional[List[List[str]]] = None) -> int:
     """Install third-party tools into `claude_dir` (env carries its CLAUDE_CONFIG_DIR); warn on untested versions.
-    superpowers is a plugin dependency now: no commands, only the version check.
+    Superpowers is an optional extra (owned core C): installed by its command like ruflo and design.
     ran: when given, every command that ran and succeeded is appended (setup records them for uninstall)."""
     import dryas_install as di
     table = json.loads(Path(table_path or HERE / "components.json").read_text(encoding="utf-8"))
     sel = [c for c in comps if c in table]
-    cmds = [argv for c in sel if c != "superpowers" for argv in table[c]["commands"]]
+    cmds = [argv for c in sel for argv in table[c]["commands"]]
     if cmds:
         print("Third-party installs:")
         for argv in cmds:

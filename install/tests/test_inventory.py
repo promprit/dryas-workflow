@@ -25,7 +25,7 @@ class StaticTest(unittest.TestCase):
         got = _static(ROOT)
         for e in (
             "mcp_server:claude:jev", "mcp_server:codex:jev",
-            "plugin_dep:claude:superpowers", "plugin_config:claude:openrouter_key",
+            "plugin_config:claude:openrouter_key",
             "command:claude:commit", "command:claude:wplan", "command:claude:orchestrate",
             "skill:claude:orchestrate", "skill:codex:wplan", "agent:claude:executor",
             "allowed_tool:claude:skill/orchestrate:mcp__plugin_ruflo-core_ruflo__swarm_init",
@@ -252,8 +252,9 @@ class ReviewFixTest(unittest.TestCase):
             sys.dont_write_bytecode = before
 
     def test_every_kind_has_entries(self):
+        # owned core C: the core has no plugin dependency; Superpowers is an optional extra, so plugin_dep may be empty
         kinds = {e.split(":", 1)[0] for e in inv.collect(ROOT)}
         want = ("agent allowed_tool chain_stage command component env install_flag log log_field mcp_param "
-                "mcp_server mcp_tool permission plugin_config plugin_dep plugin_hook setting settings_hook "
+                "mcp_server mcp_tool permission plugin_config plugin_hook setting settings_hook "
                 "skill skill_ref threshold tool_ref tune_cmd tune_line").split()
         self.assertEqual([k for k in want if k not in kinds], [])
