@@ -19,9 +19,6 @@ def root(start: str) -> Optional[str]:
         d = parent
 
 
-_root = root
-
-
 def load(start: str) -> Tuple[Optional[str], Any]:
     """(root, parsed active.json): the one read per hook call. (None, None) outside a task, data None if unreadable."""
     try:

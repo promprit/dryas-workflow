@@ -88,14 +88,7 @@ def canonical(name: str) -> str:
     return base if "." in str(name) else str(name)
 
 
-def _int(v: Any) -> Optional[int]:
-    if isinstance(v, bool):
-        return None
-    if isinstance(v, int):
-        return v
-    if isinstance(v, str) and v.strip().isdigit():
-        return int(v.strip())
-    return None
+_int = tune_tasks.as_int
 
 
 def _num(v: Any) -> Optional[float]:
@@ -109,7 +102,6 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
     dispatch = [r for r in dispatch if isinstance(r, dict)]
     review = [r for r in review if isinstance(r, dict)]
     merge = [r for r in merge if isinstance(r, dict) and r.get("task") is not None]
-    # One rule for start tier with /tune's per-task rows (tune_tasks.tiers); only dispatch-time records count.
     first_tier = {t: v["start"] for t, v in tune_tasks.tiers(dispatch).items()}
     n = len(first_tier)
     denials = sum(1 for r in scope if isinstance(r, dict))

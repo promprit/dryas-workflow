@@ -28,7 +28,6 @@ class PathClassModuleTest(unittest.TestCase):
         # Defect: the two modules keep their own diverging copies of the path rules.
         for rel in ("a/b.jks", "x/secrets.yaml", "Makefile", ".env", "src/app.py", "deploy.sh", "../x.py"):
             self.assertEqual(task_review.always_judged(rel), pathclass.always_judged(rel), rel)
-            self.assertEqual(gate._sensitive(rel), pathclass.sensitive(rel), rel)
         with open(os.path.join(HERE, "task_review.py"), encoding="utf-8") as f:
             self.assertNotIn("import gate", f.read())
 

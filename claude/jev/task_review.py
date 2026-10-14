@@ -26,7 +26,6 @@ import planfile
 import taskctx
 
 REVIEW_VERSION = 1
-FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 CONTENT_SIGNALS = ("subprocess", "os.system", "os.popen", "os.exec", "os.spawn", "child_process", "execsync",
                    "__import__", "importlib", "ctypes", "eval(", "exec(", "deno.run", "bun.spawn", "shutil.rmtree",
                    "os.remove", "unlink(", "rmsync", "fs.rm(", "rm -", "os.environ", "getenv", "process.env",
@@ -35,7 +34,7 @@ CONTENT_SIGNALS = ("subprocess", "os.system", "os.popen", "os.exec", "os.spawn",
 WORD_SIGNALS = (("socket", re.compile(r"(?<![a-z0-9_])socket")), ("pty", re.compile(r"\bpty\b")))
 MAX_TEXT = 1 << 20
 _WILD = frozenset("*?[")
-always_judged = pathclass.always_judged  # dot paths, CI files, keys, secrets, SENSITIVE_* build files, outside
+always_judged = pathclass.always_judged
 
 
 def path_class(rel: str) -> str:
@@ -103,7 +102,7 @@ def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any],
     verdict would skip per-edit judgement), "review" or "unknown" (no usable review set: judged).
     Paths are taken relative to the worktree root. loaded: taskctx.load(cwd) when the caller already read it."""
     try:
-        if tool not in FILE_TOOLS:
+        if tool not in pathclass.FILE_TOOLS:
             return None
         loaded = loaded if loaded is not None else taskctx.load(cwd)
         root = loaded[0]

@@ -6,6 +6,8 @@ worktree (absolute, "..", "."), CI files by name, key stores and names containin
 No file edit that is always judged ever skips the judge (neither via local_file nor via a task verdict)."""
 import posixpath
 
+FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+
 SENSITIVE_NAMES = frozenset((
     "Makefile", "makefile", "GNUmakefile", "Justfile", "justfile", "Rakefile", "Gemfile", "CMakeLists.txt",
     "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "pyproject.toml", "setup.py", "setup.cfg",
@@ -15,8 +17,6 @@ SENSITIVE_NAMES = frozenset((
 SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh", ".ps1", ".bat", ".cmd")
 KEY_SUFFIXES = (".pem", ".key", ".crt", ".p12", ".pfx", ".jks", ".keystore", ".kdbx")
 SENSITIVE_SUFFIXES = SCRIPT_SUFFIXES + KEY_SUFFIXES
-# compared on the lowercased name (case-insensitive file systems): Dockerfile.dev, docker-compose.override.yml,
-# requirements-dev.txt, build.gradle.kts, settings.gradle
 _SENSITIVE_LOWER = frozenset(n.lower() for n in SENSITIVE_NAMES)
 _SENSITIVE_PREFIXES = ("dockerfile", "docker-compose", "requirements", "makefile", "build.gradle", "settings.gradle")
 ALWAYS_NAMES = frozenset(("jenkinsfile", "azure-pipelines.yml", "bitbucket-pipelines.yml", "cloudbuild.yaml",

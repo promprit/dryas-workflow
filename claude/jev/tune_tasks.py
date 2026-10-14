@@ -14,9 +14,8 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pathclass
 from task_score import RANK, bucket
-
-FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 
 
 def _n(v: Any) -> Optional[float]:
@@ -29,7 +28,7 @@ def _tier(v: Any) -> Optional[str]:
     return v if isinstance(v, str) and v in RANK else None
 
 
-def _attempt(v: Any) -> Optional[int]:
+def as_int(v: Any) -> Optional[int]:
     if isinstance(v, bool):
         return None
     if isinstance(v, int):
@@ -57,7 +56,7 @@ def tiers(dispatch: List[Any]) -> Dict[str, Dict[str, Any]]:
     coder: Dict[str, Optional[str]] = {}
     for r in _dispatched(dispatch):
         t = out.setdefault(r["task"], {"start": None, "final": None, "attempt": None})
-        tier, attempt = _tier(r.get("tier")), _attempt(r.get("attempt"))
+        tier, attempt = _tier(r.get("tier")), as_int(r.get("attempt"))
         if r.get("role") == "coder":
             coder.setdefault(r["task"], tier)
         if attempt == 1 and "_first" not in t:
@@ -78,7 +77,7 @@ def _usage(dispatch: List[Any]) -> Dict[Tuple[str, Any, Optional[int]], Dict[str
     recs = [r for r in dispatch if isinstance(r, dict) and isinstance(r.get("task"), str)]
     for r in sorted(recs, key=lambda r: r.get("phase") == "return"):
         role = r.get("role") if isinstance(r.get("role"), str) else None
-        got = out.setdefault((r["task"], role, _attempt(r.get("attempt"))), {})
+        got = out.setdefault((r["task"], role, as_int(r.get("attempt"))), {})
         for f in ("tokens", "duration_ms"):
             if _n(r.get(f)) is not None:
                 got[f] = _n(r.get(f))
@@ -217,7 +216,7 @@ def summary(task_rows: Dict[str, Dict[str, Any]], gate: List[Any], review: List[
         dur = [r["duration_ms"] for r in mine if r["duration_ms"] is not None]
         by_tier[tier] = dict(tasks=len(mine), tokens_median=_med(tok), tokens_p90=_p90(tok),
                              duration_ms_median=_med(dur), duration_ms_p90=_p90(dur))
-    edits = [r for r in gate if isinstance(r, dict) and r.get("tool") in FILE_TOOLS]
+    edits = [r for r in gate if isinstance(r, dict) and r.get("tool") in pathclass.FILE_TOOLS]
     findings: Dict[str, float] = {}
     for r in (x for x in review if isinstance(x, dict) and isinstance(x.get("task"), (str, int))):
         findings[str(r["task"])] = findings.get(str(r["task"]), 0.0) + sum(

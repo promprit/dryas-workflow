@@ -49,10 +49,6 @@ class PathClassTest(unittest.TestCase):
         self.assertIsNone(tr.content_signal("const ws = new WebSocket(url)\n"))
         self.assertIsNone(tr.content_signal("from websockets import serve\n"))
 
-    def test_taskctx_root_is_public(self):
-        import taskctx
-        self.assertIs(taskctx._root, taskctx.root)
-
     def test_benign_text_has_no_signal(self):
         for text in ("# Guide\n\nInstall with the package manager.\n", "total = sum(x for x in items)\n",
                      "print('hello world')\n"):
