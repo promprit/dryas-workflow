@@ -13,6 +13,6 @@ To update: diff the upstream skills at the new commit against the one above, car
 | [`debug`](debug/UPSTREAM.md) | `systematic-debugging/` | orchestrate, executor |
 | [`verify`](verify/UPSTREAM.md) | `verification-before-completion/` | orchestrate, commit, merge |
 | [`plan`](plan/UPSTREAM.md) | `writing-plans/` | wplan |
-| `review-request` | `requesting-code-review/` | wreview |
-| `review-receive` | `receiving-code-review/` | wreview |
-| `tdd` | (executor test-first practice), `test-driven-development/` | executor |
+| [`review-request`](review-request/UPSTREAM.md) | `requesting-code-review/` | wreview |
+| [`review-receive`](review-receive/UPSTREAM.md) | `receiving-code-review/` | wreview |
+| [`tdd`](tdd/UPSTREAM.md) | (executor test-first practice), `test-driven-development/` | executor |

@@ -74,8 +74,7 @@ def headings(text):
 
 class ProcessSkillsTest(unittest.TestCase):
     def test_present_skills(self):
-        # Task 2 lands brainstorm and plan; Tasks 3 and 4 extend this tuple until it is all eight
-        self.assertEqual(set(present()), {"brainstorm", "plan", "worktree", "verify", "debug"})
+        self.assertEqual(set(present()), set(scp.PROCESS_SKILLS))
 
     def test_shape(self):
         for n in present():
