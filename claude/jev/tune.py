@@ -173,7 +173,14 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
     judged = [r for r in gate if "latency_ms" in r]
     decided = [r for r in gate if r.get("provider") in ("jev", "local") and r.get("decision") != "skipped"]
     shadowed = [r for r in decided if "shadow_decision" in r]
-    per_task = Counter(r["task"] for r in decided if isinstance(r.get("task"), str))
+    per_task: Counter = Counter()
+    for r in decided:
+        ids = ([r["task"]] if isinstance(r.get("task"), str) else []) + [t for t in (r.get("tasks") if isinstance(r.get("tasks"), list) else []) if isinstance(t, str)]
+        per_task.update(set(ids))
+    for r in dispatch:
+        if isinstance(r, dict) and isinstance(r.get("task"), str):
+            per_task.setdefault(r["task"], 0)
+    shadow_decided = [r for r in shadowed if r.get("decision") in ("deny", "ask") or r.get("shadow_decision") in ("deny", "ask")]
     shadow_spend = sum(v for v in (_num(r.get("shadow_cost")) for r in gate) if v is not None)
     q_calls: Counter = Counter()
     q_below: Counter = Counter()
@@ -227,7 +234,8 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "gate_decisions": dict(Counter(r.get("decision") for r in gate)),
         "gate_skips_by_via": {v: sum(1 for r in gate if r.get("decision") == "skipped" and (r.get("via") or "legacy") == v)
                               for v in ("allowlist", "compound", "prescreen", "legacy")},
-        "route_calls": len(route),
+        "route_calls": sum(1 for r in route if r.get("provider") != "local"),
+        "route_local": sum(1 for r in route if r.get("provider") == "local"),
         "route_injected": sum(1 for r in route if r.get("injected")),
         "questions": questions,
         "opus_escalations": _steps(esc, "opus", "sonnet"),
@@ -240,6 +248,8 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "judge_providers": dict(Counter(r["provider"] for r in decided)),
         "judge_fallbacks": sum(1 for r in decided if r.get("fallback")),
         "shadow": {"calls": len(shadowed), "agree": sum(1 for r in shadowed if r["shadow_decision"] == r.get("decision")),
+                   "decided_calls": len(shadow_decided),
+                   "decided_agree": sum(1 for r in shadow_decided if r["shadow_decision"] == r.get("decision")),
                    "by_provider": dict(Counter(r.get("shadow_provider") for r in shadowed))},
         "gate_judged_per_task_median": statistics.median(per_task.values()) if per_task else None,
         "shadow_spend_usd": shadow_spend,
@@ -319,10 +329,12 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
              "- Gate decisions: %s" % json.dumps(rep["gate_decisions"]),
              "- gate skips: allowlist %(allowlist)d, compound %(compound)d, prescreen %(prescreen)d, legacy %(legacy)d" % rep["gate_skips_by_via"],
              "- Judge providers (gate): %s, fallbacks to local: %d" % (json.dumps(rep["judge_providers"], sort_keys=True), rep["judge_fallbacks"]),
-             "- Shadow agreement (gate): %s" % ("n/a" if not rep["shadow"]["calls"] else "%.0f%% of %d %s" % (
-                 rep["shadow"]["agree"] * 100.0 / rep["shadow"]["calls"], rep["shadow"]["calls"], json.dumps(rep["shadow"]["by_provider"], sort_keys=True))),
+             "- Shadow agreement (gate): %s" % ("n/a" if not rep["shadow"]["calls"] else "%.0f%% of %d; where either side decided: %s %s" % (
+                 rep["shadow"]["agree"] * 100.0 / rep["shadow"]["calls"], rep["shadow"]["calls"],
+                 "n/a" if not rep["shadow"]["decided_calls"] else "%.0f%% of %d" % (rep["shadow"]["decided_agree"] * 100.0 / rep["shadow"]["decided_calls"], rep["shadow"]["decided_calls"]), json.dumps(rep["shadow"]["by_provider"], sort_keys=True))),
              "- Judged gate calls per task (median): %s" % na(rep["gate_judged_per_task_median"]),
              "- Route: %d calls, %d injected" % (rep["route_calls"], rep["route_injected"]),
+             "- Route hints skipped (local judge): %d" % rep["route_local"],
              "- Escalations sonnet->opus: %d %s" % (rep["opus_escalations"]["count"], json.dumps(rep["opus_escalations"]["reasons"])),
              "- Fable dispatches (opus->fable only): %d %s" % (rep["fable"]["count"], json.dumps(rep["fable"]["reasons"])),
              "- Fable without a prior Opus step (should be 0): %d %s" % (rep["fable_without_opus"]["count"], json.dumps(rep["fable_without_opus"]["reasons"]))]

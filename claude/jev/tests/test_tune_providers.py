@@ -37,7 +37,7 @@ class TuneProvidersTest(unittest.TestCase):
         rep = tune.build(self.tmp)
         self.assertEqual(rep["judge_providers"], {"jev": 2, "local": 2})
         self.assertEqual(rep["judge_fallbacks"], 1)
-        self.assertEqual(rep["shadow"], {"calls": 3, "agree": 2, "by_provider": {"local": 2, "jev": 1}})
+        self.assertEqual(rep["shadow"], {"calls": 3, "agree": 2, "decided_calls": 1, "decided_agree": 0, "by_provider": {"local": 2, "jev": 1}})
         self.assertEqual(rep["gate_judged_per_task_median"], 1.5)
         self.assertAlmostEqual(rep["shadow_spend_usd"], 0.002)
         text = tune.render(rep, [])
