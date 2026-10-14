@@ -17,7 +17,7 @@
     {"name": "mem-task", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "task"], "timeout": 2, "observe": true}
   ],
   "session-start": [
-    {"name": "mem-session-start", "harness": ["claude", "codex"], "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-start"], "timeout": 2, "observe": true}
+    {"name": "mem-session-start", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-start"], "timeout": 2, "observe": true}
   ],
   "session-end": [
     {"name": "mem-session-end", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-end"], "timeout": 2, "observe": true}

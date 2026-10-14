@@ -101,7 +101,7 @@ class ShippedChainTest(unittest.TestCase):
         pre = [s for s in c["precompact"] if s["name"] == "mem-session-end"][0]
         self.assertEqual(pre["cmd"][-1], "auto")  # summary only: never a full consolidation inside PreCompact
         start = [s for s in c["session-start"] if s["name"] == "mem-session-start"][0]
-        self.assertEqual(start["harness"], ["claude", "codex"])
+        self.assertEqual(start.get("harness", ["claude"]), ["claude"])
 
     def test_hook_files_route_events(self):
         root = os.path.dirname(os.path.dirname(JEV))
@@ -113,4 +113,5 @@ class ShippedChainTest(unittest.TestCase):
             self.assertIn("chain.py\" " + kind, cmds(ev), ev)
         with open(os.path.join(root, "codex", "hooks", "hooks.json"), encoding="utf-8") as f:
             cx = json.load(f)["hooks"]
-        self.assertIn("session-start --harness codex", " ".join(x["command"] for m in cx["SessionStart"] for x in m["hooks"]))
+        for ev in cx:
+            self.assertNotIn("session-start", " ".join(x["command"] for m in cx[ev] for x in m["hooks"]), ev)
