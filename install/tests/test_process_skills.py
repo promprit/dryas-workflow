@@ -25,7 +25,7 @@ TECHNIQUES = {
     "brainstorm": ("## Hard gate", "## Question rounds", "recommended answer", "look it up yourself"),
     "debug": ("## Feedback loop first", "3-5 ranked", "prediction", "unique prefix", "commit message", "redact",
               "NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST", "inside an executor"),
-    "review-request": ("two reviewers in parallel", "separately", "do not merge or re-rank"),
+    "review-request": ("three reviewers in parallel", "separately", "do not merge or re-rank", "## Stage 3: over-engineering", "speculative abstraction", "unused option", "wrapper around the stdlib", "new dependency", "reuse"),
     "tdd": ("NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST",),
     "verify": ("NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE",),
     "plan": ("only its own `## Task N:` section",),

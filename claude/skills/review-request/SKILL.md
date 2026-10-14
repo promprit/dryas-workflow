@@ -1,6 +1,6 @@
 ---
 name: review-request
-description: Use when a task or branch is done and before any merge. Requests a two-stage review of the diff from two fresh reviewers in parallel, spec compliance and code quality, with findings ranked by severity.
+description: Use when a task or branch is done and before any merge. Requests a three-stage review of the diff from three fresh reviewers in parallel, spec compliance, code quality and over-engineering, with findings ranked by severity.
 ---
 
 # Review request
@@ -29,19 +29,19 @@ Have fresh reviewers check the work before problems cascade. Each reviewer gets 
    HEAD_SHA=$(git rev-parse HEAD)
    ```
    Done when both SHAs resolve.
-2. **Dispatch the two reviewers** (see Two stages) with the prompt in `${CLAUDE_PLUGIN_ROOT}/skills/review-request/reviewer-prompt.md`, its placeholders filled:
-   - `[STAGE]`: `1` (spec compliance) or `2` (code quality), one per reviewer
+2. **Dispatch the three reviewers** (see Three stages) with the prompt in `${CLAUDE_PLUGIN_ROOT}/skills/review-request/reviewer-prompt.md`, its placeholders filled:
+   - `[STAGE]`: `1` (spec compliance), `2` (code quality) or `3` (over-engineering), one per reviewer
    - `[DESCRIPTION]`: a brief summary of what you built
    - `[PLAN_OR_REQUIREMENTS]`: what it should do (`.orchestrate/PLAN.md`, the named plan or spec, the task text, or the requirements)
    - `[BASE_SHA]`: the starting commit
    - `[HEAD_SHA]`: the ending commit
 <!-- claude -->
-   Dispatch both reviewers with the Agent tool in one message: two calls, each `subagent_type: "dryas:executor"`, role reviewer, one per stage, each given `${CLAUDE_PLUGIN_ROOT}/skills/review-request/reviewer-prompt.md` filled in for its stage.
+   Dispatch both reviewers with the Agent tool in one message: three calls, each `subagent_type: "dryas:executor"`, role reviewer, one per stage, each given `${CLAUDE_PLUGIN_ROOT}/skills/review-request/reviewer-prompt.md` filled in for its stage.
 <!-- /claude -->
 <!-- codex -->
-   On Codex: run the two reviewers as Codex sub-agents in parallel when available; otherwise review twice yourself, one fresh pass per stage, and still report them separately. Change nothing unless asked.
+   On Codex: run the three reviewers as Codex sub-agents in parallel when available; otherwise review three times yourself, one fresh pass per stage, and still report them separately. Change nothing unless asked.
 <!-- /codex -->
-   Done when two reports are back, one per stage.
+   Done when three reports are back, one per stage.
 3. **Act on the findings** with the `dryas:review-receive` skill:
    - Fix critical issues immediately
    - Fix important issues before proceeding
@@ -50,14 +50,19 @@ Have fresh reviewers check the work before problems cascade. Each reviewer gets 
 
 Report findings ranked by severity (critical, important, minor) with file:line. The reviewers change nothing unless asked. In Dryas: inside `/orchestrate`, the finish step runs this skill (then review-receive, then verify) and calls `mcp__plugin_dryas_jev__log_review` after each round; outside it, `/wreview` runs this skill and logs the round.
 
-## Two stages
+## Three stages
 
-Run the two stages as two reviewers in parallel, each given the diff and its own brief:
+Run the three stages as three reviewers in parallel, each given the diff and its own brief:
 
 1. **Spec compliance** against `.orchestrate/PLAN.md` or the named plan or spec. List every requirement that is missing, partial or wrong; flag deviations so the implementer can confirm whether they were intentional, and say so when the plan itself is at fault. Behavior the spec is silent on is judged by what a reasonable user would expect.
 2. **Code quality.** Correctness bugs first, then error handling, then tests (real behavior, not mocks; edge cases), then readability. Architecture, security and production readiness belong here too.
+3. **Over-engineering** (see Stage 3).
 
-Present the two reports separately, as returned: do not merge or re-rank them. The reviewer enforces the standards: the implementer worked under context pressure, so the reviewer reports what is missing instead of assuming it was intended. Each finding is checked against the code before it is reported: no finding on code the reviewer did not read.
+Present the three reports separately, as returned: do not merge or re-rank them. The reviewer enforces the standards: the implementer worked under context pressure, so the reviewer reports what is missing instead of assuming it was intended. Each finding is checked against the code before it is reported: no finding on code the reviewer did not read.
+
+## Stage 3: over-engineering
+
+The reviewer flags speculative abstraction (layers, hooks or generality no current caller needs), an unused option or parameter, a wrapper around the stdlib that adds nothing, a new dependency where the stdlib would do, and code that a reuse of existing repo code would have avoided. Each finding uses the same format and severities as stages 1 and 2 and cites the rung of the minimum-code ladder (`dryas:executor` rule 3) it skipped: YAGNI, reuse, stdlib, native feature, existing dependency, one-liner.
 
 For a worked round (SHAs, dispatch, reports, fixes), read `${CLAUDE_PLUGIN_ROOT}/skills/review-request/reference.md` § Example.
 

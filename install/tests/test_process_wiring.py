@@ -15,7 +15,8 @@ USES = {
     "claude/commands/orchestrate.md": ("Skill(dryas:brainstorm)", "Skill(dryas:worktree)", "Skill(dryas:debug)",
                                        "Skill(dryas:verify)"),
     "claude/commands/wplan.md": ("Skill(dryas:plan)", "dryas:plan skill", "/orchestrate"),
-    "claude/commands/wreview.md": ("Skill(dryas:review-request)", "Skill(dryas:review-receive)"),
+    "claude/commands/wreview.md": ("Skill(dryas:review-request)", "Skill(dryas:review-receive)",
+                                  "Stage 3: over-engineering"),
     "claude/agents/executor.md": ("skills/tdd/SKILL.md", "skills/debug/SKILL.md"),
 }
 

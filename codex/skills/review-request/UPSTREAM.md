@@ -31,11 +31,11 @@ Upstream: `requesting-code-review/`
 | How to Request — 3. note minor issues for later | review-request/SKILL.md § How |
 | How to Request — 3. push back if the reviewer is wrong, with reasoning | review-request/SKILL.md § How; review-receive/SKILL.md § When to push back |
 | How to Request — findings ranked by severity with file:line; log_review per round (Dryas) | review-request/SKILL.md § How |
-| How to Request — two stages, spec compliance then code quality (Dryas) | review-request/SKILL.md § Two stages; review-request/reviewer-prompt.md § Stage 1: spec compliance; review-request/reviewer-prompt.md § Stage 2: code quality |
-| How to Request — two reviewers in parallel, one per stage, each with its own brief (Dryas) | review-request/SKILL.md § Two stages; review-request/SKILL.md § How; review-request/reviewer-prompt.md § Reviewer prompt |
-| How to Request — present the two reports separately; do not merge or re-rank (Dryas) | review-request/SKILL.md § Two stages |
-| How to Request — the reviewer enforces the standards; reports what is missing, assumes nothing intended (Dryas) | review-request/SKILL.md § Two stages; review-request/reviewer-prompt.md § Reviewer prompt |
-| Example | review-request/reference.md § Example; review-request/SKILL.md § Two stages |
+| How to Request — three stages, spec compliance, code quality, over-engineering (Dryas) | review-request/SKILL.md § Three stages; review-request/SKILL.md § Stage 3: over-engineering; review-request/reviewer-prompt.md § Stage 3: over-engineering; review-request/reviewer-prompt.md § Stage 1: spec compliance; review-request/reviewer-prompt.md § Stage 2: code quality |
+| How to Request — three reviewers in parallel, one per stage, each with its own brief (Dryas) | review-request/SKILL.md § Three stages; review-request/SKILL.md § How; review-request/reviewer-prompt.md § Reviewer prompt |
+| How to Request — present the three reports separately; do not merge or re-rank (Dryas) | review-request/SKILL.md § Three stages |
+| How to Request — the reviewer enforces the standards; reports what is missing, assumes nothing intended (Dryas) | review-request/SKILL.md § Three stages; review-request/reviewer-prompt.md § Reviewer prompt |
+| Example | review-request/reference.md § Example; review-request/SKILL.md § Three stages |
 | Example — after Task 2: SHAs, dispatch, reviewer returns, fix, continue | review-request/reference.md § Example |
 | Common Rationalizations | review-request/SKILL.md § Rationalizations |
 | Common Rationalizations — "I'll just review the diff myself instead of dispatching a reviewer" | review-request/SKILL.md § Rationalizations |

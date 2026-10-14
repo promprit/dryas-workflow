@@ -12,8 +12,8 @@ You: Requesting a review before proceeding.
 BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
 HEAD_SHA=$(git rev-parse HEAD)
 
-[Dispatch two reviewers in parallel]
-  STAGE: 1 | 2
+[Dispatch three reviewers in parallel]
+  STAGE: 1 | 2 | 3
   DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
   PLAN_OR_REQUIREMENTS: Task 2 of .orchestrate/PLAN.md
   BASE_SHA: a7981ec
@@ -28,6 +28,9 @@ HEAD_SHA=$(git rev-parse HEAD)
   Issues:
     Important: Missing progress indicators (indexer.ts:130)
     Minor: Magic number (100) for reporting interval (indexer.ts:88)
+
+[Stage 3 reviewer returns]:
+  Minor: unused option `--verbose` on repairIndex (indexer.ts:61); skipped rung: YAGNI
   Assessment: Ready to proceed with fixes
 
 You: [Show both reports as returned, fix progress indicators]

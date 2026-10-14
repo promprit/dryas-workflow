@@ -11,7 +11,7 @@ USES = {
     "codex/skills/orchestrate/SKILL.md": ("$dryas:brainstorm", "$dryas:worktree", "$dryas:debug", "$dryas:verify",
                                           "<dryas-root>/skills/tdd/SKILL.md"),
     "codex/skills/wplan/SKILL.md": ("$dryas:plan",),
-    "codex/skills/wreview/SKILL.md": ("$dryas:review-request", "$dryas:review-receive"),
+    "codex/skills/wreview/SKILL.md": ("$dryas:review-request", "$dryas:review-receive", "over-engineering"),
 }
 
 
