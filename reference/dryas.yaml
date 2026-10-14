@@ -7,14 +7,13 @@ conformance: {level: full, table: README.md}
 
 workflow:
   stages: [brainstorm, plan, judge, build, escalate, review, ship]
-  brainstorm: {required: true, approval: human, provider: superpowers:brainstorming}
+  brainstorm: {required: true, approval: human, provider: dryas:brainstorm}
   plan: {required: true, format: plan-file, path: .orchestrate/PLAN.md}
-  judge: {required: false, provider: jev}
+  judge: {required: false, provider: local}  # flag-less install: auto (jev when a key is set, else local)
   rules_source: claude/CLAUDE.md.template
 
 memory:
-  provider: ruflo
-  version: latest  # tested 3.53.0
+  provider: dryas  # or ruflo (--memory ruflo) or none
   namespace: main-repo
   read: before-plan
   write: after-task
@@ -22,10 +21,10 @@ memory:
 
 governance:
   scope_lock: {required: true, provider: dryas-scope-lock, armed_by: .orchestrate/active.json}
-  gate: {provider: jev, model: typesafe/jev-1.13, auto_allow: false, on_failure: no-decision}
-  judge: {provider: jev, min_confidence: 0.7, below_threshold: orchestrator}
+  gate: {provider: local, auto_allow: false, on_failure: no-decision}  # or jev (model typesafe/jev-1.13)
+  judge: {provider: local, shadow: none, min_confidence: 0.7, below_threshold: orchestrator}  # jev when a key is set; install default is auto
   overrides: {log: required, tune: /tune}
-  hook_order: [scope-lock, jev-gate, ruflo, observer]
+  hook_order: [scope-lock, gate, memory, observer]
   human_approval: [design, install, move, delete, overwrite, settings, push, release]
   secrets: {only: OPENROUTER_API_KEY, location: shell-environment}
 
@@ -36,8 +35,8 @@ execution:
   isolation: worktree
   one_agent_per_worktree: true
   tdd: required
-  parallel: ruflo-hierarchical-swarm
-  process: superpowers
+  parallel: dryas-task-ledger
+  process: dryas  # or superpowers
   specialist:
     design: [ui-ux-pro-max, impeccable]
 

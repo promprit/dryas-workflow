@@ -10,7 +10,8 @@ STALE = [r"the \*\*only\*\* memory", r"only memory/learning layer", r"Superpower
          r"required by the plugin", r"required dependency", r"superpowers:[a-z]", r"Ruflo is the memory",
          r"installs Superpowers as a dependency", r"searches Ruflo memory", r"stored in Ruflo memory",
          r"Node is used only for the Ruflo MCP shim"]
-FILES = DOCS  # Task 11 appends README.md, reference/README.md, docs/why-dryas.md
+FILES = DOCS + ["README.md", "reference/README.md", "docs/why-dryas.md", "docs/operating-model.md",
+                "docs/adoption-guide.md"]
 
 
 class DocsTest(unittest.TestCase):
@@ -38,3 +39,28 @@ class DocsTest(unittest.TestCase):
             t = self.text(p)
             for n in needles:
                 self.assertIn(n, t, "%s lacks %r" % (p, n))
+
+
+class RepositionTest(unittest.TestCase):
+    def test_readme_scorecard_matches(self):
+        r = (ROOT / "README.md").read_text(encoding="utf-8")
+        block = r.split("<!-- scorecard:start -->")[1].split("<!-- scorecard:end -->")[0]
+        card = (ROOT / "reference/judge-corpus/SCORECARD.md").read_text(encoding="utf-8")
+        table = card[card.index("| Measure"):]
+        self.assertEqual(block.strip(), table.strip())
+
+    def test_readme_positioning(self):
+        r = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("owned operating model", r)
+        self.assertNotIn("built on Superpowers, Ruflo", r)
+        for flag in ("--with-ruflo", "--with-superpowers", "--judge"):
+            self.assertIn(flag, r)
+
+    def test_manifest_bindings(self):
+        y = (ROOT / "reference/dryas.yaml").read_text(encoding="utf-8")
+        for needle in ("provider: dryas:brainstorm", "provider: dryas", "process: dryas", "judge:"):
+            self.assertIn(needle, y)
+        self.assertNotIn("superpowers:brainstorming", y)
+        s = (ROOT / "spec/dryas-spec-v1.md").read_text(encoding="utf-8")
+        ex = s[s.index("9.2"):]
+        self.assertNotIn("provider: ruflo\n", ex.split("```")[1] if "```" in ex else ex)
