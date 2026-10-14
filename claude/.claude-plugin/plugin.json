@@ -17,12 +17,6 @@
     "jev",
     "codex"
   ],
-  "dependencies": [
-    {
-      "name": "superpowers",
-      "marketplace": "claude-plugins-official"
-    }
-  ],
   "userConfig": {
     "openrouter_key": {
       "type": "string",

@@ -6,6 +6,8 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 from test_pstack_content import LEAK
 REPO = HERE.parents[1]
+sys.path.insert(0, str(REPO / "tools"))
+import sync_codex_plugin as scp
 NAMES = ("interrogate", "benchmark-checklist")
 OURS = {"orchestrate", "wplan", "wreview", "commit", "tune", "handoff"}
 SUPERPOWERS = {"brainstorming", "using-git-worktrees", "test-driven-development", "requesting-code-review",
@@ -26,7 +28,7 @@ class PstackSkillsTest(unittest.TestCase):
                 self.assertTrue(skill(h, n).startswith("---\nname: %s\ndescription: " % n), (h, n))
         # the plugin ships every Codex skill, pstack ones included (they stop when pstack-picks is off)
         shipped = {d.name for d in (REPO / "codex" / "skills").iterdir() if (d / "SKILL.md").is_file()}
-        self.assertEqual(shipped, (OURS - {"handoff"}) | set(NAMES))
+        self.assertEqual(shipped, (OURS - {"handoff"}) | set(NAMES) | set(scp.PROCESS_SKILLS))
 
     def test_claude_skills_not_model_invoked(self):
         for n in NAMES:
@@ -35,7 +37,7 @@ class PstackSkillsTest(unittest.TestCase):
 
     def test_no_name_collisions(self):
         for n in NAMES:
-            self.assertNotIn(n, OURS | SUPERPOWERS)
+            self.assertNotIn(n, OURS | SUPERPOWERS | set(scp.PROCESS_SKILLS))
 
     def test_no_leaks(self):
         for h in ("claude", "codex"):

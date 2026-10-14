@@ -16,6 +16,6 @@ To update: check out the new upstream commit, diff each upstream path below agai
 | `principles/test-behavior-not-implementation.md` | `skills/principle-test-behavior-not-implementation/SKILL.md` | frontmatter removed |
 | `principles/guard-the-context-window.md` | `skills/principle-guard-the-context-window/SKILL.md` | frontmatter removed |
 | `benchmark-checklist.md` | `skills/benchmark-checklist/SKILL.md` | frontmatter removed; Explain-the-Number link replaced by one sentence; Opening-a-PR playbook reference removed; "How this fits" section removed |
-| `cleanup.md` | `skills/deslop/SKILL.md` (Pass 1), `agents/comment-sicko.md` keep-list (Pass 2) | Pass 1 verbatim except "main" became "the base branch"; Pass 2 rewritten: persona, agent, `/how` `/why` `/architect` calls and kill flags removed; unverifiable constraints are kept and reported; Pass 2 limited to comments added or changed in the diff |
+| `cleanup.md` | `skills/deslop/SKILL.md` (Pass 1), `agents/comment-sicko.md` keep-list (Pass 2) | Pass 1 verbatim except "main" became "the base branch"; Pass 2 rewritten: persona, agent, `/how` `/why` `/architect` calls and kill flags removed; unverifiable constraints are kept and reported; Pass 2 limited to comments added or changed in the diff; Pass 1: minimum-code ladder added (Dryas) |
 
 Not taken: `poteto-mode` and its hooks, `why`, `how`, `architect`, `arena`, `swarm`, `tdd`, `babysit`, the `no-comments` skill, the `comment-sicko` agent, `setup-pstack`, `models.json`, the other principles.

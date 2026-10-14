@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jev_client
 import jevlog
+import memory_mcp
 import providers
 import thresholds
 
@@ -44,7 +45,8 @@ TOOLS = [
         "name": "log_dispatch",
         "description": ("Record one executor dispatch (first or re-dispatch) once the executor returns. Feeds /tune: tasks "
                         "dispatched, GOV-M4, ESC-M1. Optional: tokens and duration_ms from the Agent result's usage; "
-                        "score, score_tier and task_type from task_review.py answer; agent_id: the Agent result's agent id."),
+                        "score, score_tier and task_type from task_review.py answer; agent_id: the Agent result's agent id; "
+                        "phase \"return\" marks the second record, logged when the executor returns."),
         "inputSchema": {"type": "object", "properties": {"task": {"type": "string"}, "tier": {"type": "string"},
                                                          "role": {"type": "string"}, "attempt": {"type": "integer", "minimum": 1},
                                                          "tokens": {"type": "integer", "minimum": 0},
@@ -52,7 +54,8 @@ TOOLS = [
                                                          "score": {"type": "integer", "minimum": 0, "maximum": 100},
                                                          "score_tier": {"type": "string", "enum": ["haiku", "sonnet", "opus"]},
                                                          "task_type": {"type": "string"},
-                                                         "agent_id": {"type": "string", "maxLength": 64}},
+                                                         "agent_id": {"type": "string", "maxLength": 64},
+                                                         "phase": {"type": "string", "enum": ["return"]}},
                         "required": ["task", "tier", "role", "attempt"]},
     },
     {
@@ -73,6 +76,7 @@ TOOLS = [
                         "required": ["task", "branch", "tasks_merged"]},
     },
 ]
+TOOLS += memory_mcp.TOOLS  # owned core B: memory tools from the Dryas store
 
 
 def _error(mid: Any, code: int, message: str) -> Dict[str, Any]:
@@ -201,7 +205,8 @@ def _dispatch_extras(args: Dict[str, Any]) -> Dict[str, Any]:
                 score=score if score is not None and 0 <= score <= 100 else None,
                 score_tier=tier if tier in ("haiku", "sonnet", "opus") else None,
                 task_type=ttype[:32] if isinstance(ttype, str) and ttype.strip() else None,
-                agent_id=agent.strip() if isinstance(agent, str) and 0 < len(agent.strip()) <= 64 else None)
+                agent_id=agent.strip() if isinstance(agent, str) and 0 < len(agent.strip()) <= 64 else None,
+                phase="return" if args.get("phase") == "return" else None)
 
 
 def _normalize_questions(questions: Dict[str, Any]) -> Dict[str, Any]:
@@ -369,6 +374,9 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
             if name == "log_override":
                 jevlog.append("overrides", _sanitize_log_override(args))
                 return _text(mid, "logged")
+            if name in memory_mcp.NAMES:
+                obj, is_error = memory_mcp.call(name, args)
+                return _text(mid, obj, is_error)
             if name in LOG_TOOLS:
                 file, strs, ints = LOG_TOOLS[name]
                 rec, bad = _validate_log(args, strs, ints)

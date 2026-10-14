@@ -61,8 +61,9 @@ def check(root: str, path: str, has_agent_id: bool = False) -> Optional[str]:
     if rel == os.pardir or rel.startswith(os.pardir + os.sep):
         return "scope lock: %s is outside worktree %s while tasks %s are active" % (path, root, ",".join(map(str, active)))
     # Bookkeeping: .orchestrate/ (PLAN.md, active.json with its task review set) belongs to the main session
-    # (no agent_id). An executor never edits it, whatever its Scope globs say.
-    if rel == ".orchestrate" or rel.startswith(".orchestrate" + os.sep):
+    # (no agent_id). An executor never edits it, whatever its Scope globs say. The name is compared without case:
+    # on a case-insensitive filesystem .ORCHESTRATE/active.json is the same file.
+    if rel.split(os.sep, 1)[0].lower() == ".orchestrate":
         if not has_agent_id:
             return None
         return "scope lock: %s is orchestrator bookkeeping; executors never edit it" % rel.replace(os.sep, "/")
@@ -123,9 +124,7 @@ def _bash(ti: Dict[str, Any], cwd: str, has_agent_id: bool = False) -> Optional[
         return None
     root = find_root(cwd)
     ids = _active_ids(os.path.realpath(root)) if root else []
-    # Literal matching is the deny line: a command that spells .orchestrate is denied. Forms that hide the name
-    # (quotes, variables) are not parsed; they fall through to the ask below, never to an allow.
-    if has_agent_id and ".orchestrate" in cmd:
+    if has_agent_id and ".orchestrate" in cmd.lower():
         try:
             jevlog.append("scope", {"task": ids, "tool": "Bash", "decision": "deny"})
         except Exception:

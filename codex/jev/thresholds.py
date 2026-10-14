@@ -1,6 +1,7 @@
 """All tunable Jev thresholds. Defaults here and in the shipped thresholds.json; user overrides in
 ~/.dryas/jev/thresholds.json (written by /tune after approval)."""
 import copy
+import datetime
 import json
 import math
 import os
@@ -27,8 +28,6 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
         ],
     },
     "route": {"min_confidence": 0.7, "swarm_min": 0.7},
-    # scored_tier: start tier from the task score instead of the tier questions (owned core A2; off until
-    # /tune shows the score predicts escalation better over min_tasks scored tasks).
     "dispatch": {"min_confidence": 0.7, "haiku_default": True, "scored_tier": False, "min_tasks": 50},
     # Ladder: fast -> standard -> strong -> frontier. Frontier only after the strong executor also failed.
     "escalation": {"executor_confidence_below": 0.5, "haiku_failures_before_sonnet": 1,
@@ -41,13 +40,8 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     # Who decides gate questions ("jev" | "local") and who answers in shadow ("local" | "jev" | "none").
     # "auto": jev when a key is set, else local; shadow local when jev decides, else none (providers.py).
     "judge": {"provider": "auto", "shadow": "auto"},
-    # Task review set (owned core A2): task_skip lets a task verdict skip per-edit judgement; off until /tune shows
-    # false skips <= max_false_skip_rate over min_tasks tasks. Always-judged files are judged whatever it says.
     "review": {"task_skip": False, "min_tasks": 50, "max_false_skip_rate": 0.01},
-    # The task score's history signal counts only once a task type has min_tasks scored tasks.
     "history": {"min_tasks": 30},
-    # /tune's Done-when check compares tasks first dispatched before this ISO date (YYYY-MM-DD) with the rest;
-    # "" splits the logged tasks into an earlier and a later half.
     "baseline": {"until": ""},
 }
 
@@ -91,6 +85,15 @@ def _type_check(value: Any, default_value: Any) -> bool:
     if isinstance(default_value, dict):
         return isinstance(value, dict)
     return type(value) == type(default_value)
+
+
+def _is_date(value: str) -> bool:
+    """A real calendar date written YYYY-MM-DD (strptime alone also takes 2026-1-5)."""
+    try:
+        datetime.datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is not None
 
 
 def validate(dotted: str, value: Any) -> Optional[str]:
@@ -172,7 +175,7 @@ def validate(dotted: str, value: Any) -> Optional[str]:
     if key == "max_false_skip_rate" and not 0.0 <= value <= 1.0:
         return f"{dotted} must be a float in [0.0, 1.0]"
 
-    if dotted == "baseline.until" and value and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+    if dotted == "baseline.until" and value and not _is_date(value):
         return f"{dotted} must be \"\" or a date YYYY-MM-DD"
 
     if section == "judge":

@@ -28,12 +28,13 @@ class PluginShapeTest(unittest.TestCase):
         self.assertEqual(p["name"], "dryas")
         self.assertFalse(p["name"].startswith(BANNED_PREFIX))
         self.assertRegex(p["version"], r"^\d+\.\d+\.\d+$")
-        dep = [d for d in p["dependencies"] if d["name"] == "superpowers"][0]
-        self.assertEqual(dep["marketplace"], "claude-plugins-official")
-        # no version range: claude-plugins-official pins superpowers to a commit, and Claude Code then finds
-        # "no git tag satisfying" any range, so the install fails; the tested version is checked by setup instead
-        self.assertNotIn("version", dep)
         self.assertTrue(p["userConfig"]["openrouter_key"]["sensitive"])
+
+    def test_plugin_has_no_superpowers_dependency(self):
+        # owned core C: the Dryas process skills replace it; Superpowers is an optional extra (install/components.json)
+        p = load(PLUGIN / ".claude-plugin" / "plugin.json")
+        self.assertNotIn("superpowers", [d.get("name") if isinstance(d, dict) else d for d in p.get("dependencies", [])])
+        self.assertIn("superpowers", load(ROOT / "install" / "components.json"))
 
     def test_versions_are_semver_and_in_sync(self):
         # no other release version exists in the repo; the marketplace entry must track plugin.json

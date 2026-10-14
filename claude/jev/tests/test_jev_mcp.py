@@ -45,7 +45,8 @@ class McpTest(unittest.TestCase):
     def test_tools_list(self):
         r = jev_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         self.assertEqual(sorted(t["name"] for t in r["result"]["tools"]),
-                         ["jev_judge", "log_dispatch", "log_escalation", "log_merge", "log_override", "log_review"])
+                         ["jev_judge", "log_dispatch", "log_escalation", "log_merge", "log_override", "log_review",
+                          "memory_forget", "memory_list", "memory_search", "memory_store", "swarm_init"])
 
     def test_escalation_description_uses_tiers(self):
         # Defect caught: the MCP description still advertises the old model-name ladder.

@@ -3,11 +3,11 @@
 - The repo is the source of truth for these rules and that doc. Edit the repo (`claude/CLAUDE.md.template`, `docs/workflow.md`), merge, then re-run the installer. Never hand-edit the installed copies or this block.
 
 # Workflow rules
-- Brainstorm first, always (superpowers:brainstorming). Nothing is built or dispatched before the user approves the design.
+- Brainstorm first, always (dryas:brainstorm). Nothing is built or dispatched before the user approves the design.
 - Design work (UI/UX, layout, visual style, components, on-screen copy) uses both `ui-ux-pro-max` and `impeccable`.
 - Single-file fix: plain Claude on Opus. Anything multi-step: `/orchestrate <task>` on the approved design.
-- Every multi-step task runs in its own git worktree. One agent per worktree: never two sessions in one worktree; parallel loops each get their own worktree and branch. Merge only after `/wreview` and superpowers:verification-before-completion.
-- Layers: Jev = decision support (gates, routing; never writes code or plans), Ruflo = orchestration and the only memory/learning layer, Superpowers = process.
+- Every multi-step task runs in its own git worktree. One agent per worktree: never two sessions in one worktree; parallel loops each get their own worktree and branch. Merge only after `/wreview` and dryas:verify.
+- Layers: Jev = decision support (gates, routing; never writes code or plans), Ruflo = orchestration and the only memory/learning layer, Dryas skills = process (brainstorm, worktree, plan, tdd, debug, verify, review-request, review-receive); Superpowers is an optional extra, and the rules point at the Dryas skills even when it is installed.
 - Hook order per event: scope lock -> Jev -> Ruflo -> observer (observe-only, last). Stages: `~/.claude/jev/chain.json`.
 - `.orchestrate/` (incl. `.orchestrate/PLAN.md`) in a worktree is orchestration scratch: globally git-ignored, never committed.
 - Ask before any install, move, delete or overwrite, including any change to `~/.claude/settings.json`. Show a dry-run or diff first.

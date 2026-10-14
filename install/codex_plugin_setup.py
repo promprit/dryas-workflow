@@ -505,8 +505,6 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     ps.add_account(root, cdx, "codex_dirs")
     rec.update(components=sorted(set(comps)), version=want, plugin_root=plugin_root)
     ps._save_json(rec_path, rec)
-    if not any((ct.skills_dir(Path.home()) / n).exists() for n in ("superpowers", "brainstorming")):
-        print(ct.SP_HINT)
     if "jev" in comps and not (os.environ.get("OPENROUTER_API_KEY") or "").strip():
         print("note: Jev reads OPENROUTER_API_KEY from the shell Codex runs in; set it in your shell profile.")
     print("Dryas set up in %s (plugin at %s, state in %s)" % (cdx, plugin_root, root))
