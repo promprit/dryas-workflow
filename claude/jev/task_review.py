@@ -148,3 +148,47 @@ def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any]) -> Optional[Tuple[str,
         return ("skip", "task_review")
     except Exception as e:
         return ("unknown", "error:" + type(e).__name__)
+
+
+def _plan_root(plan: str) -> str:
+    d = os.path.dirname(os.path.abspath(plan))
+    return os.path.dirname(d) if os.path.basename(d) == ".orchestrate" else d
+
+
+def main(argv: List[str]) -> int:
+    """answer PLAN.md N: print the task_review answer for task N and log it (mcp.jsonl, tool task_review).
+    The orchestrator copies "entry" into active.json and "log_dispatch" into its log_dispatch call."""
+    if len(argv) != 4 or argv[1] != "answer":
+        sys.stderr.write("usage: task_review.py answer PLAN.md N\n")
+        return 2
+    import time
+    import jevlog
+    import task_score
+    import thresholds
+    try:
+        with open(argv[2], encoding="utf-8") as f:
+            sec = planfile.sections(f.read()).get(argv[3])
+    except OSError as e:
+        sys.stderr.write("cannot read %s (%s)\n" % (argv[2], type(e).__name__))
+        return 1
+    if sec is None:
+        sys.stderr.write("no Task %s in %s\n" % (argv[3], argv[2]))
+        return 1
+    root = _plan_root(argv[2])
+    task_id = "%s:%s" % (taskctx.branch(root) or "?", argv[3])
+    t0 = time.monotonic()
+    ans = task_score.answer(root, sec, task_id, thresholds.load())
+    wall_ms = round((time.monotonic() - t0) * 1000, 2)
+    jevlog.append("mcp", dict(tool="task_review", question="task_review", provider="local", task=task_id,
+                              answer=dict(skip=len(ans["skip"]), review=len(ans["review"]), tier=ans["tier"]),
+                              confidence=1.0, shadow_provider="none", score=ans["score"], score_tier=ans["tier"],
+                              task_type=ans["task_type"], wall_ms=wall_ms,
+                              reasons=["%s:%d" % (k, v) for k, v in sorted(ans["parts"].items())]))
+    entry = {"skip": ans["skip"], "review": ans["review"], "tier": ans["tier"], "score": ans["score"]}
+    print(json.dumps({"task": task_id, "review_version": REVIEW_VERSION, "entry": entry,
+                      "log_dispatch": {"score": ans["score"], "score_tier": ans["tier"], "task_type": ans["task_type"]}}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
