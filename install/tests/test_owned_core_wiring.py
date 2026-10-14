@@ -11,7 +11,7 @@ class WiringTest(unittest.TestCase):
         s = read("claude/skills/orchestrate/SKILL.md")
         for t in ("memory_search", "memory_store", "swarm_init"):
             self.assertIn("mcp__plugin_dryas_jev__" + t, s)
-        self.assertNotIn("mcp__plugin_ruflo-core_ruflo__", s.split("---", 2)[1])  # allowed-tools front matter
+            self.assertIn("mcp__plugin_ruflo-core_ruflo__" + t, s.split("---", 2)[1])  # both sets: no prompt with --memory ruflo
         self.assertNotIn("Ruflo memory", s)
         cx = read("codex/skills/orchestrate/SKILL.md")
         self.assertNotIn("server `ruflo`", cx)

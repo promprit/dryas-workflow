@@ -12,4 +12,4 @@ description: Weekly Jev calibration - override rates, judged share, escalations 
 
 **Judge disagreements.** `CORPUS_CANDIDATES_JSON` lists commands where the deciding judge and its shadow disagreed (patterns only, redacted). Show them to the user. For each one the user accepts, add a row to `reference/judge-corpus/commands.jsonl` in the dryas-workflow repo with the verdict the user says is right, and a local-judge rule change in a plan. Never paste file contents.
 
-**Allowlist.** A `gate.allowlist` proposal in `$dryas:tune` comes from local asks this user approved at least `gate.allowlist_min_approvals` times. Apply it only after the user approves (`tune.py apply gate.allowlist '<json>'`). Dangerous or destructive entries are refused.
+**Allowlist.** A `gate.allowlist` proposal in `$dryas:tune` comes from local asks this user approved at least `gate.allowlist_min_approvals` times. Proposals come only from approved local Bash asks, never from denies or edits, by design. Apply it only after the user approves (`tune.py apply gate.allowlist '<json>'`). Dangerous or destructive entries are refused.

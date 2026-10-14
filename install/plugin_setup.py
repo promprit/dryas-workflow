@@ -119,6 +119,13 @@ def set_judge(provider: Optional[str]) -> None:
         thresholds.set_value("judge.provider", provider)
 
 
+def _judge_provider() -> str:
+    """The resolved judge.provider (after set_judge): local or jev."""
+    sys.path.insert(0, str(REPO / "claude" / "jev"))
+    import thresholds
+    return thresholds.load()["judge"]["provider"]
+
+
 def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool], repo: Optional[Path] = None,
                       cd: Optional[Path] = None, providers: Optional[dict] = None) -> None:
     """Unselected components: disabled stages and listed in "off". Core stages are never touched.
@@ -398,8 +405,11 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     write_chain_local(root, comps, flowobserve, repo, cd, providers)
     add_account(root, cd)
     if "jev" in comps and not key and not any((os.environ.get(k) or "").strip() for k in KEY_VARS):
-        print("note: Jev needs an OpenRouter key: set OPENROUTER_API_KEY in your shell profile, or run "
-              "/plugin configure %s in Claude Code (or re-run with --openrouter-key)." % ID)
+        if _judge_provider() == "jev":
+            print("note: Jev needs an OpenRouter key: set OPENROUTER_API_KEY in your shell profile, or run "
+                  "/plugin configure %s in Claude Code (or re-run with --openrouter-key)." % ID)
+        else:
+            print("note: local judge in use; add a key (--openrouter-key) for the Jev upgrade.")
     print("Dryas set up in %s (plugin at %s, state in %s)" % (cd, plugin_root, root))
     return 0
 
@@ -617,18 +627,23 @@ def _ruflo_imported() -> bool:
 
 
 def run_legacy(items: list, yes: bool, cd: Optional[Path] = None) -> int:
-    """Ask about each item, run it, return the number of failures. --yes answers plugin and npm items;
-    a folder is never removed by --yes (the manual command is printed)."""
+    """Ask about each item, run it, return the number of failures. Items are pieces Dryas did not install
+    (legacy_items leaves out what extras_commands offers), so --yes never runs them: the command is printed.
+    Dryas-installed extras keep their 1.x --yes behaviour through extras_commands."""
     failed = 0
     for label, argv, path in items:
-        if path is not None and yes:
+        if yes and path is not None:
             print("not removed with --yes: %s; run `rm -rf %s` yourself if you want it gone" % (label, path))
+            continue
+        if yes:
+            print("not run with --yes (Dryas did not install it): %s; run `%s` yourself if you want it gone"
+                  % (label, " ".join(argv or [])))
             continue
         q = "Remove %s?" % label
         if path is not None and not _ruflo_imported():
             q = ("The Ruflo memory in %s was never imported into Dryas (run `dryas memory import-ruflo` first "
                  "to keep it). %s" % (path, q))
-        if not (yes or di.confirm(q)):
+        if not di.confirm(q):
             continue
         if argv:
             rc = di.run(argv, env=child_env(cd)) if cd is not None else di.run(argv)

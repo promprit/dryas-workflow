@@ -18,8 +18,5 @@
   "skill_ref:claude:superpowers:systematic-debugging": "skill:claude:debug",
   "skill_ref:claude:superpowers:using-git-worktrees": "skill:claude:worktree",
   "skill_ref:claude:superpowers:verification-before-completion": "skill:claude:verify",
-  "skill_ref:claude:superpowers:writing-plans": "skill:claude:plan",
-  "allowed_tool:claude:skill/orchestrate:mcp__plugin_ruflo-core_ruflo__memory_search": "allowed_tool:claude:skill/orchestrate:mcp__plugin_dryas_jev__memory_search",
-  "allowed_tool:claude:skill/orchestrate:mcp__plugin_ruflo-core_ruflo__memory_store": "allowed_tool:claude:skill/orchestrate:mcp__plugin_dryas_jev__memory_store",
-  "allowed_tool:claude:skill/orchestrate:mcp__plugin_ruflo-core_ruflo__swarm_init": "allowed_tool:claude:skill/orchestrate:mcp__plugin_dryas_jev__swarm_init"
+  "skill_ref:claude:superpowers:writing-plans": "skill:claude:plan"
 }

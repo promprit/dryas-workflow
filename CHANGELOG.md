@@ -27,6 +27,7 @@ Dryas 2.0 owns its core. The judge, the memory and the process skills ship in th
 - **Executor rule 5:** commit your own task only when the dispatch prompt allows it; never push, merge or create worktrees.
 - **Templates** rewritten as a measured rules pass: `claude/CLAUDE.md.template` went from 4047 to 3247 bytes and `codex/AGENTS.md.template` from 2462 to 2388 bytes. `docs/template-coverage.md` maps every pre-2.0 rule to where it lives now, and a size budget test pins them.
 - **Docs and repositioning:** the workflow, memory, governance, install, harness and roadmap docs describe the owned core; the README calls Dryas a target operating model plugin; the spec's section 9.2 example manifest and `reference/dryas.yaml` show the new providers.
+- **Allowlist hardening:** user allowlist entries the local judge flags as dangerous or destructive are dropped at load.
 - **`--no-jev` means `--judge local`:** the gate stays on with the local judge. A flag-less rerun of a 1.x `--no-jev` install keeps its gates off.
 - **Uninstall legacy cleanup** of the Ruflo extra is opt-in, never runs under `--yes`, and removes only what setup recorded.
 - **GitHub repo description** (applied 2026-10-15): "Dryas: a target operating model plugin for AI software delivery — framework, draft spec and a reference implementation with its own judge, memory and process skills for Claude Code and Codex." Topics added: ai-software-delivery, target-operating-model, code-review, developer-tools, llm-governance.

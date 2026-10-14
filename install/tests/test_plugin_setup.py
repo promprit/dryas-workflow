@@ -176,7 +176,8 @@ class SetupTest(unittest.TestCase):
     def test_jev_key_hint(self):
         e = Env(self)
         _patch_env(self, {k: "" for k in ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY")})
-        out = _out(lambda: ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False))
+        out = _out(lambda: ps.setup(REPO, e.a, COMPS, yes=True, key="", flowobserve=False,
+                                    providers={"judge": "jev", "memory": "dryas", "process": "dryas"}))
         self.assertIn("set OPENROUTER_API_KEY in your shell profile", out)
         out = _out(lambda: ps.setup(REPO, e.a, COMPS, yes=True, key="sk-1", flowobserve=False))
         self.assertNotIn("OPENROUTER_API_KEY in your shell profile", out)

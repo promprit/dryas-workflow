@@ -1876,6 +1876,14 @@ Done: `python3 -m pytest -q install/tests` passes; `python3 tools/sync_codex_plu
 
 ---
 
+## Deviations recorded during the build
+
+- Codex memory stages are not wired (pinned by a test); the spec asked for full conformance, so Codex is recorded as partial.
+- Allowlist proposals come only from approved asks, never from denies or edits.
+- Gate-outcome recording is Claude-only and runs in process.
+- `/tune` tier labels use the internal names.
+- `--wait` on background runs.
+
 ## Handoff notes for executors (facts gathered while planning, 2026-10-15)
 
 - **Stale-claim locations** (spec/owned-core at c33f7bb):

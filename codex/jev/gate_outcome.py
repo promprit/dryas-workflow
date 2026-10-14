@@ -49,7 +49,9 @@ def _write(ids: List[str]) -> None:
 
 
 def note_ask(tool_use_id: str) -> None:
-    """Remember an asked Bash call (gate.py). Never raises."""
+    """Remember an asked Bash call (gate.py). Never raises.
+    The read-modify-write is unlocked by design: the worst case is a lost id, i.e. a missed /tune approval,
+    never a looser gate."""
     try:
         tid = tool_use_id[:64]
         _write([i for i in _read() if i != tid] + [tid])
@@ -58,7 +60,8 @@ def note_ask(tool_use_id: str) -> None:
 
 
 def record(event: Any) -> None:
-    """Log an asked call that ran; a failed one (PostToolUseFailure, possibly a refused ask) is dropped unlogged."""
+    """Log an asked call that ran; a failed one (PostToolUseFailure, possibly a refused ask) is dropped unlogged.
+    Unlocked read-modify-write, as in note_ask (a lost id only misses a /tune approval)."""
     try:
         if not isinstance(event, dict) or not isinstance(event.get("tool_use_id"), str):
             return
