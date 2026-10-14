@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
 import thresholds
+import tune_tasks
+import tune_window
 
 PRICE_PER_TOKEN = 0.042 / 1000000
 
@@ -226,6 +228,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
             except TypeError:
                 continue
     risky = {r.get("head") for r in judged if r.get("decision") in ("deny", "ask")}
+    task_rows = tune_tasks.rows(gate, dispatch, esc, mcp)
     return {
         "tool_calls": len(calls),
         "gate_judged": len(judged),
@@ -254,6 +257,8 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "gate_judged_per_task_median": statistics.median(per_task.values()) if per_task else None,
         "shadow_spend_usd": shadow_spend,
         "top_judged_heads": [h for h, _ in heads.most_common() if h not in risky][:3],
+        "tasks": tune_tasks.summary(task_rows, gate, review),
+        "done_check": tune_window.check(task_rows, th["baseline"]["until"]),
     }
 
 
@@ -301,6 +306,8 @@ def proposals(rep: Dict[str, Any], th: Dict[str, Dict[str, Any]]) -> List[Dict[s
             out.append({"key": "dispatch.haiku_default", "old": th["dispatch"]["haiku_default"], "new": False,
                         "why": "Haiku->Sonnet climb rate %.0f%% over %d Haiku-started tasks (all logged history) (max %.0f%%); reasons: %s"
                                % (rate * 100, started, cap * 100, json.dumps(d.get("haiku_climb_reasons") or {}))})
+    if rep.get("tasks"):
+        out += tune_tasks.proposals(rep["tasks"], th)
     return [p for p in out if p["new"] != p["old"]]
 
 
@@ -339,6 +346,10 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
              "- Fable dispatches (opus->fable only): %d %s" % (rep["fable"]["count"], json.dumps(rep["fable"]["reasons"])),
              "- Fable without a prior Opus step (should be 0): %d %s" % (rep["fable_without_opus"]["count"], json.dumps(rep["fable_without_opus"]["reasons"]))]
     lines += delivery_lines
+    if rep.get("tasks"):
+        lines += tune_tasks.lines(rep["tasks"])
+    if rep.get("done_check"):
+        lines += tune_window.lines(rep["done_check"])
     lines += ["- Swarm vs plain token ratio: %s" % rep["swarm_vs_plain"],
              "- Jev spend: $%.6f" % rep["jev_spend_usd"], "", "| question | calls | below thr | overrides | override rate |", "|---|---|---|---|---|"]
     for q, v in sorted(rep["questions"].items()):

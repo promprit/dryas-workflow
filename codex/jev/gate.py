@@ -20,6 +20,7 @@ import jevlog
 import thresholds
 import local_judge
 import providers
+import task_review
 import taskctx
 
 try:
@@ -306,6 +307,11 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     if ssd and not os.path.isdir(ssd):
         jevlog.append("gate", dict(base, decision="none", error="ssd_missing"))
         return None
+    # After every earlier check (local_file, Bash skips, ssd_missing), before the judge. Only a boolean True enforces.
+    base = dict(base, **_task_review(tool, ti, cwd))
+    if base.get("task_review") == "skip" and t_all["review"]["task_skip"] is True:
+        jevlog.append("gate", dict(base, decision="skipped", via="task_review"))
+        return None
     t0 = time.monotonic()
     local = local_judge.gate_answers(tool, cmd, risky)
     local_ms = round((time.monotonic() - t0) * 1000, 2)
@@ -334,9 +340,26 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
 def _record(base: Dict[str, Any], d: Optional[Tuple[str, str]], a: Dict[str, Any], v: Dict[str, Any],
             t: Dict[str, Any], local: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
     # Returned as dict(...) built from helpers so tools/inventory.py can trace the log fields.
+    shadow = _shadow_fields(v, t, local)
     return dict(base, decision=d[0] if d else "none", p_safe=round(a["safe"]["value"], 3), risk=a["risk"]["value"],
                 risk_conf=round(a["risk"]["confidence"], 3), provider=v["provider"],
-                **_provider_fields(v, local_ms), **_shadow_fields(v, t, local))
+                **_provider_fields(v, local_ms), **shadow, **_false_skip(base, d, shadow))
+
+
+def _task_review(tool: str, ti: Dict[str, Any], cwd: str) -> Dict[str, Any]:
+    """The task verdict for a file edit inside an orchestrated task (owned core A2); {} outside one."""
+    if tool not in FILE_TOOLS:
+        return {}
+    v = task_review.edit_verdict(cwd, tool, ti)
+    return dict(task_review=v[0], task_review_why=v[1]) if v else {}
+
+
+def _false_skip(base: Dict[str, Any], d: Optional[Tuple[str, str]], shadow: Dict[str, Any]) -> Dict[str, Any]:
+    """On an edit the task verdict would skip: did the deciding or the shadow answer say deny or ask?"""
+    if base.get("task_review") != "skip":
+        return {}
+    said = {d[0] if d else "none", shadow.get("shadow_decision", "none")}
+    return dict(false_skip=bool(said & {"deny", "ask"}))
 
 
 def _provider_fields(v: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
