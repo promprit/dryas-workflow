@@ -11,6 +11,9 @@ recursively (depth 3); so is a heredoc or here-string fed to a shell without -c.
 is skipped up to its delimiter line (the whole rest if unterminated) and never judged as commands. Quoted text is one argument, so `grep "rm -rf /"` or `git commit -m 'reset --hard'` is
 not a hit.
 
+Discarding uncommitted work or stashes asks too (git checkout -- <path> / checkout ., git restore <path> without
+--staged, git stash clear / drop): those changes have no other copy.
+
 Boundary of the short list: rm -r is denied only for /, a glob in the first component, ~ / $HOME, the home roots
 /Users and /home and one user's whole home. Deletes of other system folders (/usr, /etc, /var, ...) are NOT on the
 short list; they get no decision here and are left to the harness's permissions."""
@@ -302,6 +305,40 @@ def _git(args: List[str]) -> Optional[str]:
     if sub == "branch" and ("D" in flags or (("d" in flags or "--delete" in rest)
                                              and ("f" in flags or "--force" in rest))):
         return "git_branch_delete"
+    return _git_discard(sub, rest, flags)
+
+
+def _operands(args: List[str], takes: Tuple[str, ...] = ()) -> List[str]:
+    """Non-option words of a git subcommand; everything after "--" is an operand; an option in `takes`
+    consumes the next word as its value."""
+    out: List[str] = []
+    i, n = 0, len(args)
+    while i < n:
+        a = args[i]
+        if a == "--":
+            return out + args[i + 1:]
+        if a.startswith("-") and a != "-":
+            i += 1 + (a in takes)
+            continue
+        out.append(a)
+        i += 1
+    return out
+
+
+def _git_discard(sub: str, rest: List[str], flags: str) -> Optional[str]:
+    """Commands that throw away uncommitted work or stashes (user decision 2026-10-14: always ask)."""
+    if sub == "checkout":
+        if "--" in rest:
+            return "git_checkout_discard" if rest[rest.index("--") + 1:] else None
+        return "git_checkout_discard" if "." in _operands(rest, ("-b", "-B", "--orphan")) else None
+    if sub == "restore":
+        staged = "--staged" in rest or "S" in flags
+        worktree = "--worktree" in rest or "W" in flags
+        if _operands(rest, ("-s", "--source", "--pathspec-from-file")) and (worktree or not staged):
+            return "git_restore_discard"
+        return None
+    if sub == "stash" and _operands(rest)[:1] in (["clear"], ["drop"]):
+        return "git_stash_drop"
     return None
 
 
