@@ -24,7 +24,6 @@
       ]
     }
   },
-  "jev": {},
   "ruflo": {
     "env": {
       "RUFLO_HOOK_SKIP_NPX": "1",

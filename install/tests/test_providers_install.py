@@ -18,6 +18,12 @@ UP_1X = ["core", "jev", "ruflo", "superpowers", "design", "pstack-picks"]
 
 
 class SelectTest(unittest.TestCase):
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        p = mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": d, "JEV_THRESHOLDS": os.path.join(d, "t.json")})
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_fresh_defaults_owned_core(self):
         self.assertEqual(run_cmd.select(P([]), None), ["core", "jev", "memory", "design", "pstack-picks"])
 
