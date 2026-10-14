@@ -61,7 +61,7 @@ class ImportTest(unittest.TestCase):
         rep = ruflo_import.import_ruflo(self.c, self.src)
         self.assertTrue(rep["ok"])
         self.assertEqual(rep["new"], 6)
-        self.assertEqual(rep["namespaces"]["commands"], {"source": 2, "imported": 2, "forgotten": 0})
+        self.assertEqual(rep["namespaces"]["commands"], {"source": 2, "imported": 2, "forgotten": 0, "missing": 0})
         kinds = {r[0]: r[1] for r in self.c.execute("SELECT key, kind FROM memory")}
         self.assertEqual(kinds, {"e1": "outcome", "e2": "outcome", "e3": "archive", "e4": "archive",
                                  "e5": "archive", "e6": "archive"})
@@ -115,7 +115,7 @@ class ImportTest(unittest.TestCase):
             self.c.execute("INSERT INTO forgotten (ns, source, key, ts) VALUES ('dryas-workflow', 'ruflo', 'e1', 1.0)")
         rep = ruflo_import.import_ruflo(self.c, self.src)
         self.assertTrue(rep["ok"])
-        self.assertEqual(rep["namespaces"]["dryas-workflow"], {"source": 1, "imported": 0, "forgotten": 1})
+        self.assertEqual(rep["namespaces"]["dryas-workflow"], {"source": 1, "imported": 0, "forgotten": 1, "missing": 0})
         self.assertIsNone(self.c.execute("SELECT id FROM memory WHERE key = 'e1'").fetchone())
 
     def test_not_a_ruflo_db_raises(self):
