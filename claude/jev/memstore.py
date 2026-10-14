@@ -17,7 +17,7 @@ import redact
 
 MAX_TITLE = 200
 MAX_BODY = 4000
-STORE_KINDS = ("outcome", "fact")
+STORE_KINDS = ("outcome", "fact", "retro")
 RANK_WEIGHT = 0.3
 HIT_WEIGHT = 0.1
 CANDIDATES = 200
