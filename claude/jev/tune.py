@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
 import thresholds
+import tune_tasks
+import tune_window
 
 PRICE_PER_TOKEN = 0.042 / 1000000
 
@@ -86,14 +88,7 @@ def canonical(name: str) -> str:
     return base if "." in str(name) else str(name)
 
 
-def _int(v: Any) -> Optional[int]:
-    if isinstance(v, bool):
-        return None
-    if isinstance(v, int):
-        return v
-    if isinstance(v, str) and v.strip().isdigit():
-        return int(v.strip())
-    return None
+_int = tune_tasks.as_int
 
 
 def _num(v: Any) -> Optional[float]:
@@ -107,27 +102,15 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
     dispatch = [r for r in dispatch if isinstance(r, dict)]
     review = [r for r in review if isinstance(r, dict)]
     merge = [r for r in merge if isinstance(r, dict) and r.get("task") is not None]
-    # A task's start tier is its coder's first dispatch: a fast (`haiku`) tester logged before a
-    # skip-up standard (`sonnet`) coder must not make the task fast-started. Attempts are numbered per
-    # task, so that coder may be attempt 2. Without a coder record, fall back to the first
-    # attempt-1 dispatch of any role.
-    first_tier: Dict[str, Any] = {}
-    coder_tier: Dict[str, Any] = {}
-    for r in dispatch:
-        if r.get("task") is None:
-            continue
-        if _int(r.get("attempt")) == 1:
-            first_tier.setdefault(str(r["task"]), r.get("tier"))
-        if r.get("role") == "coder":
-            coder_tier.setdefault(str(r["task"]), r.get("tier"))
-    first_tier.update(coder_tier)
+    first_tier = {t: v["start"] for t, v in tune_tasks.tiers(dispatch).items()}
     n = len(first_tier)
     denials = sum(1 for r in scope if isinstance(r, dict))
     climbs = _steps(esc, "opus", "sonnet")["count"]
     # ESC-M3: fast-started = attempt-1 dispatch on `haiku`. Skip-ups start on `sonnet` at attempt 1,
     # so their `haiku`->`sonnet` records are not counted.
     haiku_tasks = {t for t, tier in first_tier.items() if tier == "haiku"}
-    reached_cheap = {str(r["task"]) for r in dispatch if r.get("task") is not None and r.get("tier") != "haiku"}
+    reached_cheap = {str(r["task"]) for r in dispatch if r.get("task") is not None and "phase" not in r
+                     and r.get("tier") != "haiku"}
     haiku_climbs = [r for r in esc if isinstance(r, dict) and r.get("from_model") == "haiku"
                     and r.get("to_model") == "sonnet" and str(r.get("task")) in haiku_tasks]
     last_climb: Dict[str, Dict[str, Any]] = {}
@@ -178,7 +161,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         ids = ([r["task"]] if isinstance(r.get("task"), str) else []) + [t for t in (r.get("tasks") if isinstance(r.get("tasks"), list) else []) if isinstance(t, str)]
         per_task.update(set(ids))
     for r in dispatch:
-        if isinstance(r, dict) and isinstance(r.get("task"), str):
+        if isinstance(r, dict) and isinstance(r.get("task"), str) and "phase" not in r:
             per_task.setdefault(r["task"], 0)
     shadow_decided = [r for r in shadowed if r.get("decision") in ("deny", "ask") or r.get("shadow_decision") in ("deny", "ask")]
     shadow_spend = sum(v for v in (_num(r.get("shadow_cost")) for r in gate) if v is not None)
@@ -226,6 +209,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
             except TypeError:
                 continue
     risky = {r.get("head") for r in judged if r.get("decision") in ("deny", "ask")}
+    task_rows = tune_tasks.rows(gate, dispatch, esc, mcp)
     return {
         "tool_calls": len(calls),
         "gate_judged": len(judged),
@@ -254,6 +238,8 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "gate_judged_per_task_median": statistics.median(per_task.values()) if per_task else None,
         "shadow_spend_usd": shadow_spend,
         "top_judged_heads": [h for h, _ in heads.most_common() if h not in risky][:3],
+        "tasks": tune_tasks.summary(task_rows, gate, review, th),
+        "done_check": tune_window.check(task_rows, th["baseline"]["until"], review, gate),
     }
 
 
@@ -301,6 +287,8 @@ def proposals(rep: Dict[str, Any], th: Dict[str, Dict[str, Any]]) -> List[Dict[s
             out.append({"key": "dispatch.haiku_default", "old": th["dispatch"]["haiku_default"], "new": False,
                         "why": "Haiku->Sonnet climb rate %.0f%% over %d Haiku-started tasks (all logged history) (max %.0f%%); reasons: %s"
                                % (rate * 100, started, cap * 100, json.dumps(d.get("haiku_climb_reasons") or {}))})
+    if rep.get("tasks"):
+        out += tune_tasks.proposals(rep["tasks"], th)
     return [p for p in out if p["new"] != p["old"]]
 
 
@@ -339,6 +327,10 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
              "- Fable dispatches (opus->fable only): %d %s" % (rep["fable"]["count"], json.dumps(rep["fable"]["reasons"])),
              "- Fable without a prior Opus step (should be 0): %d %s" % (rep["fable_without_opus"]["count"], json.dumps(rep["fable_without_opus"]["reasons"]))]
     lines += delivery_lines
+    if rep.get("tasks"):
+        lines += tune_tasks.lines(rep["tasks"])
+    if rep.get("done_check"):
+        lines += tune_window.lines(rep["done_check"])
     lines += ["- Swarm vs plain token ratio: %s" % rep["swarm_vs_plain"],
              "- Jev spend: $%.6f" % rep["jev_spend_usd"], "", "| question | calls | below thr | overrides | override rate |", "|---|---|---|---|---|"]
     for q, v in sorted(rep["questions"].items()):

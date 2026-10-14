@@ -1,42 +1,15 @@
-import json
 import os
-import subprocess
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import local_judge
+from test_local_judge_parity import _timed, assert_fast
 
 
 def decision(cmd):
     return local_judge.gate_answers("Bash", cmd, True)["decision"] or "none"
 
-
-JEV_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Copied from test_local_judge_parity.py: a backtracking `re` match holds the GIL, so the call
-# runs in a child process killed after the limit; the child times the call itself.
-_CHILD = (
-    "import json, sys, time\n"
-    "sys.path.insert(0, sys.argv[1])\n"
-    "import local_judge\n"
-    "cmd = sys.stdin.read()\n"
-    "start = time.perf_counter()\n"
-    "res = local_judge.gate_answers('Bash', cmd, True)\n"
-    "secs = time.perf_counter() - start\n"
-    "print(json.dumps({'secs': secs, 'res': res}))\n"
-)
-
-
-def _timed(cmd, limit=2.0):
-    """Return (hung, box) where box has 'secs' and 'res', or 'err' if the child failed."""
-    try:
-        p = subprocess.run([sys.executable, "-c", _CHILD, JEV_DIR], input=cmd, capture_output=True,
-                           text=True, timeout=limit)
-    except subprocess.TimeoutExpired:
-        return True, {}
-    if p.returncode != 0:
-        return False, {"err": AssertionError(p.stderr.strip()[-2000:])}
-    return False, json.loads(p.stdout)
 
 
 class HeredocTest(unittest.TestCase):
@@ -88,7 +61,7 @@ class HeredocTest(unittest.TestCase):
                 self.assertFalse(hung, name + ": still running after 2 s")
                 if "err" in box:
                     raise box["err"]
-                self.assertLess(box["secs"], 0.25, "%s took %.3f s" % (name, box["secs"]))
+                assert_fast(self, name, box)
 
 
 if __name__ == "__main__":
