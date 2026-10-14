@@ -148,3 +148,140 @@ def _components(repo: Path) -> Set[str]:
 
 
 STATIC: Tuple[Callable[[Path], Set[str]], ...] = (_manifests, _files, _refs, _hooks, _components)
+
+
+def _isolated(tmp: str) -> Dict[str, str]:
+    return {"DRYAS_DATA_ROOT": tmp, "JEV_LOG_DIR": os.path.join(tmp, "jev", "logs"),
+            "JEV_THRESHOLDS": os.path.join(tmp, "jev", "thresholds.json")}
+
+
+def _load(path: Path, name: str) -> Any:
+    """Import a repo module by path (its folder on sys.path while it loads, for sibling imports)."""
+    d = str(path.parent)
+    sys.path.insert(0, d)
+    try:
+        spec = importlib.util.spec_from_file_location(name, str(path))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception as e:
+        raise InventoryError("%s: %s: %s" % (path.as_posix(), type(e).__name__, e))
+    finally:
+        sys.path.remove(d)
+
+
+def _mcp_tools(repo: Path) -> Set[str]:
+    m = _load(repo / "claude/jev/jev_mcp.py", "inventory_jev_mcp")
+    out: Set[str] = set()
+    for t in m.TOOLS:
+        out.add("mcp_tool:jev:" + t["name"])
+        out |= {"mcp_param:jev:%s.%s" % (t["name"], p) for p in t.get("inputSchema", {}).get("properties", {})}
+    for file, strs, ints in m.LOG_TOOLS.values():
+        out |= {"log:" + file} | {"log_field:%s:%s" % (file, f) for f in list(strs) + list(ints)}
+    by_tool = {t["name"]: t for t in m.TOOLS}
+    for tool, file in (("log_escalation", "escalations"), ("log_override", "overrides")):
+        props = by_tool.get(tool, {}).get("inputSchema", {}).get("properties", {})
+        out |= {"log:" + file} | {"log_field:%s:%s" % (file, p) for p in props}
+    return out
+
+
+def _flags(repo: Path) -> Set[str]:
+    rc = _load(repo / "install/run_cmd.py", "inventory_run_cmd")
+    with mock.patch.object(argparse.ArgumentParser, "parse_args", lambda self, *a, **k: self):
+        parser = rc.parse([])  # parse() builds the parser; parse_args is patched to hand it back
+    out = {"component:optional:" + c for c in rc.OPTIONAL}
+    for action in parser._actions:
+        for opt in action.option_strings:
+            if opt.startswith("--") and opt != "--help":
+                out.add("install_flag:" + opt)
+                out |= {"install_flag:%s=%s" % (opt, c) for c in (action.choices or [])}
+    return out
+
+
+def _flat(prefix: str, d: Dict[str, Any], out: Set[str]) -> None:
+    for k, v in d.items():
+        if isinstance(v, dict):
+            _flat(prefix + k + ".", v, out)
+        else:
+            out.add("threshold:" + prefix + k)
+
+
+def _thresholds(repo: Path) -> Set[str]:
+    th = _load(repo / "claude/jev/thresholds.py", "inventory_thresholds")
+    out: Set[str] = set()
+    _flat("", th.DEFAULTS, out)
+    _flat("", _json(repo / "claude/jev/thresholds.json"), out)
+    return out
+
+
+def _dict_keys(node: Any, assigns: Dict[str, List[Any]], seen: Set[int]) -> Set[str]:
+    if id(node) in seen:
+        return set()
+    seen.add(id(node))
+    if isinstance(node, ast.Dict):
+        return {k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "dict":
+        keys = {kw.arg for kw in node.keywords if kw.arg}
+        for a in node.args:
+            keys |= _dict_keys(a, assigns, seen)
+        return keys
+    if isinstance(node, ast.Name):
+        keys: Set[str] = set()
+        for value in assigns.get(node.id, []):
+            keys |= _dict_keys(value, assigns, seen)
+        return keys
+    return set()
+
+
+def _logs(repo: Path) -> Set[str]:
+    out = {"log_field:*:ts", "log_field:*:session_id", "log_field:*:cwd"}  # added by jevlog.append to every record
+    for p in sorted((repo / "claude/jev").glob("*.py")):
+        tree = ast.parse(p.read_text(encoding="utf-8"), p.as_posix())
+        for scope in [tree] + [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+            assigns: Dict[str, List[Any]] = {}
+            for n in ast.walk(scope):
+                if isinstance(n, ast.Assign):
+                    for t in n.targets:
+                        if isinstance(t, ast.Name):
+                            assigns.setdefault(t.id, []).append(n.value)
+            for n in ast.walk(scope):
+                if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "append"
+                        and getattr(n.func.value, "id", "") == "jevlog" and n.args
+                        and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str)):
+                    name = n.args[0].value
+                    out.add("log:" + name)
+                    if len(n.args) > 1:
+                        out |= {"log_field:%s:%s" % (name, k) for k in _dict_keys(n.args[1], assigns, set())}
+    return out
+
+
+def _tune(repo: Path) -> Set[str]:
+    tmp = tempfile.mkdtemp()
+    try:
+        with mock.patch.dict(os.environ, _isolated(tmp)):
+            os.makedirs(os.path.join(tmp, "jev", "logs"))
+            tune = _load(repo / "claude/jev/tune.py", "inventory_tune")
+            text = tune.render(tune.build(os.path.join(tmp, "jev", "logs")), [])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    out: Set[str] = set()
+    for line in text.splitlines():
+        if line.startswith("#"):
+            out.add("tune_line:" + line.lstrip("#").strip())
+        elif line.startswith("- ") and ":" in line:
+            out.add("tune_line:" + line[2:].split(":", 1)[0].strip())
+        elif line.startswith("| ") and "---" not in line:
+            out.add("tune_line:table " + line.strip())
+        elif line.startswith("PROPOSALS_JSON"):
+            out.add("tune_line:PROPOSALS_JSON")
+    return out
+
+
+RUNTIME: Tuple[Callable[[Path], Set[str]], ...] = (_mcp_tools, _flags, _thresholds, _logs, _tune)
+
+
+def collect(repo: Path = ROOT) -> List[str]:
+    out: Set[str] = set()
+    for c in STATIC + RUNTIME:
+        out |= c(repo)
+    return sorted(out)
