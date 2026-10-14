@@ -1,6 +1,11 @@
+import contextlib
+import io
+import json
 import os
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import thresholds
@@ -86,6 +91,33 @@ class ProposalTest(unittest.TestCase):
 
     def test_min_approvals_default(self):
         self.assertEqual(thresholds.load()["gate"]["allowlist_min_approvals"], 3)
+
+
+
+class LoadAllowlistTest(unittest.TestCase):
+    def load_with(self, allowlist):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "thresholds.json")
+        with open(path, "w") as f:
+            json.dump({"gate": {"allowlist": allowlist}}, f)
+        p = mock.patch.dict(os.environ, {"JEV_THRESHOLDS": path})
+        p.start()
+        self.addCleanup(p.stop)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            got = thresholds.load()["gate"]["allowlist"]
+        self.assertEqual((out.getvalue(), err.getvalue()), ("", ""))
+        return got
+
+    def test_only_refused_entries_are_dropped(self):
+        self.assertEqual(self.load_with(["ls", "rg", "rm -rf"]), ["ls", "rg"])
+        self.assertEqual(self.load_with(["ls", "rg", "mkfs.ext4 x"]), ["ls", "rg"])
+
+    def test_safe_custom_entries_load_unchanged(self):
+        self.assertEqual(self.load_with(["ls", "rg", "jq", "git status"]), ["ls", "rg", "jq", "git status"])
+
+    def test_validate_stays_strict(self):
+        self.assertIsNotNone(thresholds.validate("gate.allowlist", ["ls", "rg", "rm -rf"]))
 
 
 if __name__ == "__main__":

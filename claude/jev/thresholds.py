@@ -206,6 +206,10 @@ def load() -> Dict[str, Dict[str, Any]]:
         if section in out and isinstance(values, dict):
             for key, value in values.items():
                 if key in out[section]:
+                    if (section, key) == ("gate", "allowlist") and isinstance(value, list) \
+                            and all(isinstance(e, str) for e in value):
+                        # Drop only the refused entries; a user's safe custom entries survive (silent: hooks).
+                        value = [e for e in value if validate("gate.allowlist", [e]) is None]
                     # Use default if value fails type or range validation (NaN/inf, out of range)
                     if _type_check(value, out[section][key]) and validate("%s.%s" % (section, key), value) is None:
                         out[section][key] = value
