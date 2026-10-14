@@ -12,6 +12,7 @@
 - `codex/jev` and `codex/pstack` are generated: edit `claude/`, run `python tools/sync_codex_plugin.py`, commit both. The command lines in `codex/hooks/hooks.json` are frozen (Codex trusts each hook by a hash of its entry); change one only with a version bump and a release note that setup will ask to re-trust.
 - `install/tests/test_portability.py` enforces the banned patterns. Mark a deliberate exception with `portable-ok: <reason>` on the same line.
 - CI must be green on macOS, Ubuntu and Windows before merging to main. Branch protection enforces this.
+- Nothing is removed without a replacement: if `python tools/inventory.py --check` reports `lost:`, add the equivalent or map the entry in `reference/inventory-map.json` (see [reference/README.md](reference/README.md#no-loss-inventory)). Never rebuild `reference/inventory-1.x.json` to make the check pass.
 
 ## Plugin version
 

@@ -285,3 +285,67 @@ def collect(repo: Path = ROOT) -> List[str]:
     for c in STATIC + RUNTIME:
         out |= c(repo)
     return sorted(out)
+
+
+def check(snapshot: Iterable[str], current: Iterable[str], mapping: Dict[str, str], extras: Iterable[str]) -> List[str]:
+    snap, cur, ext = set(snapshot), set(current), set(extras)
+    problems: List[str] = []
+    for e in sorted(snap):
+        target = mapping.get(e)
+        if e in cur:
+            if target is not None:
+                problems.append("stale map: %s still exists" % e)
+        elif target is None:
+            problems.append("lost: %s" % e)
+        elif target.startswith("extra:"):
+            if target[len("extra:"):] not in ext:
+                problems.append("lost: %s -> %s, no such optional component" % (e, target))
+        elif target not in cur:
+            problems.append("lost: %s -> %s, target missing" % (e, target))
+    problems += ["unknown map entry: %s" % k for k in sorted(set(mapping) - snap)]
+    return problems
+
+
+def _version(repo: Path) -> str:
+    return str(_json(repo / "claude/.claude-plugin/plugin.json").get("version", ""))
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    ap = argparse.ArgumentParser(prog="inventory", description="No-loss inventory of the Dryas surface.")
+    mode = ap.add_mutually_exclusive_group(required=True)
+    for m in ("list", "write", "check"):
+        mode.add_argument("--" + m, action="store_true")
+    ap.add_argument("--force", action="store_true", help="with --write: rebuild the baseline (only from a 1.x tree)")
+    ap.add_argument("--repo", default=str(ROOT))
+    a = ap.parse_args(argv)
+    repo = Path(a.repo)
+    try:
+        cur = collect(repo)
+        if a.list:
+            print("\n".join(cur))
+            return 0
+        snap = repo / SNAPSHOT
+        if a.write:
+            if snap.exists() and not a.force:
+                print("inventory: %s is the 1.x baseline and already exists; --force rebuilds it, "
+                      "and only from a 1.x tree" % SNAPSHOT, file=sys.stderr)
+                return 1
+            with open(snap, "w", encoding="utf-8", newline="\n") as f:
+                f.write(json.dumps({"version": _version(repo), "entries": cur}, indent=1) + "\n")
+            print("inventory: wrote %d entries to %s" % (len(cur), SNAPSHOT))
+            return 0
+        base = _json(snap)["entries"]
+        mp = repo / MAP
+        mapping = _json(mp) if mp.exists() else {}
+        problems = check(base, cur, mapping, _json(repo / "install/components.json").keys())
+    except InventoryError as e:
+        print("inventory: %s" % e, file=sys.stderr)
+        return 2
+    for p in problems:
+        print(p)
+    print("inventory: %d baseline entries, %d problems" % (len(base), len(problems)))
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

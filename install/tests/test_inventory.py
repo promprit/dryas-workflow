@@ -116,3 +116,43 @@ class LogFieldTest(unittest.TestCase):
         self.assertIn("log:x", got)
         self.assertIn("log_field:x:a", got)
         self.assertIn("log_field:x:b", got)
+
+
+class CheckTest(unittest.TestCase):
+    def test_repo_has_no_unmapped_loss(self):
+        self.assertEqual(inv.main(["--check"]), 0, "run: python tools/inventory.py --check")
+
+    def test_lost_entry_fails(self):
+        self.assertEqual(inv.check(["a:1", "a:2"], ["a:1"], {}, []), ["lost: a:2"])
+
+    def test_mapped_entry_passes_only_when_target_exists(self):
+        self.assertEqual(inv.check(["a:2"], ["b:2"], {"a:2": "b:2"}, []), [])
+        self.assertEqual(inv.check(["a:2"], [], {"a:2": "b:2"}, []), ["lost: a:2 -> b:2, target missing"])
+
+    def test_extra_mapping_needs_a_listed_component(self):
+        self.assertEqual(inv.check(["a:2"], [], {"a:2": "extra:ruflo"}, ["ruflo"]), [])
+        self.assertEqual(inv.check(["a:2"], [], {"a:2": "extra:nope"}, ["ruflo"]),
+                         ["lost: a:2 -> extra:nope, no such optional component"])
+
+    def test_map_stays_honest(self):
+        self.assertEqual(inv.check(["a:1"], ["a:1"], {"a:1": "b:1"}, []), ["stale map: a:1 still exists"])
+        self.assertEqual(inv.check([], [], {"z:9": "b:1"}, []), ["unknown map entry: z:9"])
+
+    def test_write_refuses_to_replace_the_baseline(self):
+        self.assertEqual(inv.main(["--write"]), 1)
+
+    def test_baseline_is_the_current_1x_surface(self):
+        data = json.loads((ROOT / inv.SNAPSHOT).read_text(encoding="utf-8"))
+        self.assertEqual(data["version"], "1.0.2")
+        self.assertEqual(data["entries"], sorted(data["entries"]))
+        self.assertGreater(len(data["entries"]), 150)
+
+    def test_baseline_has_unix_newlines(self):
+        self.assertNotIn(b"\r\n", (ROOT / inv.SNAPSHOT).read_bytes())
+
+    def test_collector_error_exits_2(self):
+        t = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(t), True)
+        (t / "claude/jev").mkdir(parents=True)
+        (t / "claude/jev/chain.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual(inv.main(["--list", "--repo", str(t)]), 2)
