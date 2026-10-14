@@ -205,3 +205,257 @@ Upstream: `writing-plans/`
 | Execution Handoff — Native: in-session execution | plan/SKILL.md § Hand-off |
 | plan-document-reviewer-prompt.md | plan/plan-reviewer-prompt.md § Plan reviewer |
 | plan-document-reviewer-prompt.md — what to check, calibration, output format | plan/plan-reviewer-prompt.md § Plan reviewer |
+
+## worktree
+
+Upstream: `using-git-worktrees/`
+
+| Upstream item | Where it lives |
+|---|---|
+| Overview | worktree/SKILL.md § Worktree |
+| Overview — isolated workspace; native tools first, git fallback | worktree/SKILL.md § Worktree |
+| Overview — core principle: detect, then native, then git; never fight the harness | worktree/SKILL.md § Worktree |
+| Overview — announce at start | worktree/SKILL.md § Worktree |
+| Overview — one agent per worktree (Dryas) | worktree/SKILL.md § Worktree; template: "One agent per worktree"; orchestrate: "One agent per worktree: this session owns it alone." |
+| Step 0: Detect Existing Isolation | worktree/SKILL.md § Detect existing isolation |
+| Step 0: Detect Existing Isolation — check before creating anything (git-dir, git-common-dir, branch) | worktree/SKILL.md § Detect existing isolation |
+| Step 0: Detect Existing Isolation — submodule guard | worktree/SKILL.md § Detect existing isolation |
+| Step 0: Detect Existing Isolation — already in a linked worktree: skip creation | worktree/SKILL.md § Detect existing isolation |
+| Step 0: Detect Existing Isolation — report on a branch | worktree/SKILL.md § Detect existing isolation |
+| Step 0: Detect Existing Isolation — report on detached HEAD | worktree/SKILL.md § Detect existing isolation |
+| Step 0: Detect Existing Isolation — normal checkout: honor a declared preference, else ask consent | worktree/SKILL.md § Detect existing isolation; template: "Every multi-step task runs in its own git worktree" |
+| Step 0: Detect Existing Isolation — declined: work in place | worktree/SKILL.md § Detect existing isolation |
+| Step 1: Create Isolated Workspace | worktree/SKILL.md § Create the worktree |
+| Step 1: Create Isolated Workspace — two mechanisms, in order | worktree/SKILL.md § Create the worktree |
+| 1a. Native Worktree Tools (preferred) | worktree/SKILL.md § Create the worktree |
+| 1a. Native Worktree Tools (preferred) — use the native tool if present (EnterWorktree on Claude) | worktree/SKILL.md § Create the worktree; worktree/SKILL.md § Worktree |
+| 1a. Native Worktree Tools (preferred) — the git fallback beside a native tool creates phantom state | worktree/SKILL.md § Create the worktree |
+| 1a. Native Worktree Tools (preferred) — fallback only without a native tool | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Directory Selection: explicit preference beats filesystem state | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Directory Selection 1. declared directory preference | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Directory Selection 2. existing .worktrees or worktrees; .worktrees wins | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Directory Selection 3. default .worktrees/ | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Safety Verification: a project-local directory must be ignored | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Safety Verification: not ignored, add to .gitignore and commit | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Safety Verification: why critical | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Create the Worktree: add with a new branch, cd into it | worktree/SKILL.md § Create the worktree |
+| 1b. Git Worktree Fallback — Sandbox fallback: say so, work in place | worktree/SKILL.md § Create the worktree |
+| Step 2: Project Setup | worktree/SKILL.md § Project setup |
+| Step 2: Project Setup — Node.js, Rust, Python, Go setup commands | worktree/SKILL.md § Project setup |
+| Step 3: Verify Clean Baseline | worktree/SKILL.md § Clean baseline |
+| Step 3: Verify Clean Baseline — run the project's tests | worktree/SKILL.md § Clean baseline |
+| Step 3: Verify Clean Baseline — tests fail: report and ask | worktree/SKILL.md § Clean baseline |
+| Step 3: Verify Clean Baseline — tests pass: report ready | worktree/SKILL.md § Clean baseline |
+| Report | worktree/SKILL.md § Report |
+| Report — path, test count, ready to implement | worktree/SKILL.md § Report |
+| Quick Reference | worktree/SKILL.md § Quick reference |
+| Quick Reference — already in linked worktree | worktree/SKILL.md § Quick reference |
+| Quick Reference — in a submodule | worktree/SKILL.md § Quick reference |
+| Quick Reference — native worktree tool available | worktree/SKILL.md § Quick reference |
+| Quick Reference — no native tool | worktree/SKILL.md § Quick reference |
+| Quick Reference — .worktrees/ exists | worktree/SKILL.md § Quick reference |
+| Quick Reference — worktrees/ exists | worktree/SKILL.md § Quick reference |
+| Quick Reference — both exist | worktree/SKILL.md § Quick reference |
+| Quick Reference — neither exists | worktree/SKILL.md § Quick reference |
+| Quick Reference — directory not ignored | worktree/SKILL.md § Quick reference |
+| Quick Reference — permission error on create | worktree/SKILL.md § Quick reference |
+| Quick Reference — tests fail during baseline | worktree/SKILL.md § Quick reference |
+| Quick Reference — no package.json/Cargo.toml | worktree/SKILL.md § Quick reference |
+| Common Rationalizations | worktree/SKILL.md § Common rationalizations |
+| Common Rationalizations — "I'm obviously not in a worktree" | worktree/SKILL.md § Common rationalizations |
+| Common Rationalizations — "the git fallback is quicker than hunting for a native tool" | worktree/SKILL.md § Common rationalizations |
+| Common Rationalizations — "The worktree directory is surely ignored already" | worktree/SKILL.md § Common rationalizations |
+| Common Rationalizations — "Any directory name works" | worktree/SKILL.md § Common rationalizations |
+| Common Rationalizations — "The workspace is fresh, baseline tests can wait" | worktree/SKILL.md § Common rationalizations |
+
+## verify
+
+Upstream: `verification-before-completion/`
+
+| Upstream item | Where it lives |
+|---|---|
+| Overview | verify/SKILL.md § Verify |
+| Overview — core principle: evidence before claims, always | verify/SKILL.md § Verify |
+| Overview — violating the letter is violating the spirit | verify/SKILL.md § Verify |
+| The Iron Law | verify/SKILL.md § Iron law |
+| The Iron Law — no completion claims without fresh verification evidence | verify/SKILL.md § Iron law |
+| The Iron Law — not run in this message, cannot claim it passes | verify/SKILL.md § Iron law |
+| The Gate Function | verify/SKILL.md § Gate function |
+| The Gate Function — 1. IDENTIFY | verify/SKILL.md § Gate function |
+| The Gate Function — 2. RUN | verify/SKILL.md § Gate function |
+| The Gate Function — 3. READ | verify/SKILL.md § Gate function |
+| The Gate Function — 4. VERIFY: no, state actual status; yes, claim with evidence | verify/SKILL.md § Gate function |
+| The Gate Function — 5. ONLY THEN | verify/SKILL.md § Gate function |
+| The Gate Function — skip any step = lying, not verifying | verify/SKILL.md § Gate function |
+| Common Failures | verify/SKILL.md § Common failures |
+| Common Failures — tests pass | verify/SKILL.md § Common failures |
+| Common Failures — linter clean | verify/SKILL.md § Common failures |
+| Common Failures — build succeeds | verify/SKILL.md § Common failures |
+| Common Failures — bug fixed | verify/SKILL.md § Common failures |
+| Common Failures — regression test works | verify/SKILL.md § Common failures |
+| Common Failures — agent completed | verify/SKILL.md § Common failures |
+| Common Failures — requirements met | verify/SKILL.md § Common failures |
+| Red Flags - STOP | verify/SKILL.md § Red flags |
+| Red Flags - STOP — "should", "probably", "seems to" | verify/SKILL.md § Red flags |
+| Red Flags - STOP — satisfaction before verification | verify/SKILL.md § Red flags |
+| Red Flags - STOP — about to commit, push or PR without verification | verify/SKILL.md § Red flags |
+| Red Flags - STOP — trusting agent success reports | verify/SKILL.md § Red flags |
+| Red Flags - STOP — relying on partial verification | verify/SKILL.md § Red flags |
+| Red Flags - STOP — "just this once" | verify/SKILL.md § Red flags |
+| Red Flags - STOP — tired and wanting work over | verify/SKILL.md § Red flags |
+| Red Flags - STOP — any wording implying success without verification | verify/SKILL.md § Red flags |
+| Rationalization Prevention | verify/SKILL.md § Rationalizations |
+| Rationalization Prevention — "Should work now" | verify/SKILL.md § Rationalizations |
+| Rationalization Prevention — "I'm confident" | verify/SKILL.md § Rationalizations |
+| Rationalization Prevention — "Just this once" | verify/SKILL.md § Rationalizations |
+| Rationalization Prevention — "Linter passed" | verify/SKILL.md § Rationalizations |
+| Rationalization Prevention — "Agent said success" | verify/SKILL.md § Rationalizations |
+| Rationalization Prevention — "I'm tired" | verify/SKILL.md § Rationalizations |
+| Rationalization Prevention — "Partial check is enough" | verify/SKILL.md § Rationalizations |
+| Rationalization Prevention — "Different words so rule doesn't apply" | verify/SKILL.md § Rationalizations |
+| Key Patterns | verify/SKILL.md § Key patterns |
+| Key Patterns — tests | verify/SKILL.md § Key patterns |
+| Key Patterns — regression tests (red-green) | verify/SKILL.md § Key patterns |
+| Key Patterns — build | verify/SKILL.md § Key patterns |
+| Key Patterns — requirements | verify/SKILL.md § Key patterns |
+| Key Patterns — agent delegation | verify/SKILL.md § Key patterns |
+| When To Apply | verify/SKILL.md § When to apply |
+| When To Apply — ALWAYS before: any success or completion claim | verify/SKILL.md § When to apply |
+| When To Apply — ALWAYS before: any expression of satisfaction | verify/SKILL.md § When to apply |
+| When To Apply — ALWAYS before: any positive statement about work state | verify/SKILL.md § When to apply |
+| When To Apply — ALWAYS before: committing, PR creation, task completion | verify/SKILL.md § When to apply; orchestrate: "Merge only after review and verification pass" |
+| When To Apply — ALWAYS before: moving to the next task | verify/SKILL.md § When to apply |
+| When To Apply — ALWAYS before: delegating to agents | verify/SKILL.md § When to apply |
+| When To Apply — applies to exact phrases, paraphrases, implications, any suggestion of completion | verify/SKILL.md § When to apply |
+
+## debug
+
+Upstream: `systematic-debugging/`
+
+| Upstream item | Where it lives |
+|---|---|
+| Overview | debug/SKILL.md § Debug |
+| Overview — core principle: root cause before fixes; symptom fixes are failure | debug/SKILL.md § Debug; executor: "Fix root causes" |
+| Overview — violating the letter is violating the spirit | debug/SKILL.md § Debug |
+| The Iron Law | debug/SKILL.md § Iron law |
+| The Iron Law — no fixes without root cause investigation first | debug/SKILL.md § Iron law |
+| The Iron Law — Phase 1 incomplete: no fix proposals | debug/SKILL.md § Iron law |
+| When to Use | debug/SKILL.md § When to use |
+| When to Use — any technical issue (test failures, production bugs, unexpected behavior, performance, build, integration) | debug/SKILL.md § When to use |
+| When to Use — ESPECIALLY: under time pressure | debug/SKILL.md § When to use |
+| When to Use — ESPECIALLY: one quick fix seems obvious | debug/SKILL.md § When to use |
+| When to Use — ESPECIALLY: already tried multiple fixes | debug/SKILL.md § When to use |
+| When to Use — ESPECIALLY: previous fix didn't work | debug/SKILL.md § When to use |
+| When to Use — ESPECIALLY: don't fully understand the issue | debug/SKILL.md § When to use |
+| When to Use — don't skip: issue seems simple | debug/SKILL.md § When to use |
+| When to Use — don't skip: in a hurry | debug/SKILL.md § When to use |
+| When to Use — don't skip: manager wants it fixed NOW | debug/SKILL.md § When to use |
+| When to Use — before an escalation climb; plan defects fixed in PLAN.md (Dryas) | debug/SKILL.md § When to use; orchestrate: "Before each climb" |
+| The Four Phases | debug/SKILL.md § Iron law |
+| The Four Phases — complete each phase before the next | debug/SKILL.md § Iron law |
+| Phase 1: Root Cause Investigation | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 1. Read error messages carefully | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 2. Reproduce consistently; not reproducible, gather data | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 3. Check recent changes | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 4. Gather evidence in multi-component systems | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 4. instrument each boundary, run once, analyze, investigate | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 4. multi-layer example | debug/SKILL.md § Phase 1: Root cause |
+| Phase 1: Root Cause Investigation — 5. Trace data flow | debug/SKILL.md § Phase 1: Root cause; debug/root-cause-tracing.md § The tracing process |
+| Phase 1: Root Cause Investigation — 5. quick version: origin, caller, trace up, fix at source | debug/SKILL.md § Phase 1: Root cause |
+| Phase 2: Pattern Analysis | debug/SKILL.md § Phase 2: Pattern analysis |
+| Phase 2: Pattern Analysis — 1. Find working examples | debug/SKILL.md § Phase 2: Pattern analysis |
+| Phase 2: Pattern Analysis — 2. Compare against references, read completely | debug/SKILL.md § Phase 2: Pattern analysis |
+| Phase 2: Pattern Analysis — 3. Identify differences, however small | debug/SKILL.md § Phase 2: Pattern analysis |
+| Phase 2: Pattern Analysis — 4. Understand dependencies | debug/SKILL.md § Phase 2: Pattern analysis |
+| Phase 3: Hypothesis and Testing | debug/SKILL.md § Phase 3: Hypothesis and test |
+| Phase 3: Hypothesis and Testing — 1. Form a single hypothesis | debug/SKILL.md § Phase 3: Hypothesis and test |
+| Phase 3: Hypothesis and Testing — 2. Test minimally, one variable at a time | debug/SKILL.md § Phase 3: Hypothesis and test |
+| Phase 3: Hypothesis and Testing — 3. Verify before continuing; no fixes on top | debug/SKILL.md § Phase 3: Hypothesis and test |
+| Phase 3: Hypothesis and Testing — 4. When you don't know | debug/SKILL.md § Phase 3: Hypothesis and test |
+| Phase 4: Implementation | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — 1. Create a failing test case (test-driven-development/ skill) | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — 2. Implement a single fix; no while-I'm-here, no bundled refactoring | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — 3. Verify the fix (verification-before-completion/ skill) | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — 4. Fix doesn't work: count; under 3 back to Phase 1; 3+ stop | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — 5. 3+ fixes failed: question the architecture | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — 5. signs of an architectural problem | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — 5. question fundamentals; discuss with your human partner | debug/SKILL.md § Phase 4: Fix |
+| Phase 4: Implementation — 5. not a failed hypothesis, a wrong architecture | debug/SKILL.md § Phase 4: Fix |
+| Red Flags - STOP and Follow Process | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "Quick fix for now, investigate later" | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "Just try changing X and see if it works" | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "Add multiple changes, run tests" | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "Skip the test, I'll manually verify" | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "It's probably X, let me fix that" | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "I don't fully understand but this might work" | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "Pattern says X but I'll adapt it differently" | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "Here are the main problems" without investigation | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — proposing solutions before tracing data flow | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — "One more fix attempt" after 2+ | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — each fix reveals a new problem elsewhere | debug/SKILL.md § Red flags |
+| Red Flags - STOP and Follow Process — all mean return to Phase 1; 3+ failed, question the architecture | debug/SKILL.md § Red flags |
+| your human partner's Signals You're Doing It Wrong | debug/SKILL.md § Signals from the user |
+| your human partner's Signals You're Doing It Wrong — "Is that not happening?" | debug/SKILL.md § Signals from the user |
+| your human partner's Signals You're Doing It Wrong — "Will it show us...?" | debug/SKILL.md § Signals from the user |
+| your human partner's Signals You're Doing It Wrong — "Stop guessing" | debug/SKILL.md § Signals from the user |
+| your human partner's Signals You're Doing It Wrong — "Ultra-think this" | debug/SKILL.md § Signals from the user |
+| your human partner's Signals You're Doing It Wrong — "We're stuck?" | debug/SKILL.md § Signals from the user |
+| your human partner's Signals You're Doing It Wrong — stop, return to Phase 1 | debug/SKILL.md § Signals from the user |
+| Common Rationalizations | debug/SKILL.md § Rationalizations |
+| Common Rationalizations — "Issue is simple, don't need process" | debug/SKILL.md § Rationalizations |
+| Common Rationalizations — "Emergency, no time for process" | debug/SKILL.md § Rationalizations |
+| Common Rationalizations — "Just try this first, then investigate" | debug/SKILL.md § Rationalizations |
+| Common Rationalizations — "I'll write test after confirming fix works" | debug/SKILL.md § Rationalizations |
+| Common Rationalizations — "Multiple fixes at once saves time" | debug/SKILL.md § Rationalizations |
+| Common Rationalizations — "Reference too long, I'll adapt the pattern" | debug/SKILL.md § Rationalizations |
+| Common Rationalizations — "I see the problem, let me fix it" | debug/SKILL.md § Rationalizations |
+| Common Rationalizations — "One more fix attempt" (after 2+ failures) | debug/SKILL.md § Rationalizations |
+| Quick Reference | debug/SKILL.md § Quick reference |
+| Quick Reference — four phases: key activities and success criteria | debug/SKILL.md § Quick reference |
+| When Process Reveals "No Root Cause" | debug/SKILL.md § No root cause found |
+| When Process Reveals "No Root Cause" — 1. you've completed the process | debug/SKILL.md § No root cause found |
+| When Process Reveals "No Root Cause" — 2. document what you investigated | debug/SKILL.md § No root cause found |
+| When Process Reveals "No Root Cause" — 3. appropriate handling (retry, timeout, error message) | debug/SKILL.md § No root cause found |
+| When Process Reveals "No Root Cause" — 4. monitoring or logging | debug/SKILL.md § No root cause found |
+| When Process Reveals "No Root Cause" — 95% are incomplete investigation | debug/SKILL.md § No root cause found |
+| Supporting Techniques | debug/SKILL.md § Supporting techniques |
+| Supporting Techniques — root-cause-tracing, defense-in-depth, condition-based-waiting | debug/SKILL.md § Supporting techniques |
+| Supporting Techniques — fix-root-causes principle (Dryas) | debug/SKILL.md § Supporting techniques |
+| root-cause-tracing.md | debug/root-cause-tracing.md § Root cause tracing |
+| root-cause-tracing.md — Overview, core principle | debug/root-cause-tracing.md § Overview |
+| root-cause-tracing.md — When to Use (flowchart, use when) | debug/root-cause-tracing.md § When to use |
+| root-cause-tracing.md — The Tracing Process 1-5 | debug/root-cause-tracing.md § The tracing process |
+| root-cause-tracing.md — Adding Stack Traces (instrument, stderr in tests, run and capture, analyze) | debug/root-cause-tracing.md § Adding stack traces |
+| root-cause-tracing.md — Finding Which Test Causes Pollution | debug/root-cause-tracing.md § Find the polluter |
+| root-cause-tracing.md — Real Example: Empty projectDir | debug/root-cause-tracing.md § Real example: empty projectDir |
+| root-cause-tracing.md — Key Principle (flowchart, never fix just the symptom) | debug/root-cause-tracing.md § Key principle |
+| root-cause-tracing.md — Stack Trace Tips | debug/root-cause-tracing.md § Stack trace tips |
+| root-cause-tracing.md — Real-World Impact | debug/root-cause-tracing.md § Real-world impact |
+| defense-in-depth.md | debug/defense-in-depth.md § Defense-in-depth validation |
+| defense-in-depth.md — Overview, core principle | debug/defense-in-depth.md § Overview |
+| defense-in-depth.md — Why Multiple Layers | debug/defense-in-depth.md § Why multiple layers |
+| defense-in-depth.md — Layer 1: Entry Point Validation | debug/defense-in-depth.md § Layer 1: Entry point validation |
+| defense-in-depth.md — Layer 2: Business Logic Validation | debug/defense-in-depth.md § Layer 2: Business logic validation |
+| defense-in-depth.md — Layer 3: Environment Guards | debug/defense-in-depth.md § Layer 3: Environment guards |
+| defense-in-depth.md — Layer 4: Debug Instrumentation | debug/defense-in-depth.md § Layer 4: Debug instrumentation |
+| defense-in-depth.md — Applying the Pattern 1-4 | debug/defense-in-depth.md § Applying the pattern |
+| defense-in-depth.md — Example from Session | debug/defense-in-depth.md § Example from a session |
+| defense-in-depth.md — Key Insight | debug/defense-in-depth.md § Key insight |
+| condition-based-waiting.md | debug/condition-based-waiting.md § Condition-based waiting |
+| condition-based-waiting.md — Overview, core principle | debug/condition-based-waiting.md § Overview |
+| condition-based-waiting.md — When to Use (flowchart, use when, don't use when) | debug/condition-based-waiting.md § When to use |
+| condition-based-waiting.md — Core Pattern | debug/condition-based-waiting.md § Core pattern |
+| condition-based-waiting.md — Quick Patterns | debug/condition-based-waiting.md § Quick patterns |
+| condition-based-waiting.md — Implementation (waitFor) | debug/condition-based-waiting.md § Implementation |
+| condition-based-waiting.md — Implementation: domain helpers in the example file | debug/condition-based-waiting.md § Implementation |
+| condition-based-waiting.md — Common Mistakes (too fast, no timeout, stale data) | debug/condition-based-waiting.md § Common mistakes |
+| condition-based-waiting.md — When Arbitrary Timeout IS Correct | debug/condition-based-waiting.md § When an arbitrary timeout IS correct |
+| condition-based-waiting.md — Real-World Impact | debug/condition-based-waiting.md § Real-world impact |
+| condition-based-waiting-example.ts | extra:superpowers |
+| find-polluter.sh | debug/root-cause-tracing.md § Find the polluter |
+| CREATION-LOG.md | extra:superpowers |
+| test-academic.md | extra:superpowers |
+| test-pressure-1.md | extra:superpowers |
+| test-pressure-2.md | extra:superpowers |
+| test-pressure-3.md | extra:superpowers |
