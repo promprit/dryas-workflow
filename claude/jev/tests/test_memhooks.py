@@ -1,3 +1,4 @@
+import calendar
 import json
 import os
 import subprocess
@@ -90,7 +91,8 @@ class MemHooksTest(unittest.TestCase):
         self.assertEqual(self.db().execute("SELECT task_id FROM edits").fetchone()[0], "feat/b:2")
 
     def test_several_active_tasks_in_either_taskctx_shape(self):
-        for ctx in ({"task": "feat/b:1", "co_tasks": ["feat/b:2"]}, {"tasks": ["feat/b:1", "feat/b:2"]}):
+        ctx = {"tasks": ["feat/b:1", "feat/b:2"]}
+        for _ in range(2):
             with mock.patch.object(memhooks.taskctx, "context", return_value=ctx):
                 self.assertEqual(memhooks._task_ids(self.proj), ["feat/b:1", "feat/b:2"], ctx)
                 self.run_stage("edit", self.edit_event())
@@ -109,22 +111,99 @@ class MemHooksTest(unittest.TestCase):
         rows = [tuple(r) for r in self.db().execute("SELECT ns, file FROM edits")]
         self.assertEqual(rows, [("myrepo", "pkg/m.py"), ("myrepo", "pkg/m.py")])
 
-    def test_task_closed_with_tiers_and_plan_title(self):
+    TS = "2026-01-02T03:04:05+0000"
+
+    def setup_task_three(self):
         self.activate("3")
         with open(os.path.join(self.proj, ".orchestrate", "PLAN.md"), "w") as f:
             f.write("## Task 3: Fix the router\n\nGoal: x\nScope:\n- claude/jev/route.py\nDone:\n- tests pass\n")
-        os.makedirs(self.logs)
+        os.makedirs(self.logs, exist_ok=True)
         with open(os.path.join(self.logs, "dispatch.jsonl"), "w") as f:
-            for rec in ({"task": "feat/b:3", "tier": "haiku", "attempt": 1}, {"task": "feat/b:9", "tier": "opus"},
-                        {"task": "feat/b:3", "tier": "sonnet", "attempt": 2}):
+            for rec in ({"task": "feat/b:3", "tier": "haiku", "attempt": 1, "ts": self.TS},
+                        {"task": "feat/b:9", "tier": "opus"},
+                        {"task": "feat/b:3", "tier": "sonnet", "attempt": 2, "ts": "2026-01-02T04:00:00+0000"}):
                 f.write(json.dumps(rec) + "\n")
             f.write("not json\n")
+
+    def task_row(self, tid="feat/b:3", ns="proj"):
+        return self.db().execute("SELECT * FROM tasks WHERE task_id = ? AND ns = ?", (tid, ns)).fetchone()
+
+    def test_subagent_stop_keeps_running_tasks_open(self):
+        self.setup_task_three()
         self.assertEqual(self.run_stage("task", self.event()), 1)
-        r = self.db().execute("SELECT * FROM tasks WHERE task_id = 'feat/b:3'").fetchone()
-        self.assertEqual((r["ns"], r["title"], json.loads(r["scope"]), r["tier_start"], r["tier_end"], r["outcome"]),
-                         ("proj", "Fix the router", ["claude/jev/route.py"], "haiku", "sonnet", "returned"))
+        r = self.task_row()
+        self.assertEqual((r["ns"], r["title"], json.loads(r["scope"]), r["tier_start"], r["tier_end"]),
+                         ("proj", "Fix the router", ["claude/jev/route.py"], "haiku", "sonnet"))
+        self.assertEqual((r["outcome"], r["ended"]), (None, None))
+        self.assertEqual(r["started"], calendar.timegm((2026, 1, 2, 3, 4, 5)))
+        self.assertEqual(json.loads(r["meta"]), {"dispatches": 2, "root": os.path.realpath(self.proj)})
+
+    def test_task_closed_when_it_leaves_active(self):
+        self.setup_task_three()
+        self.activate("3", "4")
+        self.run_stage("task", self.event())
+        self.assertEqual(self.task_row("feat/b:4")["ended"], None)
+        self.activate("4")
+        self.run_stage("task", self.event())
+        r = self.task_row()
+        self.assertEqual(r["outcome"], "done")
         self.assertIsNotNone(r["ended"])
-        self.assertEqual(json.loads(r["meta"]), {"dispatches": 2})
+        self.assertIsNone(self.task_row("feat/b:4")["ended"])  # the sibling still in active.json stays open
+
+    def test_finished_run_closed_at_session_end(self):
+        for mode in (None, "manual"):
+            self.setup_task_three()
+            self.run_stage("task", self.event())
+            os.remove(os.path.join(self.proj, ".orchestrate", "active.json"))
+            self.run_stage("session-end", self.event(), *([mode] if mode else []))
+            self.assertEqual(self.task_row()["outcome"], "done", mode)
+            self.db().execute("DELETE FROM tasks")
+
+    def test_rows_without_root_are_never_swept(self):
+        self.activate("1")
+        c = self.db()
+        c.execute("INSERT INTO tasks (task_id, ns) VALUES ('swarm-1', 'proj')")
+        self.run_stage("task", self.event())
+        self.run_stage("session-end", self.event())
+        self.assertIsNone(c.execute("SELECT ended FROM tasks WHERE task_id = 'swarm-1'").fetchone()[0])
+
+    def test_two_projects_with_one_task_id_keep_separate_rows(self):
+        other = os.path.join(self.tmp, "other")
+        os.makedirs(os.path.join(other, ".git"))
+        with open(os.path.join(other, ".git", "HEAD"), "w") as f:
+            f.write("ref: refs/heads/feat/b\n")
+        self.activate("1")
+        os.makedirs(os.path.join(other, ".orchestrate"))
+        with open(os.path.join(other, ".orchestrate", "active.json"), "w") as f:
+            json.dump({"active": ["1"]}, f)
+        self.run_stage("task", self.event())
+        self.run_stage("task", self.event(cwd=other))
+        rows = [tuple(r) for r in self.db().execute("SELECT ns, task_id FROM tasks ORDER BY ns")]
+        self.assertEqual(rows, [("other", "feat/b:1"), ("proj", "feat/b:1")])
+
+    def test_two_notes_dirs_under_one_namespace_do_not_delete_each_other(self):
+        other = os.path.join(self.tmp, "notes2")
+        os.makedirs(other)
+        self.write_note("a.md", "alpha note\n")
+        with open(os.path.join(other, "b.md"), "w") as f:
+            f.write("beta note\n")
+        conn = self.db()
+        for d in (self.notes, other, self.notes, other):
+            self.assertEqual(memhooks.index_notes(conn, "proj", d)["removed"], 0)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM memory").fetchone()[0], 2)
+
+    def test_note_title_is_redacted(self):
+        self.write_note("k.md", "---\nname: key sk-ant-api03-abcdefghijklmnopqrstuvwx\n---\nbody\n")
+        self.run_stage("session-start", self.event())
+        self.assertNotIn("abcdefghijklmnopqrstuvwx", self.db().execute("SELECT title FROM memory").fetchone()[0])
+
+    def test_watchdog_logs_timeout_and_exits_zero(self):
+        codes = []
+        with mock.patch.object(memhooks.os, "_exit", codes.append):
+            t = memhooks._watchdog("edit", 0.05)
+            t.join(2)
+        self.assertEqual(codes, [0])
+        self.assertEqual([(r["stage"], r["error"]) for r in self.log_lines()], [("edit", "Timeout")])
 
     def test_task_without_active_tasks_does_nothing(self):
         self.assertEqual(self.run_stage("task", self.event()), 0)

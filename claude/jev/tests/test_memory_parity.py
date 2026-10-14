@@ -90,7 +90,14 @@ class MemoryParityTest(unittest.TestCase):
         with open(os.path.join(self.proj, ".orchestrate", "active.json"), "w") as f:
             json.dump({"active": ["1"]}, f)
         self.assertEqual(self.hook("task"), 1)
-        self.assertEqual(self.db().execute("SELECT outcome FROM tasks WHERE task_id = 'feat/b:1'").fetchone()[0], "returned")
+        q = "SELECT outcome, ended FROM tasks WHERE task_id = 'feat/b:1'"
+        self.assertEqual(tuple(self.db().execute(q).fetchone()), (None, None))
+        with open(os.path.join(self.proj, ".orchestrate", "active.json"), "w") as f:
+            json.dump({"active": []}, f)
+        self.hook("task")
+        r = self.db().execute(q).fetchone()
+        self.assertEqual(r[0], "done")
+        self.assertIsNotNone(r[1])
 
     def test_row_session_restore_end_precompact(self):
         self.hook("session-start")
