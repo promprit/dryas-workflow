@@ -1,5 +1,4 @@
 """The Codex edition ships and names the Dryas process skills; no "Superpowers if installed" left (owned core C)."""
-import io
 import sys
 import unittest
 from pathlib import Path

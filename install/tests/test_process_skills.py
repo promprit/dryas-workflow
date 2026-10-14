@@ -109,7 +109,6 @@ class ProcessSkillsTest(unittest.TestCase):
                 self.assertIn(s, text, (n, s))
 
     def test_model_invoked(self):
-        # process skills hold reusable discipline: the model may invoke them; their description names triggers
         for n in present():
             head = (SKILLS / n / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[1]
             self.assertNotIn("disable-model-invocation", head, n)

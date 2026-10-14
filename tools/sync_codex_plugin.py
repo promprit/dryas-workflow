@@ -40,10 +40,8 @@ SKILL_ALLOW: Dict[str, Dict[str, Set[str]]] = {
         "codex": {"needs_stronger_model"},
     },
 }
-# owned core C: one source in claude/skills, rendered into codex/skills
 PROCESS_SKILLS = ("brainstorm", "worktree", "debug", "verify", "plan", "review-request", "review-receive", "tdd")
-SKILL_FILES = ("UPSTREAM.md", "LICENSE-superpowers")  # provenance, copied as is
-# Codex-specific instructions of the 1.x hand-written Codex skills and AGENTS.md: each must survive the rendering
+SKILL_FILES = ("UPSTREAM.md", "LICENSE-superpowers")
 HARNESS_REQUIRED: Dict[str, Tuple[str, ...]] = {
     "brainstorm": ("get the user's approval of a design",),
     "worktree": ("git worktree add ../<repo>-<topic> -b <branch>",),
@@ -136,10 +134,14 @@ def render_skill(text: str, harness: str) -> str:
     return out
 
 
+def _lf(p: Path) -> str:
+    return p.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
 def user_invoked(repo: Path, name: str) -> Optional[bool]:
     for p in (Path(repo) / "claude/skills" / name / "SKILL.md", Path(repo) / "claude/commands" / (name + ".md")):
         if p.is_file():
-            m = _FRONT.match(p.read_text(encoding="utf-8").replace("\r\n", "\n"))
+            m = _FRONT.match(_lf(p))
             return bool(m and re.search(r"^disable-model-invocation:\s*true\s*$", m.group(1), re.M))
     return None
 
@@ -156,12 +158,12 @@ def invocation_drift(repo: Path) -> List[str]:
         if not (d / "SKILL.md").is_file():
             continue
         y = d / "agents/openai.yaml"
+        ui = user_invoked(repo, d.name)
         if not y.is_file():  # no policy file: Codex allows implicit invocation, which only a user-invoked skill forbids
-            if user_invoked(repo, d.name):
+            if ui:
                 out.append("skill %s: codex agents/openai.yaml is missing" % d.name)
             continue
         m = re.search(r"^\s*allow_implicit_invocation:\s*(true|false)\s*$", y.read_text(encoding="utf-8"), re.M)
-        ui = user_invoked(repo, d.name)
         if m is None:
             out.append("skill %s: codex agents/openai.yaml sets no allow_implicit_invocation" % d.name)
         elif ui is None:
@@ -177,11 +179,11 @@ def skill_plan(repo: Path) -> Dict[str, str]:
     src, out = Path(repo) / "claude/skills", {}
     for name in SKILL_FILES:
         if (src / name).is_file():
-            out["codex/skills/" + name] = (src / name).read_text(encoding="utf-8").replace("\r\n", "\n")
+            out["codex/skills/" + name] = _lf(src / name)
     for name in PROCESS_SKILLS:
         for f in sorted((src / name).glob("*.md")) if (src / name).is_dir() else []:
             try:
-                text = render_skill(f.read_text(encoding="utf-8").replace("\r\n", "\n"), "codex")
+                text = render_skill(_lf(f), "codex")
             except ValueError as e:
                 raise ValueError("%s: %s" % (f.relative_to(repo).as_posix(), e))
             out["codex/skills/%s/%s" % (name, f.name)] = text
@@ -207,7 +209,7 @@ def harness_drift(repo: Path) -> List[str]:
         f = Path(repo) / "claude/skills" / name / "SKILL.md"
         if not f.is_file():
             continue
-        text = render_skill(f.read_text(encoding="utf-8").replace("\r\n", "\n"), "codex")
+        text = render_skill(_lf(f), "codex")
         out += ['skill %s: the Codex copy lacks "%s"' % (name, p) for p in phrases if p not in text]
     return out
 
@@ -226,7 +228,7 @@ def drift(repo: Path) -> List[str]:
         dest = Path(repo) / rel
         if not dest.is_file():
             out.append("missing " + rel)
-        elif dest.read_text(encoding="utf-8").replace("\r\n", "\n") != text:
+        elif _lf(dest) != text:
             out.append("differs " + rel)
     out += ["extra " + rel for rel in _skill_existing(repo) if rel not in rendered]
     return sorted(out)

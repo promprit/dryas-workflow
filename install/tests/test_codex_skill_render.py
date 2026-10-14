@@ -27,7 +27,7 @@ class RenderTest(unittest.TestCase):
         out = scp.render_skill(SRC, "claude")
         self.assertIn("Claude only: use the Skill tool.\n", out)
         self.assertNotIn("On Codex", out)
-        self.assertIn("allowed-tools: Read", out)  # Claude front matter untouched
+        self.assertIn("allowed-tools: Read", out)
 
     def test_codex_front_matter_trimmed(self):
         out = scp.render_skill(SRC, "codex")
@@ -120,7 +120,7 @@ class TreeTest(unittest.TestCase):
             with redirect_stdout(buf):
                 self.assertEqual(scp.main(argv), 1)
             self.assertIn("error: claude/skills/brainstorm/SKILL.md: unclosed <!-- codex --> marker", buf.getvalue())
-        self.assertFalse((t / "codex/skills/brainstorm").exists())  # nothing written
+        self.assertFalse((t / "codex/skills/brainstorm").exists())
 
     def test_check_passes_on_synced_tree(self):
         t = self._tree()
