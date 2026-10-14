@@ -190,6 +190,10 @@ class MainTest(unittest.TestCase):
         st = MainStubs(self)
         st.copy = True
         cd = st.tmp / "acct"
+        from unittest import mock
+        p = mock.patch.dict(os.environ, {"JEV_THRESHOLDS": str(st.tmp / "thresholds.json")})
+        p.start()
+        self.addCleanup(p.stop)
         self.assertEqual(self.main("--claude-dir", str(cd), "--no-ruflo", "--flowobserve", "--yes"), 0)
         self.assertEqual(st.steps(), ["migrate", "ps.setup", "ps.verify"])
         a, k = st.call("migrate")
@@ -197,7 +201,7 @@ class MainTest(unittest.TestCase):
         a, k = st.call("ps.setup")
         self.assertEqual(a[1], cd.resolve())
         self.assertEqual(k, {"yes": True, "key": "", "flowobserve": True, "dry": False,
-                             "providers": {"judge": None, "memory": "dryas", "process": "dryas"}})
+                             "providers": {"judge": "auto", "memory": "dryas", "process": "dryas"}})
 
     def test_key_flag_and_default_dir(self):
         st = MainStubs(self)
