@@ -50,14 +50,15 @@ HARNESS_REQUIRED: Dict[str, Tuple[str, ...]] = {
     "plan": ("`docs/superpowers/plans/` if the project uses that", "$dryas:orchestrate"),
     "review-request": ("Change nothing unless asked", "Codex sub-agent"),
 }
-USER_INVOKED = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "benchmark-checklist")
+COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate")
+COMMAND_RE = re.compile(r"(?<![\w$/.<-])/(" + "|".join(COMMANDS) + r")\b(?![/\w-]|\.\w)")
 _HARNESS = re.compile(r"^<!-- (/?)(claude|codex) -->\n?", re.M)
 _FRONT = re.compile(r"\A---\n(.*?\n)---\n", re.S)
 _CODEX_NAMES = (
     (re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}"), "<dryas-root>"),
     (re.compile(r"mcp__plugin_dryas_jev__"), ""),
     (re.compile(r"(?<![\w$/.@-])dryas:([a-z][a-z-]*)"), r"$dryas:\1"),
-    (re.compile(r"(?<![\w$/.<-])/(orchestrate|wplan|wreview|commit|tune|interrogate)\b(?![/\w-]|\.\w)"), r"$dryas:\1"),
+    (COMMAND_RE, r"$dryas:\1"),
 )
 
 

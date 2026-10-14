@@ -20,7 +20,7 @@ import settings_merge as sm  # noqa: E402
 
 PLUGIN, MARKET = "dryas", "dryas-workflow"
 ID = PLUGIN + "@" + MARKET
-OFFICIAL_SOURCE = "anthropics/claude-plugins-official"  # marketplace of the superpowers dependency
+OFFICIAL_SOURCE = "anthropics/claude-plugins-official"  # marketplace of the optional superpowers component
 SUPERPOWERS = "superpowers@claude-plugins-official"
 RECORD = ".dryas-plugin.json"
 OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
@@ -313,7 +313,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
         return 1
     env = child_env(cd)
     if "superpowers" not in comps:
-        print("note: Superpowers is not installed; the Dryas process skills cover the loop "
+        print("note: Dryas does not install Superpowers; the Dryas process skills cover the loop "
               "(its conflicting skills stay denied if you add it later).")
     # claude-plugins-official hosts the optional superpowers component: it is added, and an old unresolved
     # superpowers dependency repaired below, only when superpowers is selected.

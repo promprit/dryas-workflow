@@ -36,7 +36,7 @@ Have fresh reviewers check the work before problems cascade. Each reviewer gets 
    - `[BASE_SHA]`: the starting commit
    - `[HEAD_SHA]`: the ending commit
 <!-- claude -->
-   Dispatch both reviewers with the Agent tool in one message: three calls, each `subagent_type: "dryas:executor"`, role reviewer, one per stage, each given `${CLAUDE_PLUGIN_ROOT}/skills/review-request/reviewer-prompt.md` filled in for its stage.
+   Dispatch the three reviewers with the Agent tool in one message: three calls, each `subagent_type: "dryas:executor"`, role reviewer, one per stage, each given `${CLAUDE_PLUGIN_ROOT}/skills/review-request/reviewer-prompt.md` filled in for its stage.
 <!-- /claude -->
 <!-- codex -->
    On Codex: run the three reviewers as Codex sub-agents in parallel when available; otherwise review three times yourself, one fresh pass per stage, and still report them separately. Change nothing unless asked.

@@ -10,10 +10,12 @@ USER_RUNS = (r"(runs|run|invoke|invokes|logs)\s+`?/(wreview|commit|orchestrate|t
 sys.path.insert(0, str(ROOT / "tools"))
 import sync_codex_plugin as scp
 
+USER_INVOKED = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "benchmark-checklist")
+
 
 class InvocationTest(unittest.TestCase):
     def test_user_invoked_on_claude(self):
-        for n in scp.USER_INVOKED:
+        for n in USER_INVOKED:
             self.assertIs(scp.user_invoked(ROOT, n), True, n)
         for n in scp.PROCESS_SKILLS:
             self.assertIs(scp.user_invoked(ROOT, n), False, n)
@@ -23,15 +25,15 @@ class InvocationTest(unittest.TestCase):
         for d in sorted((ROOT / "codex/skills").iterdir()):
             if (d / "SKILL.md").is_file():
                 y = (d / "agents/openai.yaml").read_text(encoding="utf-8")
-                want = "false" if d.name in scp.USER_INVOKED else "true"
+                want = "false" if d.name in USER_INVOKED else "true"
                 self.assertIn("allow_implicit_invocation: %s" % want, y, d.name)
 
     def test_user_invoked_never_calls_user_invoked(self):
-        for n in scp.USER_INVOKED:
+        for n in USER_INVOKED:
             for p in (ROOT / "claude/skills" / n / "SKILL.md", ROOT / "claude/commands" / (n + ".md")):
                 if p.is_file():
                     head = p.read_text(encoding="utf-8").split("---", 2)[1]
-                    for other in scp.USER_INVOKED:
+                    for other in USER_INVOKED:
                         self.assertNotIn("Skill(dryas:%s)" % other, head, (p, other))
 
     def test_orchestrate_finish_uses_skills(self):

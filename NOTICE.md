@@ -14,6 +14,6 @@ This repository is MIT-licensed (see [LICENSE](LICENSE)). Third-party tools are 
 
 ## Ideas
 
-The skill-writing rules in CONTRIBUTING.md, the brainstorm question rounds, the debug feedback loop and the parallel two-stage review draw on ideas from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT). No text is copied.
+The skill-writing rules in CONTRIBUTING.md, the brainstorm question rounds, the debug feedback loop and the parallel three-stage review draw on ideas from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT). No text is copied.
 
 The minimum-code ladder and the over-engineering review stage draw on ideas only from [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail). No text is copied.

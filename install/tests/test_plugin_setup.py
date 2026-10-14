@@ -158,7 +158,7 @@ class SetupTest(unittest.TestCase):
     def test_no_superpowers_note(self):
         e = Env(self)
         out = _out(lambda: ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=False))
-        self.assertIn("Superpowers is not installed; the Dryas process skills cover the loop", out)
+        self.assertIn("Dryas does not install Superpowers; the Dryas process skills cover the loop", out)
         self.assertFalse(any(ps.OFFICIAL_SOURCE in c for c in e.calls()))
         self.assertFalse(any(ps.SUPERPOWERS in c for c in e.calls()))
         s = json.loads((e.a / "settings.json").read_text())

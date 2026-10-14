@@ -1,4 +1,5 @@
 """Dryas process skills (owned core C): shape, no Superpowers names, clean Codex copies, complete coverage tables."""
+import json
 import os
 import re
 import sys
@@ -20,7 +21,15 @@ SECTION = re.compile(r"^([a-z-]+/[A-Za-z0-9_.-]+\.md) § (.+)$")
 PHRASE = re.compile(r'^(template|executor|orchestrate): "(.+)"$')
 SP_NAME = re.compile(r"\bsuperpowers:[a-z]")
 CLAUDE_ONLY = ("${CLAUDE_PLUGIN_ROOT}", "mcp__plugin_", "Skill(", "subagent_type", "EnterWorktree")
-SHORT = set(scp.PROCESS_SKILLS)
+OUTLINE = ROOT / "install/tests/fixtures/superpowers-6.4.1-outline.json"
+EXTRA_SUPERPOWERS = {
+    "brainstorm": {"Checklist — Architectural 2. Offer the visual companion just-in-time", "Visual Companion",
+                   "Visual Companion — offering just-in-time, offer as its own message",
+                   "Visual Companion — per-question browser or terminal decision",
+                   "Visual Companion — read visual-companion.md on acceptance", "visual-companion.md", "scripts/"},
+    "debug": {"condition-based-waiting-example.ts", "CREATION-LOG.md", "test-academic.md", "test-pressure-1.md",
+              "test-pressure-2.md", "test-pressure-3.md"},
+}
 TECHNIQUES = {
     "brainstorm": ("## Hard gate", "## Question rounds", "recommended answer", "look it up yourself"),
     "debug": ("## Feedback loop first", "3-5 ranked", "prediction", "unique prefix", "commit message", "redact",
@@ -30,7 +39,7 @@ TECHNIQUES = {
     "verify": ("NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE",),
     "plan": ("only its own `## Task N:` section",),
 }
-CLAUDE_COMMAND = re.compile(r"(?<![\w$/.<-])/(orchestrate|wplan|wreview|commit|tune|interrogate)\b(?![/\w-]|\.\w)")
+CLAUDE_COMMAND = scp.COMMAND_RE
 
 
 def present():
@@ -98,7 +107,7 @@ class ProcessSkillsTest(unittest.TestCase):
             self.assertLess(len(f.read_text(encoding="utf-8").splitlines()), 500, f)
 
     def test_skill_length(self):
-        for n in sorted(SHORT):
+        for n in sorted(scp.PROCESS_SKILLS):
             lines = len((SKILLS / n / "SKILL.md").read_text(encoding="utf-8").splitlines())
             self.assertTrue(50 <= lines <= 150, "%s/SKILL.md is %d lines; target 50-150" % (n, lines))
 
@@ -147,34 +156,48 @@ class ProcessSkillsTest(unittest.TestCase):
                 self.assertTrue(up and target, (skill, row))
                 for t in target.split("; "):
                     if t == "extra:superpowers":
+                        self.assertIn(up, EXTRA_SUPERPOWERS.get(skill, ()), (skill, row))
                         continue
                     m, p = SECTION.match(t), PHRASE.match(t)
                     if m:
                         f = SKILLS / m.group(1)
                         self.assertTrue(f.is_file(), (skill, t))
-                        self.assertIn(m.group(2), headings(f.read_text(encoding="utf-8"))
-                                      + re.findall(r"^#{1,4} (.+?)\s*$", f.read_text(encoding="utf-8"), re.M), (skill, t))
+                        self.assertIn(m.group(2), re.findall(r"^#{1,4} (.+?)\s*$", f.read_text(encoding="utf-8"), re.M), (skill, t))
                     elif p:
                         self.assertIn(p.group(2), PHRASE_FILES[p.group(1)].read_text(encoding="utf-8"), (skill, t))
                     else:
                         self.fail("bad target %r in %s" % (t, skill))
 
     def test_coverage_complete_against_upstream(self):
-        base = upstream_dir()
-        if base is None:
-            self.skipTest("Superpowers 6.4.1 not installed here (set DRYAS_SUPERPOWERS_SKILLS)")
+        outline = json.loads(OUTLINE.read_text(encoding="utf-8"))
         t = tables()
         for n in present():
             ups = [r[0] for r in t.get(n, [])]
-            src = base / UPSTREAM_OF[n]
-            for h in headings((src / "SKILL.md").read_text(encoding="utf-8")):
+            src = outline[UPSTREAM_OF[n]]
+            for h in src["headings"]:
                 self.assertTrue(any(u == h or u.startswith(h + " — ") for u in ups), "%s: no row for heading %r" % (n, h))
-            for f in sorted(src.iterdir()):
-                if f.name == "SKILL.md":
-                    continue
-                name = f.name + ("/" if f.is_dir() else "")
+            for name in src["files"]:
                 self.assertTrue(any(u == name or u.startswith(name + " — ") for u in ups), "%s: no row for %s" % (n, name))
 
+    def test_outline_fixture_matches_upstream(self):
+        base = upstream_dir()
+        if base is None:
+            self.skipTest("Superpowers 6.4.1 not installed here (set DRYAS_SUPERPOWERS_SKILLS)")
+        live = {}
+        for u in UPSTREAM_OF.values():
+            src = base / u
+            live[u] = {"headings": headings((src / "SKILL.md").read_text(encoding="utf-8")),
+                       "files": sorted(f.name + ("/" if f.is_dir() else "") for f in src.iterdir() if f.name != "SKILL.md")}
+        self.assertEqual(json.loads(OUTLINE.read_text(encoding="utf-8")), live)
+
+    def test_description_is_one_line(self):
+        for n in present():
+            head = (SKILLS / n / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[1]
+            lines = head.strip("\n").split("\n")
+            i = next(k for k, l in enumerate(lines) if l.startswith("description:"))
+            rest = lines[i + 1:]
+            self.assertTrue(not rest or re.match(r"^[A-Za-z_-]+:", rest[0]), (n, "description spans lines"))
+            self.assertNotRegex(lines[i], r"^description:\s*[>|]", n)
 
 if __name__ == "__main__":
     unittest.main()
