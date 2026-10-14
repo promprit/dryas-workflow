@@ -32,13 +32,14 @@ def ask(state: Any, questions: Dict[str, Any], local: Dict[str, Any], th: Dict[s
     out: Dict[str, Any] = {"provider": provider, "shadow_provider": shadow}
     remote: Any = None
     if "jev" in (provider, shadow):
-        from jev_client import JevUnavailable, judge
-        try:
+        from jev_client import judge
+        try:  # any failure, including a malformed response, counts as a Jev failure
             remote = (judge_fn or judge)(state, questions)
-        except JevUnavailable as e:
+            jev_answers = remote["answers"]
+        except Exception as e:
             remote = e
     if provider == "jev" and not isinstance(remote, Exception):
-        out.update(answers=remote["answers"], latency_ms=remote.get("latency_ms"),
+        out.update(answers=jev_answers, latency_ms=remote.get("latency_ms"),
                    input_tokens=remote.get("input_tokens"), cost=remote.get("cost"))
         if shadow == "local":
             out.update(shadow_answers=local["answers"], shadow_reasons=local.get("reasons", []))
@@ -50,5 +51,5 @@ def ask(state: Any, questions: Dict[str, Any], local: Dict[str, Any], th: Dict[s
         if isinstance(remote, Exception):
             out["shadow_error"] = type(remote).__name__
         else:
-            out.update(shadow_answers=remote["answers"], shadow_cost=remote.get("cost"))
+            out.update(shadow_answers=jev_answers, shadow_cost=remote.get("cost"))
     return out
