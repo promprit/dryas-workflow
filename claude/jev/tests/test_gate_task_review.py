@@ -85,7 +85,7 @@ class GateTaskReviewTest(unittest.TestCase):
     def test_enforced_skip_does_not_call_the_judge(self):
         self.skip_on(True)
         j = jev("destructive")
-        self.assertIsNone(gate.run(self.edit("src/app.py"), j))
+        self.assertIsNone(gate.run(dict(self.edit("src/app.py"), agent_id="a1"), j))
         self.assertEqual(j.calls, [])
         rec = self.log()[-1]
         self.assertEqual((rec["decision"], rec["via"], rec["task_review"]), ("skipped", "task_review", "skip"))
@@ -251,6 +251,91 @@ class GateTaskReviewAttackTest(unittest.TestCase):
         rec = self.log()[-2]
         self.assertEqual((rec["decision"], rec["task_review"], rec.get("fallback")), ("none", "review", "local"))
         self.assertEqual(rec["error"], "RuntimeError")
+
+
+class GateTaskReviewPopulationTest(unittest.TestCase):
+    """The task verdict covers every file edit of a task, and enforcement stays narrow."""
+    setUp, active, skip_on, log = GateTaskReviewTest.setUp, GateTaskReviewTest.active, GateTaskReviewTest.skip_on, \
+        GateTaskReviewTest.log
+
+    def edit(self, rel, cwd="", content="x = 1\n", **extra):
+        return dict({"tool_name": "Write", "cwd": os.path.join(self.wt, cwd),
+                     "tool_input": {"file_path": os.path.join(self.wt, rel), "content": content}}, **extra)
+
+    def test_local_file_skip_still_logs_task_verdict(self):
+        # Defect: edits inside the executor's cwd are skipped by local_file with no task verdict, so the shadow
+        # evidence misses most real edits. The path is relative to the worktree root (src/app.py), not to cwd.
+        os.makedirs(os.path.join(self.wt, "src"))
+        j = jev("destructive")
+        self.assertIsNone(gate.run(self.edit("src/app.py", "src"), j))
+        self.assertEqual(j.calls, [])
+        rec = self.log()[-1]
+        self.assertEqual((rec["decision"], rec["via"], rec["task"], rec["task_review"], rec["task_review_why"]),
+                         ("skipped", "local_file", "feat/x:1", "skip", "task_review"))
+        self.assertNotIn("false_skip", rec)
+
+    def test_local_file_skip_of_unlisted_file_logs_review_verdict(self):
+        j = jev()
+        self.assertIsNone(gate.run(self.edit("pkg/other.py", "pkg"), j))
+        self.assertEqual(j.calls, [])
+        rec = self.log()[-1]
+        self.assertEqual((rec["via"], rec["task_review"], rec["task_review_why"]), ("local_file", "review", "not_in_skip"))
+
+    def test_local_file_skip_outside_a_task_has_no_verdict(self):
+        os.remove(os.path.join(self.wt, ".orchestrate", "active.json"))
+        self.assertIsNone(gate.run(self.edit("pkg/a.py", "pkg"), jev()))
+        rec = self.log()[-1]
+        self.assertEqual(rec["via"], "local_file")
+        self.assertNotIn("task_review", rec)
+
+    def test_enforced_skip_needs_an_agent_id(self):
+        # Defect: a Codex event (no worker identity) or the orchestrator's own edit is skipped by a task verdict.
+        self.skip_on(True)
+        for ev in (self.edit("src/app.py", "pkg"), self.edit("src/app.py", "pkg", agent_id=""),
+                   self.edit("src/app.py", "pkg", agent_id=None)):
+            j = jev("destructive")
+            self.assertEqual(gate.run(ev, j)["hookSpecificOutput"]["permissionDecision"], "ask", ev)
+            self.assertEqual(len(j.calls), 1, ev)
+            self.assertEqual(self.log()[-1]["task_review"], "skip", ev)
+        j = jev("destructive")
+        self.assertIsNone(gate.run(self.edit("src/app.py", "pkg", agent_id="a1b2"), j))
+        self.assertEqual(j.calls, [])
+        self.assertEqual(self.log()[-1]["via"], "task_review")
+
+    def test_active_json_is_read_once_per_gate_call(self):
+        # Defect: one gate call reads active.json three times (context, edit_verdict, load_review).
+        import builtins
+        real, reads = builtins.open, []
+
+        def counting(f, *a, **k):
+            if str(f).endswith("active.json"):
+                reads.append(f)
+            return real(f, *a, **k)
+        for ev in (self.edit("src/app.py", "pkg"), self.edit("pkg/a.py", "pkg")):
+            reads.clear()
+            with mock.patch("builtins.open", counting):
+                gate.run(ev, jev())
+            self.assertEqual(len(reads), 1, ev)
+
+
+class GateLocalFileAlwaysJudgedTest(unittest.TestCase):
+    """local_file never skips a file pathclass.always_judged names (no task needed)."""
+
+    def test_always_judged_files_inside_cwd_reach_the_judge(self):
+        # Defect: foo.jks or secrets.yaml inside cwd were skipped by local_file and never judged.
+        tmp = os.path.realpath(tempfile.mkdtemp())
+        env = dict(NOKEY, JEV_LOG_DIR=os.path.join(tmp, "logs"), JEV_SSD_ROOT=tmp,
+                   JEV_THRESHOLDS=os.path.join(tmp, "t.json"))
+        with mock.patch.dict(os.environ, env):
+            for rel in ("keys/foo.jks", "secrets.yaml", "app.keystore", "db_credentials.json", "Jenkinsfile",
+                        "azure-pipelines.yml", "vault.kdbx"):
+                ti = {"file_path": os.path.join(tmp, rel), "content": "x"}
+                self.assertFalse(gate.local_file("Write", ti, tmp), rel)
+                j = jev("destructive")
+                out = gate.run({"tool_name": "Write", "tool_input": ti, "cwd": tmp}, j)
+                self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "ask", rel)
+                self.assertEqual(len(j.calls), 1, rel)
+            self.assertTrue(gate.local_file("Write", {"file_path": os.path.join(tmp, "src/a.py")}, tmp))
 
 
 if __name__ == "__main__":

@@ -8,51 +8,34 @@ The orchestrator writes the set into .orchestrate/active.json (the scope lock de
 An edit would be skipped only when it touches no always-judged path, its new text has no content signal, every
 active task has a well-formed entry, some entry's skip list names the file and no entry's review list matches it.
 Missing, unreadable, malformed or other-version data means the edit is judged (fail safe). Never raises.
+Path classes come from pathclass.py (shared with the gate). CONTENT_SIGNALS is a best-effort list of lowercase
+substrings of the new text (process spawn, dynamic import and native calls, eval, deletes, env reads, network,
+install hooks); WORD_SIGNALS match only at a word start (socket: not websocket) or as a whole word (pty: not
+empty). A missed signal never skips an always-judged file.
 
 CLI: task_review.py answer PLAN.md N   (prints the entry to write; see task_score.answer)"""
 import json
 import os
-import posixpath
+import re
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pathclass
 import planfile
 import taskctx
 
 REVIEW_VERSION = 1
 FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
-# Always judged, whatever a task verdict or provider says: dot paths (.git, .github CI, .env, .claude,
-# .orchestrate), CI files by name, key and certificate files, secret-looking names, the gate's SENSITIVE_* build
-# files and scripts, anything outside the worktree.
-ALWAYS_NAMES = frozenset(("jenkinsfile", "azure-pipelines.yml", "bitbucket-pipelines.yml", "cloudbuild.yaml",
-                          "cloudbuild.yml", ".gitlab-ci.yml"))
-KEY_SUFFIXES = (".pem", ".key", ".crt", ".p12", ".pfx", ".jks", ".keystore", ".kdbx")
-# Plain substrings of the new text (no regex): processes, eval, deletes, env reads, network.
-CONTENT_SIGNALS = ("subprocess", "os.system", "os.popen", "child_process", "eval(", "exec(", "shutil.rmtree",
-                   "os.remove", "unlink(", "rm -", "os.environ", "getenv", "process.env", "requests.", "urllib",
-                   "http.client", "socket", "fetch(", "curl ", "wget ", "sudo ", "chmod ", "postinstall",
-                   "preinstall")
+CONTENT_SIGNALS = ("subprocess", "os.system", "os.popen", "os.exec", "os.spawn", "child_process", "execsync",
+                   "__import__", "importlib", "ctypes", "eval(", "exec(", "deno.run", "bun.spawn", "shutil.rmtree",
+                   "os.remove", "unlink(", "rmsync", "fs.rm(", "rm -", "os.environ", "getenv", "process.env",
+                   "requests.", "urllib", "http.client", "fetch(", "curl ", "wget ", "sudo ", "chmod ",
+                   "postinstall", "preinstall")
+WORD_SIGNALS = (("socket", re.compile(r"(?<![a-z0-9_])socket")), ("pty", re.compile(r"\bpty\b")))
 MAX_TEXT = 1 << 20
 _WILD = frozenset("*?[")
-
-
-def _norm(rel: str) -> str:
-    return posixpath.normpath(str(rel).replace("\\", "/"))
-
-
-def always_judged(rel: str) -> bool:
-    r = _norm(rel)
-    if r in (".", "..") or r.startswith(("../", "/")):
-        return True
-    parts = [p for p in r.split("/") if p]
-    if any(p.startswith(".") for p in parts):
-        return True
-    name = parts[-1].lower()
-    if name in ALWAYS_NAMES or name.endswith(KEY_SUFFIXES) or "secret" in name or "credential" in name:
-        return True
-    import gate  # lazy: gate imports this module
-    return gate._sensitive(r)  # build files and scripts (SENSITIVE_NAMES, _SENSITIVE_PREFIXES, SENSITIVE_SUFFIXES)
+always_judged = pathclass.always_judged  # dot paths, CI files, keys, secrets, SENSITIVE_* build files, outside
 
 
 def path_class(rel: str) -> str:
@@ -62,7 +45,8 @@ def path_class(rel: str) -> str:
 
 def content_signal(text: str) -> Optional[str]:
     low = str(text)[:MAX_TEXT].lower()
-    return next((s for s in CONTENT_SIGNALS if s in low), None)
+    hit = next((s for s in CONTENT_SIGNALS if s in low), None)
+    return hit or next((name for name, rx in WORD_SIGNALS if rx.search(low)), None)
 
 
 def edit_text(tool: str, ti: Dict[str, Any]) -> str:
@@ -95,37 +79,35 @@ def review_set(globs: List[str]) -> Dict[str, List[str]]:
     return out
 
 
-def load_review(root: str) -> Optional[Dict[str, Dict[str, List[str]]]]:
-    """The review set of every active task, or None when any part is missing or malformed."""
-    try:
-        with open(os.path.join(root, ".orchestrate", "active.json"), encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or data.get("review_version") != REVIEW_VERSION:
-            return None
-        active, review = data.get("active"), data.get("review")
-        if not isinstance(active, list) or not active or not isinstance(review, dict):
-            return None
-        out: Dict[str, Dict[str, List[str]]] = {}
-        for a in active:
-            e = review.get(str(a))
-            if not isinstance(e, dict) or not isinstance(e.get("skip"), list) or not isinstance(e.get("review"), list):
-                return None
-            if not all(isinstance(x, str) for x in e["skip"] + e["review"]):
-                return None
-            out[str(a)] = {"skip": e["skip"], "review": e["review"]}
-        return out
-    except Exception:
+def review_sets(data: Any) -> Optional[Dict[str, Dict[str, List[str]]]]:
+    """The review set of every active task in parsed active.json, or None when any part is missing or malformed."""
+    if not isinstance(data, dict) or data.get("review_version") != REVIEW_VERSION:
         return None
-
-
-def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any]) -> Optional[Tuple[str, str]]:
-    """(verdict, why) for a file edit inside an orchestrated task, None outside one. verdict: "skip" (the task
-    verdict would skip per-edit judgement), "review" or "unknown" (no usable review set: judged)."""
-    try:
-        if tool not in FILE_TOOLS or not taskctx.context(cwd):
+    active, review = data.get("active"), data.get("review")
+    if not isinstance(active, list) or not active or not isinstance(review, dict):
+        return None
+    out: Dict[str, Dict[str, List[str]]] = {}
+    for a in active:
+        e = review.get(str(a))
+        if not isinstance(e, dict) or not isinstance(e.get("skip"), list) or not isinstance(e.get("review"), list):
             return None
-        root = taskctx._root(cwd)
-        if root is None:
+        if not all(isinstance(x, str) for x in e["skip"] + e["review"]):
+            return None
+        out[str(a)] = {"skip": e["skip"], "review": e["review"]}
+    return out
+
+
+def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any],
+                 loaded: Optional[Tuple[Optional[str], Any]] = None) -> Optional[Tuple[str, str]]:
+    """(verdict, why) for a file edit inside an orchestrated task, None outside one. verdict: "skip" (the task
+    verdict would skip per-edit judgement), "review" or "unknown" (no usable review set: judged).
+    Paths are taken relative to the worktree root. loaded: taskctx.load(cwd) when the caller already read it."""
+    try:
+        if tool not in FILE_TOOLS:
+            return None
+        loaded = loaded if loaded is not None else taskctx.load(cwd)
+        root = loaded[0]
+        if root is None or not taskctx.context(cwd, loaded):
             return None
         paths = targets(tool, ti)
         if not paths:
@@ -137,7 +119,7 @@ def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any]) -> Optional[Tuple[str,
         sig = content_signal(edit_text(tool, ti))
         if sig:
             return ("review", "content:" + sig)
-        sets = load_review(root)
+        sets = review_sets(loaded[1])
         if sets is None:
             return ("unknown", "no_review_set")
         for r in rels:

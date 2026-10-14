@@ -2,10 +2,11 @@
 (the task id format /orchestrate uses for log_dispatch). Read-only; never raises; {} when nothing is active."""
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 
-def _root(start: str) -> Optional[str]:
+def root(start: str) -> Optional[str]:
+    """The worktree root holding .orchestrate/active.json above start, None outside one."""
     d = os.path.realpath(start or ".")
     while True:
         if os.path.isfile(os.path.join(d, ".orchestrate", "active.json")):
@@ -16,6 +17,21 @@ def _root(start: str) -> Optional[str]:
         if parent == d:
             return None
         d = parent
+
+
+_root = root
+
+
+def load(start: str) -> Tuple[Optional[str], Any]:
+    """(root, parsed active.json): the one read per hook call. (None, None) outside a task, data None if unreadable."""
+    try:
+        r = root(start)
+        if r is None:
+            return None, None
+        with open(os.path.join(r, ".orchestrate", "active.json"), encoding="utf-8") as f:
+            return r, json.load(f)
+    except Exception:
+        return None, None
 
 
 def branch(root: str) -> str:
@@ -37,18 +53,17 @@ def branch(root: str) -> str:
         return ""
 
 
-def context(cwd: str) -> Dict[str, Any]:
+def context(cwd: str, loaded: Optional[Tuple[Optional[str], Any]] = None) -> Dict[str, Any]:
+    """loaded: taskctx.load(cwd) when the caller already has it."""
     try:
-        root = _root(cwd)
-        if root is None:
+        r, data = loaded if loaded is not None else load(cwd)
+        if r is None:
             return {}
-        with open(os.path.join(root, ".orchestrate", "active.json"), encoding="utf-8") as f:
-            data = json.load(f)
         active = data.get("active", []) if isinstance(data, dict) else []
         ids = [str(a) for a in active if isinstance(a, (str, int))] if isinstance(active, list) else []
         if not ids:
             return {}
-        b = branch(root) or "?"
+        b = branch(r) or "?"
         tasks = ["%s:%s" % (b, i) for i in ids]
         return {"task": tasks[0]} if len(tasks) == 1 else {"tasks": tasks[:16]}
     except Exception:

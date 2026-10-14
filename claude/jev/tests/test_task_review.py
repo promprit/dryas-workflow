@@ -33,8 +33,25 @@ class PathClassTest(unittest.TestCase):
                     "os.remove", "unlink(", "rm -", "os.environ", "getenv", "process.env", "requests.", "urllib",
                     "http.client", "socket", "fetch(", "curl ", "wget ", "sudo ", "chmod ", "postinstall",
                     "preinstall"):
-            self.assertEqual(tr.content_signal("x = 1\n" + sig + "y\n"), sig, sig)
+            self.assertEqual(tr.content_signal("x = 1\n" + sig + " y\n"), sig, sig)
             self.assertEqual(tr.content_signal(sig.upper()), sig, sig)
+
+    def test_new_content_signals_fire(self):
+        # Defect: process spawn, dynamic import, native calls and deletes in other runtimes carry no signal.
+        for text in ("os.execv('/bin/sh', [])", "os.spawnl(0, 'x')", "__import__('os')", "import importlib",
+                     "import ctypes", "import pty", "execSync('ls')", "fs.rmSync(p)", "fs.rm(p, cb)",
+                     "Deno.run({cmd})", "Bun.spawn(['x'])", "eval(code)", "exec(code)", "import socket",
+                     "s = socket.socket()", "import socketserver"):
+            self.assertIsNotNone(tr.content_signal(text), text)
+
+    def test_websocket_is_not_a_socket_signal(self):
+        # Defect: every web client using a WebSocket was sent to the judge.
+        self.assertIsNone(tr.content_signal("const ws = new WebSocket(url)\n"))
+        self.assertIsNone(tr.content_signal("from websockets import serve\n"))
+
+    def test_taskctx_root_is_public(self):
+        import taskctx
+        self.assertIs(taskctx._root, taskctx.root)
 
     def test_benign_text_has_no_signal(self):
         for text in ("# Guide\n\nInstall with the package manager.\n", "total = sum(x for x in items)\n",
