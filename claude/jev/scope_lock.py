@@ -124,8 +124,6 @@ def _bash(ti: Dict[str, Any], cwd: str, has_agent_id: bool = False) -> Optional[
         return None
     root = find_root(cwd)
     ids = _active_ids(os.path.realpath(root)) if root else []
-    # Literal matching is the deny line: a command that spells .orchestrate (in any letter case) is denied. Forms
-    # that hide the name (quotes, variables) are not parsed; they fall through to the ask below, never to an allow.
     if has_agent_id and ".orchestrate" in cmd.lower():
         try:
             jevlog.append("scope", {"task": ids, "tool": "Bash", "decision": "deny"})

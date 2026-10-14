@@ -22,7 +22,6 @@ MAX_FILES = 5000
 MAX_BYTES = 2 << 20
 SKIP_DIRS = frozenset((".git", ".orchestrate", "node_modules", "__pycache__", ".venv", "venv", ".tox",
                        ".mypy_cache", ".pytest_cache"))
-# Matched as whole words or whole word sequences of a Done line ("tox" never matches "toxicity").
 TEST_WORDS = tuple(tuple(w.split()) for w in (
     "pytest", "unittest", "jest", "vitest", "mocha", "go test", "cargo test", "swift test", "npm test",
     "pnpm test", "yarn test", "rspec", "phpunit", "ctest", "make test", "tox", "nox"))
