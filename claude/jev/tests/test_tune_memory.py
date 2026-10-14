@@ -32,7 +32,7 @@ class WarningTest(unittest.TestCase):
     def test_repeated_skips_without_a_finished_run_warn(self):
         rows = [r for r in ROWS if r.get("ok") is not True]
         now = 1792041200.0  # 2026-10-15 ~12:13 +0700
-        self.assertIn("dryas memory consolidate", rules_inject.consolidate_warning(rows, now))
+        self.assertIn(rules_inject.wrapper() + " memory consolidate", rules_inject.consolidate_warning(rows, now))
 
     def test_a_finished_run_after_the_skips_silences_it(self):
         self.assertEqual(rules_inject.consolidate_warning(ROWS, 1792041200.0), "")
