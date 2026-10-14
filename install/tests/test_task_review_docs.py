@@ -47,6 +47,12 @@ class TaskReviewDocsTest(unittest.TestCase):
                   'phase: "return"', "carry no worker identity", "best-effort"):
             self.assertIn(s, t, s)
 
+    def test_governance_states_evidence_rules(self):
+        t = read("docs/governance.md")
+        for s in ("would-skip edits", "no evidence", "2 x", "--discard-changes", "every file edit",
+                  "`git checkout -f`", "`git switch -f`", "directory pathspecs", "local_file"):
+            self.assertIn(s, t, s)
+
 
 if __name__ == "__main__":
     unittest.main()
