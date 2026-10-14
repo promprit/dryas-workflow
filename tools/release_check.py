@@ -241,6 +241,27 @@ def release_versions(rep):
             next(iter(versions(REPO).values())))
 
 
+def no_node(rep, repo, tmp):
+    """Preflight passes with Node stripped from PATH (the default install needs none)."""
+    home = Path(tempfile.mkdtemp(dir=str(tmp)))
+    env = sandbox(os.environ, home)
+    env.update(HOME=str(home), USERPROFILE=str(home))
+    env["PATH"] = os.pathsep.join(d for d in env.get("PATH", "").split(os.pathsep)
+                                  if not any(os.path.isfile(os.path.join(d, n)) for n in ("node", "node.exe")))
+    argv = [sys.executable, str(Path(repo) / "install" / "dryas_install.py"), "preflight", "--harness", "claude",
+            "--claude-dir", str(home / ".claude")]
+    try:
+        r = subprocess.run(argv, capture_output=True, universal_newlines=True, encoding="utf-8", errors="replace",
+                           env=env, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        rep.say("FAIL", "no-node install", str(e))
+        return
+    if r.returncode == 0 and "preflight ok" in r.stdout:
+        rep.say("PASS", "no-node install")
+    else:
+        rep.say("FAIL", "no-node install", ("exit %s: %s" % (r.returncode, (r.stdout + r.stderr).strip()))[-200:])
+
+
 def manifests(rep, claude):
     """`claude plugin validate` on the marketplace and the plugin (schema is not checked anywhere else), plus a light
     shape check of the Codex manifest and marketplace."""
@@ -460,6 +481,7 @@ def main(argv=None):
     bash = find_bash()
     tmp = tempfile.mkdtemp(prefix="dryas-release-check-")
     try:
+        no_node(rep, REPO, tmp)
         return _checks(rep, cds, cdxs, env, bash, tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
