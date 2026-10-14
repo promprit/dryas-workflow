@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
 import thresholds
+import tune_memory
 import tune_tasks
 import tune_window
 
@@ -226,6 +227,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "fable": _steps(esc, "fable", "opus"),
         "fable_without_opus": _steps(esc, "fable", "opus", skipped=True),
         "delivery": delivery(dispatch, scope, esc, review, merge),
+        "memory": tune_memory.summary(read("memory", log_dir)),
         "compare_count": len(ratios),
         "swarm_vs_plain": round(sum(ratios) / len(ratios), 3) if ratios else None,
         "jev_spend_usd": _cost(gate) + _cost(route) + _cost(mcp) + _cost(compact) + shadow_spend,
@@ -326,6 +328,7 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
              "- Escalations sonnet->opus: %d %s" % (rep["opus_escalations"]["count"], json.dumps(rep["opus_escalations"]["reasons"])),
              "- Fable dispatches (opus->fable only): %d %s" % (rep["fable"]["count"], json.dumps(rep["fable"]["reasons"])),
              "- Fable without a prior Opus step (should be 0): %d %s" % (rep["fable_without_opus"]["count"], json.dumps(rep["fable_without_opus"]["reasons"]))]
+    lines += tune_memory.lines(rep["memory"])  # delivery lines stay adjacent to the per-task lines
     lines += delivery_lines
     if rep.get("tasks"):
         lines += tune_tasks.lines(rep["tasks"])

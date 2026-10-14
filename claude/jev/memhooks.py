@@ -7,6 +7,7 @@ event on stdin, write the memory store, print nothing, always exit 0, stay insid
   memhooks.py task                       SubagentStop: upsert the active task rows (tiers from dispatch.jsonl), close finished ones
   memhooks.py session-start              SessionStart: session row; Claude memory files indexed as notes
   memhooks.py session-end [manual|auto]  SessionEnd (summary, consolidate) / PreCompact (summary only)
+A consolidation skipped inside the budget is marked pending and finished by a detached `memcli.py consolidate`.
 Sub-project D wires these into chain.json (mem-edit, mem-task, mem-session-start, mem-session-end)."""
 import datetime
 import json
@@ -18,6 +19,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import consolidate_bg
 import jevlog
 import memdb
 import memlearn
@@ -256,7 +258,10 @@ def on_session_start(conn, event: Dict[str, Any]) -> Dict[str, int]:
         conn.execute("INSERT OR IGNORE INTO sessions (id, ns, started) VALUES (?, ?, ?)",
                      (str(event.get("session_id") or "unknown"), ns, time.time()))
     d = notes_dir(cwd)
-    return index_notes(conn, ns, d) if d else {"indexed": 0, "unchanged": 0, "skipped": 0, "removed": 0}
+    counts = index_notes(conn, ns, d) if d else {"indexed": 0, "unchanged": 0, "skipped": 0, "removed": 0}
+    if consolidate_bg.pending(conn):
+        consolidate_bg.spawn(None)  # memcli takes the lock; a run already going makes this one exit at once
+    return counts
 
 
 def summary(conn, ns: str, sid: str) -> str:
@@ -293,6 +298,8 @@ def on_session_end(conn, event: Dict[str, Any], mode: Optional[str], t0: float) 
                 out["consolidated"] = res
         if reason:
             jevlog.append("memory", dict(stage="session-end", error="ConsolidateSkipped", detail=reason))
+            consolidate_bg.mark_pending(conn, ns)
+            consolidate_bg.spawn(ns)
             out["consolidate_skipped"] = reason
     return out
 
