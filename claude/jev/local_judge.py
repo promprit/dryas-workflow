@@ -7,7 +7,8 @@ MAX_CHARS (not parsed at all), answers destructive, so the gate asks.
 The command is parsed, not regex-scanned: one linear, quote-aware pass splits it into simple commands (on ; & &&
 || | newline ( ) { } $( and backticks), drops keywords, NAME=value assignments and wrappers (sudo, env, nice,
 timeout, xargs, ...), and judges the command word and its arguments. `sh -c STRING` and `eval` are judged
-recursively (depth 3). Quoted text is one argument, so `grep "rm -rf /"` or `git commit -m 'reset --hard'` is
+recursively (depth 3); so is a heredoc or here-string fed to a shell without -c. A heredoc body is data: it
+is skipped up to its delimiter line (the whole rest if unterminated) and never judged as commands. Quoted text is one argument, so `grep "rm -rf /"` or `git commit -m 'reset --hard'` is
 not a hit.
 
 Boundary of the short list: rm -r is denied only for /, a glob in the first component, ~ / $HOME, the home roots
@@ -45,13 +46,14 @@ _WRAPPERS: Dict[str, set] = {
 
 class _Cmd:
     """One simple command: words (quotes removed), which words held $( or a backtick, redirection targets,
-    and the simple command it is piped from."""
-    __slots__ = ("words", "dyn", "redirs", "src")
+    heredoc and here-string texts fed to its stdin, and the simple command it is piped from."""
+    __slots__ = ("words", "dyn", "redirs", "here", "src")
 
     def __init__(self, src: "Optional[_Cmd]" = None) -> None:
         self.words: List[str] = []
         self.dyn: List[bool] = []
         self.redirs: List[str] = []
+        self.here: List[str] = []
         self.src = src
 
 
@@ -63,24 +65,31 @@ def _scan(s: str) -> List[_Cmd]:
     cur: List[str] = []
     have = dyn = redir = False  # word started (even if empty), word holds $( or `, word is a redirect target
     quote = ""
+    hkind = ""  # "<<", "<<-" or "<<<" while the redirect target is a heredoc delimiter or here-string
+    pending: List[Tuple[str, bool, _Cmd]] = []  # heredocs whose body starts after the current line
+    arith = 0  # open "((" frames: (( )) and $(( )) arithmetic, where << is a shift
     n, i = len(s), 0
 
     def end_word() -> None:
-        nonlocal cur, have, dyn, redir
+        nonlocal cur, have, dyn, redir, hkind
         if cur or have:
             word = "".join(cur)
             if redir:
                 cmd.redirs.append(word)
-                redir = False
+                if hkind == "<<<":
+                    cmd.here.append(word)
+                elif hkind:
+                    pending.append((word, hkind == "<<-", cmd))
+                redir, hkind = False, ""
             else:
                 cmd.words.append(word)
                 cmd.dyn.append(dyn)
         cur, have, dyn = [], False, False
 
     def end_cmd(pipe: bool = False) -> None:
-        nonlocal cmd, redir
+        nonlocal cmd, redir, hkind
         end_word()
-        redir = False
+        redir, hkind = False, ""
         if cmd.words or cmd.redirs:
             out.append(cmd)
         cmd = _Cmd(cmd if pipe else None)
@@ -128,6 +137,20 @@ def _scan(s: str) -> List[_Cmd]:
             end_word()
         elif c == "\n":
             end_cmd()
+            j = i + 1
+            for delim, tabs, owner in pending:  # bodies in order, each up to its delimiter line
+                body = []
+                while j < n:
+                    e = s.find("\n", j)
+                    e = n if e < 0 else e
+                    line = s[j:e]
+                    j = e + 1
+                    if (line.lstrip("\t") if tabs else line) == delim:
+                        break
+                    body.append(line)
+                owner.here.append("\n".join(body))
+            pending.clear()
+            i = j - 1
         elif c == "\\":
             if nxt and nxt != "\n":
                 cur.append(nxt)
@@ -157,14 +180,16 @@ def _scan(s: str) -> List[_Cmd]:
             i += nxt in "|&" and nxt != ""
         elif c == "(":
             end_cmd()
-            stack.append(("(", None))
+            kind = "((" if nxt == "(" or s[i - 1:i] == "(" else "("
+            arith += kind == "(("
+            stack.append((kind, None))
         elif c == ")":
             if stack and stack[-1][0] == "$(":
                 pop_sub()
             else:
                 end_cmd()
-                if stack and stack[-1][0] == "(":
-                    stack.pop()
+                if stack and stack[-1][0] in ("(", "(("):
+                    arith -= stack.pop()[0] == "(("
         elif c in "{}" and not cur and not have:
             end_cmd()
         elif c in "<>":
@@ -176,15 +201,19 @@ def _scan(s: str) -> List[_Cmd]:
                 push_sub("$(")
                 i += 1
             else:
-                redir = True
+                redir, start = True, i
                 while i + 1 < n and s[i + 1] in "<>&|":
                     i += 1
+                op = s[start:i + 1]
+                if op == "<<" and s[i + 1:i + 2] == "-":
+                    op, i = "<<-", i + 1
+                hkind = op if op == "<<<" or (op in ("<<", "<<-") and not arith) else ""
         else:
             cur.append(c)
         i += 1
     end_cmd()
     while stack:
-        if stack[-1][0] == "(":
+        if stack[-1][0] in ("(", "(("):
             stack.pop()
         else:
             pop_sub()
@@ -303,6 +332,9 @@ def _judge(cmd: _Cmd, depth: int, hits: List[Optional[str]]) -> None:
         if string is not None:
             if depth < _DEPTH:
                 _walk(string, depth + 1, hits)
+        elif cmd.here:  # a heredoc or here-string to a shell is a script
+            for text in cmd.here if depth < _DEPTH else ():
+                _walk(text, depth + 1, hits)
         elif cmd.src is not None and cmd.src.words:
             j, _ = _head(cmd.src.words)
             if j < len(cmd.src.words) and _base(cmd.src.words[j]) in ("curl", "wget"):
