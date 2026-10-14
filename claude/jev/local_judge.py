@@ -11,6 +11,8 @@ recursively (depth 3); so is a heredoc or here-string fed to a shell without -c.
 is skipped up to its delimiter line (the whole rest if unterminated) and never judged as commands. Quoted text is one argument, so `grep "rm -rf /"` or `git commit -m 'reset --hard'` is
 not a hit.
 
+Git rules (force pushes, discards, ...) are in local_git.
+
 Boundary of the short list: rm -r is denied only for /, a glob in the first component, ~ / $HOME, the home roots
 /Users and /home and one user's whole home. Deletes of other system folders (/usr, /etc, /var, ...) are NOT on the
 short list; they get no decision here and are left to the harness's permissions."""
@@ -18,6 +20,8 @@ import functools
 import posixpath
 import re
 from typing import Any, Dict, List, Optional, Tuple
+
+from local_git import bundles, git_hit
 
 MAX_CHARS = 65536
 _DEPTH = 3
@@ -279,32 +283,6 @@ def _is_root(t: str) -> bool:
     return False
 
 
-def _bundles(args: List[str]) -> str:
-    """The letters of every single-dash option word."""
-    return "".join(a[1:] for a in args if a.startswith("-") and not a.startswith("--"))
-
-
-def _git(args: List[str]) -> Optional[str]:
-    i, n = 0, len(args)
-    while i < n and args[i].startswith("-"):
-        i += 1 + (args[i] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace"))
-    if i >= n:
-        return None
-    sub, rest = args[i], args[i + 1:]
-    flags = _bundles(rest)
-    if sub == "reset" and "--hard" in rest:
-        return "git_reset_hard"
-    if sub == "clean" and ("--force" in rest or "f" in flags) and not ("--dry-run" in rest or "n" in flags):
-        return "git_clean_force"
-    if sub == "push" and ("--force" in rest or "f" in flags or "d" in flags or "--delete" in rest
-                          or "--mirror" in rest or any(len(a) > 1 and a[0] in "+:" for a in rest)):
-        return "git_push_force"
-    if sub == "branch" and ("D" in flags or (("d" in flags or "--delete" in rest)
-                                             and ("f" in flags or "--force" in rest))):
-        return "git_branch_delete"
-    return None
-
-
 def _shell_string(args: List[str]) -> Optional[str]:
     """STRING of `sh -c STRING` (also -lc, -ec, ...), else None."""
     has_c = False
@@ -345,7 +323,7 @@ def _judge(cmd: _Cmd, depth: int, hits: List[Optional[str]]) -> None:
     elif cw == "rm":
         cut = args.index("--") if "--" in args else len(args)
         opts = args[:cut]
-        if "r" in _bundles(opts).lower() or "--recursive" in opts:
+        if "r" in bundles(opts).lower() or "--recursive" in opts:
             targets = [(a, d) for j, (a, d) in enumerate(zip(args, dyn))
                        if j > cut or (j < cut and not (a.startswith("-") and a != "-"))]
             if any(_is_root(a) for a, _ in targets):
@@ -367,11 +345,11 @@ def _judge(cmd: _Cmd, depth: int, hits: List[Optional[str]]) -> None:
         if "/s" in low and "/q" in low and any(_DRIVE.match(a) for a in args):
             found(0, "del_drive")
     elif cw == "chmod":
-        if ("R" in _bundles(args) or "--recursive" in args) and any(a in ("777", "0777", "a+rwx") for a in args) \
+        if ("R" in bundles(args) or "--recursive" in args) and any(a in ("777", "0777", "a+rwx") for a in args) \
                 and any(a.startswith("/") and _norm(a) == "/" for a in args):
             found(0, "chmod_root")
     elif cw == "git":
-        hit = _git(args)
+        hit = git_hit(args)
         if hit:
             found(1, hit)
     elif cw in _SQL_CLIENTS:

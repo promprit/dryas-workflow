@@ -60,10 +60,13 @@ def check(root: str, path: str, has_agent_id: bool = False) -> Optional[str]:
     rel = os.path.relpath(path, root)
     if rel == os.pardir or rel.startswith(os.pardir + os.sep):
         return "scope lock: %s is outside worktree %s while tasks %s are active" % (path, root, ",".join(map(str, active)))
-    # Bookkeeping: anything under .orchestrate/ allowed only from main session (no agent_id)
-    if not has_agent_id:
-        if rel.startswith(".orchestrate" + os.sep):
+    # Bookkeeping: .orchestrate/ (PLAN.md, active.json with its task review set) belongs to the main session
+    # (no agent_id). An executor never edits it, whatever its Scope globs say. The name is compared without case:
+    # on a case-insensitive filesystem .ORCHESTRATE/active.json is the same file.
+    if rel.split(os.sep, 1)[0].lower() == ".orchestrate":
+        if not has_agent_id:
             return None
+        return "scope lock: %s is orchestrator bookkeeping; executors never edit it" % rel.replace(os.sep, "/")
     globs = [g for t in active for g in planfile.scope(secs.get(str(t), ""))]
     if planfile.in_scope(rel, globs):
         return None
@@ -111,8 +114,9 @@ def _shell_writes(cmd: str) -> bool:
         return True
 
 
-def _bash(ti: Dict[str, Any], cwd: str) -> Optional[Dict[str, Any]]:
-    """Ask (never deny) for a write-like shell command while a task is active."""
+def _bash(ti: Dict[str, Any], cwd: str, has_agent_id: bool = False) -> Optional[Dict[str, Any]]:
+    """Ask for a write-like shell command while a task is active; deny it when an executor's command names
+    .orchestrate (the orchestrator's bookkeeping, see check)."""
     if not task_active(cwd):
         return None
     cmd = str(ti.get("command", ""))
@@ -120,6 +124,14 @@ def _bash(ti: Dict[str, Any], cwd: str) -> Optional[Dict[str, Any]]:
         return None
     root = find_root(cwd)
     ids = _active_ids(os.path.realpath(root)) if root else []
+    if has_agent_id and ".orchestrate" in cmd.lower():
+        try:
+            jevlog.append("scope", {"task": ids, "tool": "Bash", "decision": "deny"})
+        except Exception:
+            pass
+        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                       "permissionDecisionReason": "scope lock: executors never write .orchestrate/ "
+                                                                   "(orchestrator bookkeeping)"}}
     try:
         jevlog.append("scope", {"task": ids, "tool": "Bash", "decision": "ask"})
     except Exception:
@@ -139,7 +151,7 @@ def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         ti = {}
     cwd = event.get("cwd") or os.getcwd()
     if tool == "Bash":
-        return _bash(ti, str(cwd))
+        return _bash(ti, str(cwd), "agent_id" in event)
     target = ti.get("file_path") or ti.get("notebook_path")
     if not target:
         if task_active(str(cwd)):  # fail closed: a file tool with no path cannot be checked against the scope
