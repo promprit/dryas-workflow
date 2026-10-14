@@ -82,7 +82,9 @@ def _false_skip(gate: List[Any]) -> str:
     if not recs:
         return "n/a"
     enforced = [r for r in recs if r.get("decision") == "skipped" and r.get("via") == "task_review"]
-    paths = [r.get(k) for r in enforced for k in ("path", "file_path", "rel") if isinstance(r.get(k), str)]
+    paths = [p for r in enforced for k in ("path", "file_path", "rel")
+             for p in (r.get(k) if isinstance(r.get(k), list) else [r.get(k)])
+             if isinstance(p, str) and p != "<outside>"]
     if enforced and not paths:
         return "n/a"
     return "FAIL" if any(pathclass.always_judged(p) for p in paths) else "PASS"

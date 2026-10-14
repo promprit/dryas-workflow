@@ -338,5 +338,37 @@ class GateLocalFileAlwaysJudgedTest(unittest.TestCase):
             self.assertTrue(gate.local_file("Write", {"file_path": os.path.join(tmp, "src/a.py")}, tmp))
 
 
+class GateRelTest(GateTaskReviewTest):
+    """Task-verdict gate records name the worktree-relative path (never an absolute one)."""
+
+    def test_task_verdict_records_carry_rel(self):
+        gate.run(self.edit("src/app.py"), jev())
+        self.assertEqual(self.log()[-1]["rel"], "src/app.py")
+
+    def test_outside_worktree_is_marked_not_absolute(self):
+        ev = self.edit("src/app.py")
+        ev["tool_input"]["file_path"] = os.path.join(self.tmp, "elsewhere", "x.py")
+        gate.run(ev, jev())
+        rec = self.log()[-1]
+        self.assertIn("task_review", rec)
+        self.assertEqual(rec["rel"], "<outside>")
+
+    def test_several_paths_log_a_list_capped_at_16(self):
+        ev = self.edit("src/app.py")
+        ev["tool_input"]["paths"] = [os.path.join(self.wt, "lib", "m%d.py" % i) for i in range(20)]
+        gate.run(ev, jev())
+        rel = self.log()[-1]["rel"]
+        self.assertEqual(len(rel), 16)
+        self.assertEqual(rel[:2], ["src/app.py", "lib/m0.py"])
+        self.assertNotIn(self.tmp, json.dumps(rel))
+
+    def test_records_without_a_task_verdict_are_unchanged(self):
+        self.active({"active": []})
+        gate.run(self.edit("src/app.py"), jev())
+        rec = self.log()[-1]
+        self.assertNotIn("task_review", rec)
+        self.assertNotIn("rel", rec)
+
+
 if __name__ == "__main__":
     unittest.main()

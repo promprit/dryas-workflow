@@ -116,6 +116,12 @@ class FalseSkipLineTest(unittest.TestCase):
         self.assertEqual(self.fs([{"tool": "Bash", "decision": "none"}]), "PASS")  # no enforced skip at all
         self.assertEqual(self.fs([skip("scripts/run.sh", decision="none", via=None)]), "PASS")  # not enforced
 
+    def test_rel_lists(self):
+        self.assertEqual(self.fs([skip(rel=["src/a.py", "scripts/run.sh"])]), "FAIL")
+        self.assertEqual(self.fs([skip(rel=["src/a.py", "lib/b.py"])]), "PASS")
+        self.assertEqual(self.fs([skip(rel=["<outside>"])]), "n/a")
+        self.assertEqual(self.fs([skip(rel=["<outside>", "scripts/run.sh"])]), "FAIL")
+
     def test_na_without_data(self):
         self.assertEqual(self.fs([]), "n/a")
         self.assertEqual(self.fs([skip()]), "n/a")  # enforced skip, path not logged
