@@ -59,6 +59,8 @@ Present the three reports separately, as returned: do not merge or re-rank them.
 
 The reviewer flags speculative abstraction (layers, hooks or generality no current caller needs), an unused option or parameter, a wrapper around the stdlib that adds nothing, a new dependency where the stdlib would do, and code that a reuse of existing repo code would have avoided. Each finding uses the same format and severities as stages 1 and 2 and cites the rung of the minimum-code ladder (`$dryas:executor` rule 3) it skipped: YAGNI, reuse, stdlib, native feature, existing dependency, one-liner.
 
+- Unrelated change: a hunk that does not trace to the task or plan step (refactor, rename, reformat, drive-by fix). Report it as an "unrelated change" finding, Important, naming the hunk.
+
 For a worked round (SHAs, dispatch, reports, fixes), read `<dryas-root>/skills/review-request/reference.md` § Example.
 
 ## Rationalizations

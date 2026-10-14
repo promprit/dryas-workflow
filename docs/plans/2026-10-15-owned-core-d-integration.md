@@ -1864,6 +1864,18 @@ class ReleaseTest(unittest.TestCase):
 
 ---
 
+## Task 16: Surgical changes
+
+Origin: karpathy-skills guidelines, lessons only, nothing installed, approved by Promprit 2026-10-15. Task 14's rules-template pass keeps the rule reachable within its byte budget.
+
+Goal: executors change only lines that trace to their task and report unrelated issues instead of fixing them; /wreview's over-engineering stage flags hunks that do not trace to the task or plan step as "unrelated change" findings; both editions.
+
+Scope: `claude/agents/executor.md`, `codex/skills/orchestrate/SKILL.md`, `claude/skills/review-request/**`, `codex/skills/review-request/**`, `claude/skills/UPSTREAM.md`, `install/tests/fixtures/pre_pstack/**`, `install/tests/test_surgical_changes.py`.
+
+Done: `python3 -m pytest -q install/tests` passes; `python3 tools/sync_codex_plugin.py --check` exits 0; `python3 tools/inventory.py --check` prints `0 problems`.
+
+---
+
 ## Handoff notes for executors (facts gathered while planning, 2026-10-15)
 
 - **Stale-claim locations** (spec/owned-core at c33f7bb):
