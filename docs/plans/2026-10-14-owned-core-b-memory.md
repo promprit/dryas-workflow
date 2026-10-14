@@ -1220,7 +1220,7 @@ Done:
 Failing test first: claude/jev/tests/test_memhooks.py :: MemHooksTest :: test_one_row_per_edit_failure_flagged
 
 **Interfaces:**
-- Consumes: `memdb.connect/tx/content_hash` (Task 1), `projns.project_ns/main_root` (Task 1), `memlearn.consolidate` (Task 3), `taskctx.context(cwd)` (plan A1: `{}`, `{"task": "<branch>:<id>"}` or `{"tasks": [...]}`), `planfile.sections/scope`, `paths.projects_dir`, `jevlog.append/log_dir`, `redact.redact`.
+- Consumes: `memdb.connect/tx/content_hash` (Task 1), `projns.project_ns/main_root` (Task 1), `memlearn.consolidate` (Task 3), `taskctx.context(cwd)` (plan A1: `{}`, `{"task": "<branch>:<id>"}`, `{"task": first, "co_tasks": [...]}` or `{"tasks": [...]}`; all shapes accepted, an edit with more than one active task gets no `task_id`), `planfile.sections/scope`, `paths.projects_dir`, `jevlog.append/log_dir`, `redact.redact`.
 - Produces: CLI `memhooks.py edit | task | session-start | session-end [manual|auto]` (stdin = the hook event JSON; prints nothing; exit 0). `memhooks.run(stage: str, event: dict, rest: List[str], t0: float)` returns the stage's result: `edit` → bool (row written), `task` → int (task rows closed), `session-start` → `{"indexed", "unchanged", "skipped", "removed"}`, `session-end` → `{"summary": str[, "consolidated": dict]}`; raises on error (`main` catches and logs). `memhooks.repo_rel(path: str) -> str`; `memhooks.notes_dir(cwd: str) -> Optional[str]` (`$DRYAS_NOTES_DIR` when set, else `<projects_dir>/<main repo path with every non-alphanumeric character as "-">/memory`, then the same for cwd). Sub-project D wires these as chain stages `mem-edit` (PostToolUse and PostToolUseFailure), `mem-task` (SubagentStop), `mem-session-start` (SessionStart), `mem-session-end` (SessionEnd; PreCompact with `manual`/`auto`).
 - Log record on failure: `memory.jsonl` `{"stage", "error", "detail"}`.
 
@@ -1317,6 +1317,14 @@ class MemHooksTest(unittest.TestCase):
         self.activate("2")
         self.run_stage("edit", self.edit_event())
         self.assertEqual(self.db().execute("SELECT task_id FROM edits").fetchone()[0], "feat/b:2")
+
+    def test_several_active_tasks_in_either_taskctx_shape(self):
+        for ctx in ({"task": "feat/b:1", "co_tasks": ["feat/b:2"]}, {"tasks": ["feat/b:1", "feat/b:2"]}):
+            with mock.patch.object(memhooks.taskctx, "context", return_value=ctx):
+                self.assertEqual(memhooks._task_ids(self.proj), ["feat/b:1", "feat/b:2"], ctx)
+                self.run_stage("edit", self.edit_event())
+                self.assertEqual(self.run_stage("task", self.event()), 2)
+        self.assertEqual([r[0] for r in self.db().execute("SELECT task_id FROM edits")], [None, None])
 
     def test_edit_paths_agree_across_worktrees(self):
         repo = Path(self.tmp) / "myrepo"
@@ -1486,8 +1494,15 @@ def repo_rel(path: str) -> str:
 
 
 def _task_ids(cwd: str) -> List[str]:
+    """Every active task id. Accepts both taskctx shapes: {"task", "co_tasks"?} and {"tasks"}."""
     ctx = taskctx.context(cwd)
-    return [ctx["task"]] if "task" in ctx else [str(t) for t in ctx.get("tasks", [])]
+    ids = [str(ctx["task"])] if ctx.get("task") else []
+    for key in ("co_tasks", "tasks"):
+        extra = ctx.get(key)
+        for t in extra if isinstance(extra, list) else []:
+            if str(t) not in ids:
+                ids.append(str(t))
+    return ids
 
 
 def on_edit(conn, event: Dict[str, Any]) -> bool:
@@ -2275,8 +2290,9 @@ class MemoryParityTest(unittest.TestCase):
         self.assertIsNotNone(self.db().execute("SELECT 1 FROM tasks WHERE task_id = ?", (out["swarmId"],)).fetchone())
 
     def test_row_pre_bash_danger_scan(self):
-        self.assertIsNotNone(local_judge.danger("rm -rf /"))
-        self.assertIsNone(local_judge.danger("rm -rf node_modules"))
+        # Ruflo pre-bash's own cases; A1 owns the rest of the danger list and its negative cases
+        for cmd in ("rm -rf /", "format c:", "del /s /q c:\\", ":(){ :|:& };:"):
+            self.assertIsNotNone(local_judge.danger(cmd), cmd)
 
     def test_row_post_edit(self):
         self.edit("a.py")
