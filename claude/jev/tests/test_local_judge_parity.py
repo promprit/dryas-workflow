@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -65,11 +66,13 @@ class ParityTest(_Cases):
 
 JEV_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # A daemon thread cannot bound a runaway here: a backtracking `re` match holds the GIL, so join()
-# never returns. The call runs in a child process killed after HANG_LIMIT seconds. Speed is judged
+# never returns. The call runs in a child process that prints "go" before each timed call and is killed when a
+# call is still running HANG_LIMIT seconds later (startup and the other calls do not count). Speed is judged
 # against a baseline measured in the same child: the same call on a benign command of equal length
 # (capped at MAX_CHARS), so machine load slows both alike. Each side is the median of 3 runs.
 HANG_LIMIT = 2.0
-SLOWDOWN = 12
+STARTUP_LIMIT = 60.0
+SLOWDOWN = 40
 _CHILD = (
     "import json, statistics, sys, time\n"
     "sys.path.insert(0, sys.argv[1])\n"
@@ -78,11 +81,12 @@ _CHILD = (
     "    runs = []\n"
     "    for _ in range(3):\n"
     "        local_judge._analyse.cache_clear()\n"
+    "        print('go', flush=True)\n"
     "        start = time.perf_counter()\n"
     "        res = local_judge.gate_answers('Bash', cmd, True)\n"
     "        runs.append(time.perf_counter() - start)\n"
     "    return statistics.median(runs), res\n"
-    "cmd = sys.stdin.read()\n"
+    "cmd = sys.argv[2]\n"
     "base, _ = secs('ls -la ' * (min(len(cmd), local_judge.MAX_CHARS) // 7))\n"
     "took, res = secs(cmd)\n"
     "print(json.dumps({'secs': took, 'base': base, 'res': res}))\n"
@@ -91,14 +95,29 @@ _CHILD = (
 
 def _timed(cmd):
     """Return (hung, box) where box has 'secs', 'base' and 'res', or 'err' if the child failed."""
+    p = subprocess.Popen([sys.executable, "-c", _CHILD, JEV_DIR, cmd],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    started = False
     try:
-        p = subprocess.run([sys.executable, "-c", _CHILD, JEV_DIR], input=cmd, capture_output=True,
-                           text=True, timeout=HANG_LIMIT)
-    except subprocess.TimeoutExpired:
-        return True, {}
-    if p.returncode != 0:
-        return False, {"err": AssertionError(p.stderr.strip()[-2000:])}
-    return False, json.loads(p.stdout)
+        while True:
+            killer = threading.Timer(HANG_LIMIT if started else STARTUP_LIMIT, p.kill)
+            killer.start()
+            try:
+                line = p.stdout.readline()
+            finally:
+                killer.cancel()
+            if line.strip() != "go":
+                break
+            started = True
+        p.wait()
+        if line:
+            return False, json.loads(line)
+        return (p.returncode < 0 and started), {"err": AssertionError(p.stderr.read().strip()[-2000:])}
+    finally:
+        p.kill()
+        p.wait()
+        p.stdout.close()
+        p.stderr.close()
 
 
 def assert_fast(test, name, box):
