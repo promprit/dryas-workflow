@@ -30,10 +30,41 @@ def ns_from(start: str, common_dir: Optional[str]) -> str:
     return sanitize(name)
 
 
+def _walk_common_dir(start: str) -> Optional[str]:
+    """The git common dir read from the first .git entry upward from start; None when there is none."""
+    d = os.path.realpath(start)
+    while True:
+        g = os.path.join(d, ".git")
+        if os.path.isdir(g):
+            return g
+        if os.path.isfile(g):
+            with open(g, encoding="utf-8") as f:
+                line = f.readline().strip()
+            if not line.startswith("gitdir:"):
+                return None
+            x = os.path.realpath(os.path.join(d, line[len("gitdir:"):].strip()))
+            cd = os.path.join(x, "commondir")
+            if os.path.isfile(cd):
+                with open(cd, encoding="utf-8") as f:
+                    return os.path.realpath(os.path.join(x, f.read().strip()))
+            return x
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+
 def common_dir(start: str) -> Optional[str]:
+    """Read .git entries first (no subprocess inside a checkout); ask git only when none is found."""
+    try:
+        found = _walk_common_dir(start)
+    except OSError:
+        found = None
+    if found:
+        return found
     try:
         p = subprocess.run(["git", "-C", start, "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                           capture_output=True, text=True, timeout=5)
+                           capture_output=True, text=True, timeout=1)
     except (OSError, subprocess.SubprocessError):
         return None
     out = p.stdout.strip()

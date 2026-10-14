@@ -132,7 +132,7 @@ def on_task(conn, event: Dict[str, Any]) -> int:
         with memdb.tx(conn):
             conn.execute(
                 "INSERT INTO tasks (task_id, ns, title, scope, tier_start, tier_end, outcome, started, ended, meta) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(task_id) DO UPDATE SET "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(ns, task_id) DO UPDATE SET "
                 "title = CASE WHEN excluded.title != '' THEN excluded.title ELSE tasks.title END, "
                 "scope = CASE WHEN excluded.scope != '[]' THEN excluded.scope ELSE tasks.scope END, "
                 "tier_start = COALESCE(tasks.tier_start, excluded.tier_start), "
