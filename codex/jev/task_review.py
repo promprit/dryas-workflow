@@ -7,10 +7,11 @@ The orchestrator writes the set into .orchestrate/active.json (the scope lock de
    "review": {"3": {"skip": ["src/a.py"], "review": ["src/**"], "tier": "sonnet", "score": 42}}}
 An edit would be skipped only when it touches no always-judged path, its new text has no content signal, every
 active task has a well-formed entry, some entry's skip list names the file and no entry's review list matches it.
-Missing, unreadable, malformed or other-version data means the edit is judged (fail safe). Never raises.
+Missing, unreadable, malformed or other-version data means the edit is judged (fail safe). Skip entries with a
+wildcard (*?[) are ignored, so "skip": ["**"] skips nothing. Never raises.
 Path classes come from pathclass.py (shared with the gate). CONTENT_SIGNALS is a best-effort list of lowercase
 substrings of the new text (process spawn, dynamic import and native calls, eval, deletes, env reads, network,
-install hooks); WORD_SIGNALS match only at a word start (socket: not websocket) or as a whole word (pty: not
+install hooks); text over MAX_TEXT is the signal "too_long"; WORD_SIGNALS match only at a word start (socket: not websocket) or as a whole word (pty: not
 empty). A missed signal never skips an always-judged file.
 
 CLI: task_review.py answer PLAN.md N   (prints the entry to write; see task_score.answer)"""
@@ -28,10 +29,11 @@ import taskctx
 REVIEW_VERSION = 1
 CONTENT_SIGNALS = ("subprocess", "os.system", "os.popen", "os.exec", "os.spawn", "child_process", "execsync",
                    "__import__", "importlib", "ctypes", "eval(", "exec(", "deno.run", "bun.spawn", "shutil.rmtree",
-                   "os.remove", "unlink(", "rmsync", "fs.rm(", "rm -", "os.environ", "getenv", "process.env",
+                   "os.remove", "unlink(", "rmsync", "fs.rm(", "rm -", "os.environ", "getenv", "process.env", "from os import",
                    "requests.", "urllib", "http.client", "fetch(", "curl ", "wget ", "sudo ", "chmod ",
                    "postinstall", "preinstall")
-WORD_SIGNALS = (("socket", re.compile(r"(?<![a-z0-9_])socket")), ("pty", re.compile(r"\bpty\b")))
+WORD_SIGNALS = (("socket", re.compile(r"(?<![a-z0-9_])socket")), ("pty", re.compile(r"\bpty\b")),
+                ("environ", re.compile(r"\benviron\b")))
 MAX_TEXT = 1 << 20
 _WILD = frozenset("*?[")
 always_judged = pathclass.always_judged
@@ -43,7 +45,11 @@ def path_class(rel: str) -> str:
 
 
 def content_signal(text: str) -> Optional[str]:
-    low = str(text)[:MAX_TEXT].lower()
+    """Best-effort signal name for risky new text, None if none; text over MAX_TEXT is "too_long" (judged)."""
+    text = str(text)
+    if len(text) > MAX_TEXT:
+        return "too_long"
+    low = text.lower()
     hit = next((s for s in CONTENT_SIGNALS if s in low), None)
     return hit or next((name for name, rx in WORD_SIGNALS if rx.search(low)), None)
 
@@ -92,7 +98,7 @@ def review_sets(data: Any) -> Optional[Dict[str, Dict[str, List[str]]]]:
             return None
         if not all(isinstance(x, str) for x in e["skip"] + e["review"]):
             return None
-        out[str(a)] = {"skip": e["skip"], "review": e["review"]}
+        out[str(a)] = {"skip": [x for x in e["skip"] if not set(x) & _WILD], "review": e["review"]}
     return out
 
 
@@ -106,7 +112,7 @@ def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any],
             return None
         loaded = loaded if loaded is not None else taskctx.load(cwd)
         root = loaded[0]
-        if root is None or not taskctx.context(cwd, loaded):
+        if root is None or (loaded[1] is not None and not taskctx.context(cwd, loaded)):
             return None
         paths = targets(tool, ti)
         if not paths:
@@ -149,7 +155,7 @@ def main(argv: List[str]) -> int:
     try:
         with open(argv[2], encoding="utf-8") as f:
             sec = planfile.sections(f.read()).get(argv[3])
-    except OSError as e:
+    except (OSError, ValueError) as e:
         sys.stderr.write("cannot read %s (%s)\n" % (argv[2], type(e).__name__))
         return 1
     if sec is None:
@@ -162,7 +168,7 @@ def main(argv: List[str]) -> int:
     wall_ms = round((time.monotonic() - t0) * 1000, 2)
     jevlog.append("mcp", dict(tool="task_review", question="task_review", provider="local", task=task_id,
                               answer=dict(skip=len(ans["skip"]), review=len(ans["review"]), tier=ans["tier"]),
-                              confidence=1.0, shadow_provider="none", score=ans["score"], score_tier=ans["tier"],
+                              confidence=1.0, shadow_provider="none", shadow_answer=None, score=ans["score"], score_tier=ans["tier"],
                               task_type=ans["task_type"], wall_ms=wall_ms,
                               reasons=["%s:%d" % (k, v) for k, v in sorted(ans["parts"].items())]))
     entry = {"skip": ans["skip"], "review": ans["review"], "tier": ans["tier"], "score": ans["score"]}

@@ -239,7 +239,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "shadow_spend_usd": shadow_spend,
         "top_judged_heads": [h for h, _ in heads.most_common() if h not in risky][:3],
         "tasks": tune_tasks.summary(task_rows, gate, review, th),
-        "done_check": tune_window.check(task_rows, th["baseline"]["until"]),
+        "done_check": tune_window.check(task_rows, th["baseline"]["until"], review, gate),
     }
 
 

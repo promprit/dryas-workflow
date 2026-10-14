@@ -332,7 +332,18 @@ def _task_review(tool: str, ti: Dict[str, Any], cwd: str, loaded: Tuple[Optional
     if tool not in pathclass.FILE_TOOLS:
         return {}
     v = task_review.edit_verdict(cwd, tool, ti, loaded)
-    return dict(task_review=v[0], task_review_why=v[1]) if v else {}
+    if not v:
+        return {}
+    root = loaded[0]
+    base = os.path.realpath(cwd or ".")
+    rels = []
+    for t in task_review.targets(tool, ti)[:16]:
+        r = os.path.relpath(os.path.realpath(os.path.join(base, t)), root).replace(os.sep, "/") if root else ""
+        rels.append("<outside>" if not r or r == ".." or r.startswith("../") else r)
+    out = dict(task_review=v[0], task_review_why=v[1])
+    if rels:
+        out["rel"] = rels[0] if len(rels) == 1 else rels
+    return out
 
 
 def _false_skip(base: Dict[str, Any], d: Optional[Tuple[str, str]], shadow: Dict[str, Any]) -> Dict[str, Any]:

@@ -20,15 +20,19 @@ def root(start: str) -> Optional[str]:
 
 
 def load(start: str) -> Tuple[Optional[str], Any]:
-    """(root, parsed active.json): the one read per hook call. (None, None) outside a task, data None if unreadable."""
+    """(root, parsed active.json): the one read per hook call. (None, None) outside a task; (root, None) when
+    active.json exists but is unreadable or malformed, so records keep root context."""
     try:
         r = root(start)
-        if r is None:
-            return None, None
+    except Exception:
+        return None, None
+    if r is None:
+        return None, None
+    try:
         with open(os.path.join(r, ".orchestrate", "active.json"), encoding="utf-8") as f:
             return r, json.load(f)
     except Exception:
-        return None, None
+        return r, None
 
 
 def branch(root: str) -> str:
