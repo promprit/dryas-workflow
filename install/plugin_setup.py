@@ -23,7 +23,7 @@ ID = PLUGIN + "@" + MARKET
 OFFICIAL_SOURCE = "anthropics/claude-plugins-official"  # marketplace of the optional superpowers component
 SUPERPOWERS = "superpowers@claude-plugins-official"
 RECORD = ".dryas-plugin.json"
-OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
+OPTIONAL = run_cmd.OPTIONAL
 WORKFLOW_DOC = ("docs/workflow.md", "docs/dryas-workflow.md")  # repo source -> data root target
 REPO = Path(__file__).resolve().parents[1]
 KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY")
@@ -108,8 +108,17 @@ def _save_json(p: Path, v) -> None:
     p.write_text(json.dumps(v, indent=2) + "\n", encoding="utf-8")
 
 
+def set_judge(provider: Optional[str]) -> None:
+    """--judge / --no-jev / --openrouter-key: the user's judge.provider. None leaves the current value (upgrade)."""
+    if provider is None:
+        return
+    sys.path.insert(0, str(REPO / "claude" / "jev"))
+    import thresholds
+    thresholds.set_value("judge.provider", provider)
+
+
 def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool], repo: Optional[Path] = None,
-                      cd: Optional[Path] = None) -> None:
+                      cd: Optional[Path] = None, providers: Optional[dict] = None) -> None:
     """Unselected components: disabled stages and listed in "off". Core stages are never touched.
     Keeps the user's own stage entries; malformed shapes are replaced. Shared by all accounts and Codex:
     a changed "off" set is reported when another account (other than cd) or Codex uses it."""
@@ -117,6 +126,8 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool],
     loc = _load_json(p, {})
     old = loc.get("off")
     loc["off"] = sorted(c for c in OPTIONAL if c not in comps)
+    if providers is not None:
+        loc["providers"] = providers
     _shared_warning(root, old, loc["off"], cd)
     chain = json.loads((Path(repo or REPO) / "claude" / "jev" / "chain.json").read_text(encoding="utf-8"))
     stages = loc.get("stages") if isinstance(loc.get("stages"), dict) else {}
@@ -294,7 +305,8 @@ def repair_stale_jev(cd: Path, env: Dict[str, str], dry: bool) -> None:
         print("warning: `%s` failed (exit %d); remove the stale jev MCP server by hand" % (" ".join(argv), rc))
 
 
-def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: Optional[bool] = None, dry: bool = False) -> int:
+def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobserve: Optional[bool] = None, dry: bool = False,
+          providers: Optional[dict] = None) -> int:
     repo, cd, root = Path(repo).resolve(), norm(cd), data_root()
     try:
         sm.load_settings(cd / "settings.json")  # malformed settings.json stops here, before any command runs
@@ -380,7 +392,8 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     rec["plugin_root"] = plugin_root
     _save_json(rec_path, rec)
     write_workflow_doc(repo, root)
-    write_chain_local(root, comps, flowobserve, repo, cd)
+    set_judge((providers or {}).get("judge"))
+    write_chain_local(root, comps, flowobserve, repo, cd, providers)
     add_account(root, cd)
     if "jev" in comps and not key and not any((os.environ.get(k) or "").strip() for k in KEY_VARS):
         print("note: Jev needs an OpenRouter key: set OPENROUTER_API_KEY in your shell profile, or run "

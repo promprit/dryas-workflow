@@ -266,7 +266,7 @@ class SetupTest(unittest.TestCase):
 
     def test_chain_local_components(self):
         e = Env(self)
-        ps.setup(REPO, e.a, ["core", "jev"], yes=True, key="", flowobserve=True)
+        ps.setup(REPO, e.a, ["core", "jev", "memory"], yes=True, key="", flowobserve=True)
         loc = json.loads((e.root / "chain.local.json").read_text())
         self.assertEqual(sorted(loc["off"]), ["design", "pstack-picks", "ruflo", "superpowers"])
         self.assertTrue(loc["stages"]["pretool"]["flowobserve"]["enabled"])

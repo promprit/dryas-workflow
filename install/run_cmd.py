@@ -1,6 +1,7 @@
 """Installer entry used by install.sh and install.ps1: flags, preflight, then codex -> migrate -> setup -> verify.
 
-  dryas_install.py run [--repo PATH] [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
+  dryas_install.py run [--repo PATH] [--judge local|jev] [--memory dryas|ruflo|none] [--with-ruflo] [--with-superpowers] [--with-design]
+                       [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
                        [--yes] [--force] [--dry-run] [--uninstall] [--purge] [--keep-extras] [--preflight-only]
                        [--harness claude|codex|both] [--claude-dir DIR] [--codex-dir DIR]
                        [--flowobserve|--no-flowobserve] [--openrouter-key KEY]
@@ -18,15 +19,17 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 import platform_util as pu
 
 HERE = Path(__file__).resolve().parent
-OPTIONAL = ("jev", "ruflo", "superpowers", "design", "pstack-picks")
+OPTIONAL = ("jev", "memory", "ruflo", "superpowers", "design", "pstack-picks")
+EXTRAS = ("ruflo", "superpowers")  # off unless selected or already installed
+FRESH = ("jev", "memory", "design", "pstack-picks")
 HARNESSES = ("claude", "codex", "both")
 NO_SPACE_RUFLO = ("Your Python, Dryas data folder or Dryas plugin path contains a space and has no short form; "
-                  "Ruflo's hook override cannot handle that. Re-run with --no-ruflo.")
+                  "Ruflo's hook override cannot handle that. Re-run without --with-ruflo (--no-ruflo on an upgrade that has it).")
 LEGACY_REFUSAL = ("A Codex copy install (%s) uses %s; run install.sh --harness both (install.ps1 on Windows) to move "
                   "Claude Code and Codex to their plugins. If you no longer use Codex, remove its copy install first "
                   "with install.sh --uninstall --harness codex (Claude Code is not touched), then re-run. Nothing changed.")
@@ -44,6 +47,10 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--repo", default=str(HERE.parent))
     for c in OPTIONAL:
         ap.add_argument("--no-" + c, action="store_true")
+    for c in ("ruflo", "superpowers", "design"):
+        ap.add_argument("--with-" + c, action="store_true")
+    ap.add_argument("--judge", default=None, choices=("local", "jev"))
+    ap.add_argument("--memory", default=None, choices=("dryas", "ruflo", "none"))
     for f in ("yes", "force", "dry-run", "uninstall", "preflight-only", "purge", "keep-extras"):
         ap.add_argument("--" + f, action="store_true")
     fo = ap.add_mutually_exclusive_group()  # tri-state: None keeps the setting, True on, False off
@@ -53,11 +60,52 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--claude-dir", default=None)
     ap.add_argument("--codex-dir", default=None)
     ap.add_argument("--openrouter-key", default="")  # explicit only: it reaches the `claude plugin install` argv
-    return ap.parse_args(argv)
+    a = ap.parse_args(argv)
+    for c in ("ruflo", "superpowers", "design"):
+        if getattr(a, "with_" + c) and getattr(a, "no_" + c):
+            ap.error("--with-%s and --no-%s together" % (c, c))
+    return a
+
+
+def _no(a: argparse.Namespace, c: str) -> bool:
+    return bool(getattr(a, "no_" + c.replace("-", "_")))
+
+
+def select(a: argparse.Namespace, recorded: Optional[List[str]]) -> List[str]:
+    """Components to install. Fresh: the owned core. Upgrade (recorded components): keep them, plus core."""
+    if recorded is None:
+        have = set(FRESH)
+    else:
+        have = set(recorded)
+        if "ruflo" not in have:
+            have.add("memory")
+    for c in ("ruflo", "superpowers", "design"):
+        if getattr(a, "with_" + c):
+            have.add(c)
+    for c in OPTIONAL:
+        if _no(a, c):
+            have.discard(c)
+    if a.memory == "ruflo":
+        have.add("ruflo")
+        have.discard("memory")
+    elif a.memory == "none":
+        have -= {"ruflo", "memory"}
+    elif a.memory == "dryas":
+        have.add("memory")
+    if a.judge or a.no_jev or a.openrouter_key:
+        have.add("jev")
+    return ["core"] + [c for c in OPTIONAL if c in have]
 
 
 def components(a: argparse.Namespace) -> List[str]:
-    return ["core"] + [c for c in OPTIONAL if not getattr(a, "no_" + c.replace("-", "_"))]
+    return select(a, None)
+
+
+def providers(a: argparse.Namespace, comps: List[str], recorded: Optional[List[str]]) -> Dict[str, Optional[str]]:
+    """Provider slots to record. judge None leaves the user's current value (upgrade)."""
+    judge = "jev" if (a.judge == "jev" or a.openrouter_key) else "local" if (a.judge == "local" or a.no_jev) else None
+    mem = "dryas" if "memory" in comps else "ruflo" if "ruflo" in comps else "none"
+    return {"judge": judge, "memory": mem, "process": "dryas"}
 
 
 def codex_version() -> Optional[tuple]:
@@ -85,7 +133,7 @@ def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Seq
     probs = []
     if missing and len(node) == len(missing):  # only Ruflo needs Node: say so and name the way around it
         probs.append("Missing: %s. Only Ruflo needs them: install Node.js (node and npm) and re-run, or re-run with "
-                     "--no-ruflo to skip Ruflo (%s). This installer never installs system packages."
+                     "without --with-ruflo (or with --no-ruflo on an upgrade) to skip Ruflo (%s). This installer never installs system packages."
                      % (" ".join(node), NO_RUFLO_EFFECT[harness]))
     elif missing:
         probs.append("Missing: %s. Install them and re-run (this installer never installs system packages)."
@@ -171,11 +219,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     a = parse(list(sys.argv[1:] if argv is None else argv))
     repo, home = Path(a.repo).resolve(), Path.home()
     cd = ps.claude_dir(a.claude_dir)
-    comps = components(a)
+    rec = ps._load_json(cd / ps.RECORD, {}) if (cd / ps.RECORD).is_file() else {}
+    recorded = (rec.get("components") or None) if isinstance(rec, dict) else None
+    comps = select(a, recorded)
     want_claude, want_codex = a.harness in ("claude", "both"), a.harness in ("codex", "both")
     cdx = cps.codex_home(a.codex_dir)
     legacy = cps.legacy_components(cdx)
-    no_flags = not any(getattr(a, "no_" + c.replace("-", "_")) for c in OPTIONAL)
+    no_flags = not (any(_no(a, c) for c in OPTIONAL) or any(getattr(a, "with_" + c) for c in ("ruflo", "superpowers", "design"))
+                    or a.judge or a.memory)
     codex_comps = legacy if (legacy is not None and no_flags) else comps
     if a.harness == "codex" and not a.uninstall and ("superpowers" in comps or "design" in comps):
         print("note: superpowers and design are Claude Code plugins; skipped for Codex.")
@@ -248,7 +299,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             rc = migrate.migrate(cd, ps.data_root())
             if rc:
                 return rc
-        rc = ps.setup(repo, cd, comps, yes=a.yes, key=a.openrouter_key, flowobserve=a.flowobserve, dry=a.dry_run)
+        rc = ps.setup(repo, cd, comps, yes=a.yes, key=a.openrouter_key, flowobserve=a.flowobserve, dry=a.dry_run,
+                      providers=providers(a, comps, recorded))
         if rc:
             if copy_install and not a.dry_run:
                 print("Your copy install was migrated (state is in %s); plugin setup failed. Fix the error above "

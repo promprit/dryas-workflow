@@ -77,7 +77,7 @@ class FragmentTest(unittest.TestCase):
         allow = frag["core"]["permissions"]["allow"]
         self.assertIn("Read($DATA_RULE/**)", allow)
         self.assertIn('Bash("$CD/bin/dryas-py" "$CD/jev/planfile.py":*)', allow)
-        self.assertEqual(json.loads((REPO / "claude" / "settings.fragment.json").read_text(encoding="utf-8"))["jev"]["permissions"]["allow"], ["mcp__plugin_dryas_jev"])
+        self.assertIn("mcp__plugin_dryas_jev", allow)
         self.assertEqual(frag["core"]["env"]["DRYAS_PY"], "$PY")
         self.assertEqual(frag["core"]["env"]["DRYAS_DATA_ROOT"], "$DRYAS_DATA_ROOT")
 
