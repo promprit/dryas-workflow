@@ -1890,7 +1890,8 @@ class ReleaseTest(unittest.TestCase):
   - New modules: `pathclass.py`, `task_review.py`, `task_score.py`, `tune_tasks.py`, `tune_window.py`, possibly `local_git.py`.
   - All switches are off by default.
   - Codex workers carry no identity, so `task_skip` is never enforced for them.
-  - A2's cleanup makes three timing tests relative or median, and confirms with 5 passes under load.
+  - A2's cleanup made the three timing tests (parity, heredoc, redact) take the median of 3 runs against a 40x same-length benign baseline in the same child, with a strict 2 s hang check; 5/5 passed at load ~43. Known residual risk: the `$(` x30000 parity case under extreme load. If it alone fails in Task 15 Step 5, report it with the load average instead of loosening the budget. `local_git.py` has no dedicated test file (covered by existing tests).
+  - Removed by A2's cleanup (do not use): `gate._sensitive` (use `pathclass.sensitive`), `taskctx._root` (use `taskctx.root`), `tune_tasks._attempt` (now `tune_tasks.as_int`); `FILE_TOOLS` lives only in `pathclass.py`.
   - A2's cleanup moved the git rules out of `local_judge.py` into `claude/jev/local_git.py`; `local_judge` keeps its public API (`gate_answers`). Tasks 6 and 7 call `local_judge.danger`/`destructive`: if those moved too, import them from where the merged code exposes them.
 
 ## Self-review (done while writing)
