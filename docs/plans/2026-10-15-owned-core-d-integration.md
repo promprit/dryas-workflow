@@ -1283,7 +1283,7 @@ Done:
 Failing test first: claude/jev/tests/test_tune_lines.py :: LinesTest :: test_median_lines_per_task_and_per_tier
 
 **Interfaces:**
-- Consumes (A2): `jev_mcp._dispatch_extras` (optional return-record fields), `tune_tasks._row` (row dict, keys incl. `start_tier`), `tune_tasks.summary(rows, gate, review, th)`, `tune_tasks.lines(summary)`. Read A2's `tune_tasks.py` first: if the names differ after A2's cleanup, use the merged names, keep this task's behaviour, and note the names in the commit body.
+- Consumes (A2): `jev_mcp._dispatch_extras` (optional return-record fields), `tune_tasks._row` (row dict, keys incl. `start_tier`), `tune_tasks.summary(task_rows, gate, review, ..., th)` (A2 fix 16 added `gate`, `review` and `th`; call it with the merged signature, as `tune.build` does), `tune_tasks.lines(summary)`. Read A2's `tune_tasks.py` first: if the names differ after A2's cleanup, use the merged names, keep this task's behaviour, and note the names in the commit body.
 - Produces: `log_dispatch` accepts `lines` (int 0–1,000,000; other values dropped, never an error). Rows carry `lines` (None when unknown). `summary` carries `lines_median` (`float` or None) and `lines_by_tier` (`{tier: median}`). `lines()` emits `- Lines changed per task (median): N` and `- Lines per task by start tier: fast N, standard N, strong N, frontier N` (missing tiers omitted; `n/a` when none).
 
 - [ ] **Step 1: Write the failing test.** Build two dispatch records per task: a dispatch-time record with `task`, `tier` and `role`, and a `phase: "return"` record with `lines`. Copy the shapes from A2's `test_tune_baseline.py` / `tune_tasks` tests. Feed them through `tune_tasks.rows(...)` and `summary(...)`, then assert:
@@ -1891,6 +1891,7 @@ class ReleaseTest(unittest.TestCase):
   - All switches are off by default.
   - Codex workers carry no identity, so `task_skip` is never enforced for them.
   - A2's cleanup makes three timing tests relative or median, and confirms with 5 passes under load.
+  - A2's cleanup moved the git rules out of `local_judge.py` into `claude/jev/local_git.py`; `local_judge` keeps its public API (`gate_answers`). Tasks 6 and 7 call `local_judge.danger`/`destructive`: if those moved too, import them from where the merged code exposes them.
 
 ## Self-review (done while writing)
 
