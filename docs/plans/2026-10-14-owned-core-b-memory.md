@@ -488,7 +488,7 @@ Failing test first: claude/jev/tests/test_memstore.py :: LikeStoreTest :: test_s
 
 **Interfaces:**
 - Consumes: `memdb.connect`, `memdb.tx`, `memdb.content_hash`, the tables of Task 1; `redact.redact`.
-- Produces: `memstore.MAX_TITLE = 200`, `memstore.MAX_BODY = 4000`, `memstore.STORE_KINDS = ("outcome", "fact")`; `class memstore.Rejected(ValueError)`; `memstore.check(title: str, body: str) -> None` (raises `Rejected`); `memstore.store(conn, ns, title, body, kind="outcome", tags=(), task_id=None, commit=None, source="dryas", key=None, created=None, meta=None, check_content=True) -> {"id": int, "stored": bool, "duplicate": bool}`; `memstore.terms(query: str) -> List[str]`; `memstore.search(conn, ns, query, limit=3, include_archive=False, session=None) -> {"results": [result], "patterns": [pattern], "fts": bool}` where a result is `{"id", "kind", "title", "body", "tags": list, "task_id", "commit", "source", "created": ISO str, "score": float, "reason": str}` and a pattern is `{"kind", "key", "value", "support", "reason"}`; `memstore.pattern_reason(kind, key, value, support) -> str`; `memstore.list_entries(conn, ns, kind=None, limit=20, offset=0, include_archive=False) -> [result]` (body capped at 300 chars, `score` None, reason `"listed"`); `memstore.forget(conn, ns, mem_id: int) -> "forgotten" | "not found" | "note"`.
+- Produces: `memstore.MAX_TITLE = 200`, `memstore.MAX_BODY = 4000`, `memstore.STORE_KINDS = ("outcome", "fact")` (Task 6 adds `"retro"` for D's `/retro`; the `kind` column itself is free-form text); `class memstore.Rejected(ValueError)`; `memstore.check(title: str, body: str) -> None` (raises `Rejected`); `memstore.store(conn, ns, title, body, kind="outcome", tags=(), task_id=None, commit=None, source="dryas", key=None, created=None, meta=None, check_content=True) -> {"id": int, "stored": bool, "duplicate": bool}`; `memstore.terms(query: str) -> List[str]`; `memstore.search(conn, ns, query, limit=3, include_archive=False, session=None) -> {"results": [result], "patterns": [pattern], "fts": bool}` where a result is `{"id", "kind", "title", "body", "tags": list, "task_id", "commit", "source", "created": ISO str, "score": float, "reason": str}` and a pattern is `{"kind", "key", "value", "support", "reason"}`; `memstore.pattern_reason(kind, key, value, support) -> str`; `memstore.list_entries(conn, ns, kind=None, limit=20, offset=0, include_archive=False) -> [result]` (body capped at 300 chars, `score` None, reason `"listed"`); `memstore.forget(conn, ns, mem_id: int) -> "forgotten" | "not found" | "note"`.
 - Ranking (both backends): a candidate counts if a query term is a prefix of one of its words (words = runs of letters and digits, lower case). `score = matched/terms + 0.3 * rank/max_rank + 0.1 * min(hits, 10)/10`; ties by newer `created`, then lower id. `rank` comes from `patterns` rows of kind `rank` (Task 3). Archive rows only with `include_archive`. Search bumps `hits`/`accessed` and records `access(session, id)` unless the connection is read-only.
 
 - [ ] **Step 1: Write the failing tests** — `claude/jev/tests/test_memstore.py`:
@@ -2088,6 +2088,7 @@ if __name__ == "__main__":
 Goal: the `jev` MCP server answers `memory_search`, `memory_store`, `memory_list`, `memory_forget` and `swarm_init` from the Dryas store (Ruflo argument names accepted, degraded answers when the store is unavailable); one test per row of the spec's parity table; the Codex plugin gets the same modules.
 Scope:
 - claude/jev/memory_mcp.py
+- claude/jev/memstore.py
 - claude/jev/jev_mcp.py
 - claude/jev/tests/test_jev_mcp.py
 - claude/jev/tests/test_memory_mcp.py
@@ -2167,6 +2168,17 @@ class MemoryMcpTest(unittest.TestCase):
         self.assertFalse(err)
         res, _ = call("memory_search", {"query": "retries"})
         self.assertEqual(json.loads(res["results"][0]["body"]), {"retries": 2})
+
+    def test_retro_kind_is_kept(self):
+        # spec D: /retro stores its outcome with kind "retro" so the next task's memory_search finds it
+        out, err = call("memory_store", {"title": "retro 2026-10-14", "body": "Lesson: split PLAN.md only at line start.",
+                                         "kind": "retro"})
+        self.assertFalse(err)
+        res, _ = call("memory_search", {"query": "lesson plan"})
+        self.assertEqual((res["results"][0]["id"], res["results"][0]["kind"]), (out["id"], "retro"))
+        out, _ = call("memory_store", {"title": "x", "body": "unknown kind falls back", "kind": "bogus"})
+        res, _ = call("memory_list", {"kind": "outcome"})
+        self.assertIn(out["id"], [r["id"] for r in res["results"]])
 
     def test_list_and_forget(self):
         a, _ = call("memory_store", {"title": "one", "body": "first"})
@@ -2518,6 +2530,12 @@ def call(name: str, args: Any) -> Tuple[Any, bool]:
         conn.close()
 ```
 
+In `claude/jev/memstore.py` (built in Task 2), allow the `/retro` kind that sub-project D stores (spec commit beb311a):
+
+```python
+STORE_KINDS = ("outcome", "fact", "retro")
+```
+
 Then in `claude/jev/jev_mcp.py` (three small edits, after the A1 merge):
 
 1. Add `import memory_mcp` after `import jevlog` in the import block.
@@ -2544,7 +2562,7 @@ In `claude/jev/tests/test_jev_mcp.py`, `McpTest.test_tools_list` (the one named 
 
 - [ ] **Step 4: Run** `python3 -m pytest -q claude/jev/tests/test_memory_mcp.py claude/jev/tests/test_memory_parity.py claude/jev/tests/test_jev_mcp.py` → pass.
 - [ ] **Step 5: Sync and full check:** `python3 tools/sync_codex_plugin.py`, then `python3 tools/sync_codex_plugin.py --check` → exit 0 (copies the eight new modules and the changed `jev_mcp.py` to `codex/jev`); `python3 tools/inventory.py --check` → `0 problems`; the full suite from Done (about three minutes).
-- [ ] **Step 6: Commit** `git add claude/jev/memory_mcp.py claude/jev/jev_mcp.py claude/jev/tests/test_jev_mcp.py claude/jev/tests/test_memory_mcp.py claude/jev/tests/test_memory_parity.py codex/jev` and `git commit -m "feat(memory): memory tools on the Dryas MCP server, parity tests, Codex sync"`.
+- [ ] **Step 6: Commit** `git add claude/jev/memory_mcp.py claude/jev/memstore.py claude/jev/jev_mcp.py claude/jev/tests/test_jev_mcp.py claude/jev/tests/test_memory_mcp.py claude/jev/tests/test_memory_parity.py codex/jev` and `git commit -m "feat(memory): memory tools on the Dryas MCP server, parity tests, Codex sync"`.
 
 ---
 
