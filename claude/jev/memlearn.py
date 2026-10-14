@@ -5,6 +5,7 @@ Graph nodes are memories ("m:<id>") and files ("f:<path>"). Edges: two memories 
 (co-access), two files edited in the same task or, without a task, the same session (co-edit), and a memory
 and the files its task edited. Pattern rows of kinds rank, file_fail, coedit and tier are replaced for the
 namespace on every run."""
+import heapq
 import os
 import re
 import sys
@@ -26,7 +27,7 @@ MAX_ACCESS = 20000
 MAX_EDGES = 50000  # heaviest edges that take part in PageRank
 MAX_RANK_ROWS = 5000
 MAX_COEDIT_ROWS = 5000
-CHECK_EVERY = 200  # groups between deadline checks in the pair loops
+CHECK_PAIRS = 20000  # pair increments between deadline checks in the pair loops
 KINDS = ("rank", "file_fail", "coedit", "tier")
 _TYPE = re.compile(r"\s*([A-Za-z]+)")
 
@@ -65,13 +66,15 @@ def task_type(title: str) -> str:
     return m.group(1).lower() if m else "other"
 
 
-def _dedupe(conn, ns: str) -> int:
+def _dedupe(conn, ns: str, check=None) -> int:
     where = "ns = ? AND kind NOT IN ('note', 'archive') AND source != 'ruflo'"
     removed = 0
     for (h,) in conn.execute("SELECT hash FROM memory WHERE " + where + " GROUP BY hash HAVING COUNT(*) > 1",
                              (ns,)).fetchall():
         rows = conn.execute("SELECT id, hits FROM memory WHERE " + where + " AND hash = ? ORDER BY created, id",
                             (ns, h)).fetchall()
+        if check is not None:
+            check()
         keep, rest = rows[0][0], [r[0] for r in rows[1:]]
         marks = ",".join("?" * len(rest))
         conn.execute("UPDATE memory SET hits = ? WHERE id = ?", (sum(r[1] or 0 for r in rows), keep))
@@ -104,7 +107,7 @@ def consolidate(conn, ns: str, now: Optional[float] = None, deadline: Optional[f
 
 def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
     with memdb.tx(conn):
-        deduped = _dedupe(conn, ns)
+        deduped = _dedupe(conn, ns, check)
         conn.execute("DELETE FROM access WHERE ts < ?", (now - ACCESS_DAYS * 86400,))
         edges: Counter = Counter()
 
@@ -113,11 +116,15 @@ def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
                                    "WHERE m.ns = ? ORDER BY a.ts DESC LIMIT ?", (ns, MAX_ACCESS)).fetchall():
             by_session[s].add("m:%d" % mid)
         check()
-        for i, ids in enumerate(by_session.values()):
-            if i % CHECK_EVERY == CHECK_EVERY - 1:
-                check()
+        pending = 0
+        for ids in by_session.values():
             for pair in _pairs(ids):
                 edges[pair] += 1
+                pending += 1
+                if pending >= CHECK_PAIRS:
+                    check()
+                    pending = 0
+        check()
 
         groups: Dict[Tuple[str, str], Set[str]] = defaultdict(set)
         totals: Counter = Counter()
@@ -129,18 +136,25 @@ def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
             fails[f] += 0 if ok else 1
         check()
         coedit: Counter = Counter()
-        for i, files in enumerate(groups.values()):
-            if i % CHECK_EVERY == CHECK_EVERY - 1:
-                check()
+        pending = 0
+        for files in groups.values():
             for a, b in _pairs(files):
                 coedit[(a, b)] += 1
                 edges[("f:" + a, "f:" + b)] += 1
+                pending += 1
+                if pending >= CHECK_PAIRS:
+                    check()
+                    pending = 0
+        check()
         for mid, tid in conn.execute("SELECT id, task_id FROM memory WHERE ns = ? AND task_id IS NOT NULL", (ns,)):
             for f in sorted(groups.get(("task", tid), ()))[:MAX_GROUP]:
                 edges[tuple(sorted(("m:%d" % mid, "f:" + f)))] += 1
-
         check()
-        heavy = sorted(edges.items(), key=lambda kv: (-kv[1], kv[0]))[:MAX_EDGES]
+
+        heavy = edges.items()
+        if len(edges) > MAX_EDGES:
+            heavy = heapq.nsmallest(MAX_EDGES, heavy, key=lambda kv: (-kv[1], kv[0]))
+        check()
         ranks = pagerank(dict(heavy), check=check)
         degree: Counter = Counter()
         for a, b in dict(heavy):
@@ -153,6 +167,7 @@ def _consolidate(conn, ns: str, now: float, check) -> Dict[str, int]:
 
         rows: List[Tuple[Any, ...]] = []
         top = sorted(((v, r) for v, r in ranks.items() if v.startswith("m:")), key=lambda vr: (-vr[1], vr[0]))
+        # support is the degree in the capped graph (MAX_EDGES heaviest edges) on capped stores
         rows += [(ns, "rank", v[2:], "%.6f" % r, degree[v], now) for v, r in sorted(top[:MAX_RANK_ROWS])]
         ranked = len(rows)
         rows += [(ns, "file_fail", f, "%.4f" % (fails[f] / float(n)), n, now) for f, n in sorted(totals.items())
