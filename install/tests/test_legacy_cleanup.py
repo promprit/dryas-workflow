@@ -44,9 +44,15 @@ class LegacyTest(unittest.TestCase):
             labels = [i[0] for i in ps.legacy_items(self.cd, {}, last_account=False)]
         self.assertFalse(any("npm" in l for l in labels))
 
-    def test_yes_removes_dir(self):
+    def test_yes_never_removes_dir(self):
         items = [("remove %s" % (self.root / "ruflo"), None, self.root / "ruflo")]
         self.assertEqual(ps.run_legacy(items, yes=True), 0)
+        self.assertTrue((self.root / "ruflo").exists())
+
+    def test_confirmed_removes_dir(self):
+        items = [("remove %s" % (self.root / "ruflo"), None, self.root / "ruflo")]
+        with mock.patch.object(di, "confirm", lambda q: True):
+            self.assertEqual(ps.run_legacy(items, yes=False), 0)
         self.assertFalse((self.root / "ruflo").exists())
 
     def test_plugin_already_offered_by_extras_is_not_repeated(self):

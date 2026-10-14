@@ -70,7 +70,7 @@ If an old Codex copy install still runs from that dir's runtime files, a `--harn
 
 The third-party plugins setup installed for that dir (the Ruflo plugins `ruflo-core`, `ruflo-swarm`, `ruflo-testgen` and `ruflo-jujutsu`, Impeccable and UI UX Pro Max) are recorded in the dir's `.dryas-plugin.json` as setup ran them. `--uninstall` lists the `claude plugin uninstall <id>` commands that undo them and asks `Remove them too?`; `--yes` runs them, `--keep-extras` leaves them without asking (the commands are printed for later). The global `npm uninstall -g ruflo` is offered only on the last account, when no other Claude config dir or Codex home is listed in `accounts.json` (every account and Codex share the npm package). Their marketplaces (`ruflo`, `impeccable`, `ui-ux-pro-max-skill`) are never removed, since you may have installed other plugins from them; the `claude plugin marketplace remove` commands are printed. A failed removal is a warning; the uninstall goes on.
 
-**Legacy cleanup.** For an account Dryas set up (its record exists in that dir), uninstall also offers the pre-2.0 Ruflo pieces still on the machine, each asked separately (`--yes` answers yes; `--keep-extras` skips them): the Ruflo plugins, the global `npm uninstall -g ruflo` (last account only) and the `ruflo` folder under the data root. A dir Dryas never set up is not offered any of it.
+**Legacy cleanup.** For an account Dryas set up (its record exists in that dir), uninstall also offers the pre-2.0 Ruflo pieces still on the machine, offered by default and skipped with `--keep-extras`, each asked separately (`--yes` answers yes for the plugins and the npm package): the Ruflo plugins, the global `npm uninstall -g ruflo` (last account only) and the `ruflo` folder under the data root. The folder is offered only on the last account and when no other account's install record lists Ruflo; `--yes` never removes it (the exact `rm -rf` command is printed), and if `dryas.db` has no rows imported from Ruflo the prompt says the memory was never imported and names `dryas memory import-ruflo`. A dir Dryas never set up is not offered any of it.
 
 `--purge` also removes the entries Dryas owns in `~/.dryas` (`accounts.json`, `chain.local.json`, `docs`, `jev`, `ruflo`), and only when `accounts.json` lists no other Claude config dir and no Codex home (`claude_dirs` and `codex_dirs`) and no old Codex copy install uses it (uninstall each Codex home first, or in the same run with `--harness both`). That deletes your Jev logs, your `/tune` thresholds, saved handoffs and Ruflo memory. It keeps your Dryas memory (`dryas.db` is not among the entries Dryas removes) and your notes in `~/.dryas/docs/dryas-local.md`. It refuses when `accounts.json` is missing or unreadable or the dir's record cannot be read (that dir then stays listed), and it never removes files Dryas did not create.
 
@@ -99,7 +99,7 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex C
 ### Fresh install and upgrade
 
 - **Fresh install:** the owned core: Jev (the gate, the route hint and the `jev` MCP server), Dryas memory, the design skills and the pstack picks. No key, no Node and no third-party process plugin is needed. Ruflo and Superpowers are off until you pass `--with-ruflo` or `--with-superpowers`.
-- **Upgrade** (setup finds the components a previous run recorded): you keep what you have. An install that has Ruflo keeps Ruflo memory, with the Dryas memory stages off; one that has Superpowers keeps it; a recorded judge setting is left alone. Nothing is uninstalled unless you pass a `--no-` flag. An install that had `--no-jev` keeps its gates off until you pass `--judge local` or `--judge jev`. Without Ruflo recorded, an upgrade adds Dryas memory.
+- **Upgrade** (setup finds the components a previous run recorded): you keep what you have. An install that has Ruflo keeps Ruflo memory, with the Dryas memory stages off; one that has Superpowers keeps it; a recorded judge setting is left alone. Nothing is uninstalled unless you pass a `--no-` flag. A flag-less rerun of a 1.x `--no-jev` install keeps its gates off; passing `--no-jev` or `--judge` turns the local or Jev gates on. Without Ruflo recorded, an upgrade adds Dryas memory.
 
 ### Preflight
 
@@ -113,9 +113,9 @@ Setup installs a `dryas` command with the plugin (`claude/bin/dryas`; `claude/bi
 
 To move a 1.x install (Ruflo, Superpowers and a Jev key) to the owned core:
 
-1. Run setup for 2.0 with `--judge jev`. The local judge stays as shadow (`judge.shadow` is `auto`), so `/tune` can compare the two.
+1. Run `install.sh --judge jev --memory dryas`. This switches memory to Dryas; Ruflo stays installed as an extra unless you pass `--no-ruflo`. The local judge stays as shadow (`judge.shadow` is `auto`), so `/tune` can compare the two.
 2. Run `dryas memory import-ruflo`. It copies your Ruflo memory into `dryas.db` read-only, is safe to repeat, and leaves `~/.dryas/ruflo` in place.
-3. Accept the legacy cleanup when setup or uninstall offers it (see [Uninstall and purge](#uninstall-and-purge)).
+3. The legacy cleanup is offered by `--uninstall`, not by setup (see [Uninstall and purge](#uninstall-and-purge)); to remove the Ruflo extra earlier, run setup with `--no-ruflo` and then uninstall.
 4. Keep working. Ruflo and Superpowers keep running as extras until you drop them.
 5. Flip to `--judge local` when `/tune` proposes it, once the local judge has agreed with Jev for long enough.
 
@@ -129,7 +129,7 @@ To move a 1.x install (Ruflo, Superpowers and a Jev key) to the owned core:
 | `--with-superpowers` | Add the Superpowers extra |
 | `--with-design` | Add the design skills (they are on by default; this keeps them on an upgrade that dropped them) |
 | `--no-memory` | Do not use Dryas memory |
-| `--no-jev` | Alias for `--judge local`: the gate stays on with the local judge. On an upgrade of an install that had no Jev, the gates stay off until you pass `--judge` |
+| `--no-jev` | Alias for `--judge local`: the gate stays on with the local judge. On a flag-less upgrade of an install that had no Jev, the gates stay off; passing `--no-jev` or `--judge` turns them on |
 | `--no-ruflo` | Do not install Ruflo, or drop it on an upgrade |
 | `--no-superpowers` | Do not install Superpowers, or drop it on an upgrade. Codex never installs it |
 | `--no-design` | Do not install Impeccable or UI UX Pro Max |

@@ -6,6 +6,7 @@
 import json
 import os
 import shutil
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -114,7 +115,8 @@ def set_judge(provider: Optional[str]) -> None:
         return
     sys.path.insert(0, str(REPO / "claude" / "jev"))
     import thresholds
-    thresholds.set_value("judge.provider", provider)
+    if thresholds.load()["judge"]["provider"] != provider:
+        thresholds.set_value("judge.provider", provider)
 
 
 def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool], repo: Optional[Path] = None,
@@ -593,16 +595,40 @@ def legacy_items(cd: Path, rec: dict, last_account: bool) -> list:
     if last_account and shutil.which("npm") and argv not in offered:
         items.append((" ".join(argv), argv, None))
     d = data_root() / "ruflo"
-    if d.exists():
+    if last_account and d.exists() and not any(
+            "ruflo" in (_load_json(Path(o) / RECORD, {}).get("components") or []) for o in other_accounts(cd)):
         items.append(("remove %s" % d, None, d))
     return items
 
 
+def _ruflo_imported() -> bool:
+    """True when dryas.db holds rows imported from Ruflo."""
+    db = data_root() / "dryas.db"
+    if not db.is_file():
+        return False
+    try:
+        conn = sqlite3.connect(str(db))
+        try:
+            return conn.execute("SELECT 1 FROM memory WHERE source = 'ruflo' LIMIT 1").fetchone() is not None
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+
+
 def run_legacy(items: list, yes: bool, cd: Optional[Path] = None) -> int:
-    """Ask about each item (--yes lists without asking), run it, return the number of failures."""
+    """Ask about each item, run it, return the number of failures. --yes answers plugin and npm items;
+    a folder is never removed by --yes (the manual command is printed)."""
     failed = 0
     for label, argv, path in items:
-        if not (yes or di.confirm("Remove %s?" % label)):
+        if path is not None and yes:
+            print("not removed with --yes: %s; run `rm -rf %s` yourself if you want it gone" % (label, path))
+            continue
+        q = "Remove %s?" % label
+        if path is not None and not _ruflo_imported():
+            q = ("The Ruflo memory in %s was never imported into Dryas (run `dryas memory import-ruflo` first "
+                 "to keep it). %s" % (path, q))
+        if not (yes or di.confirm(q)):
             continue
         if argv:
             rc = di.run(argv, env=child_env(cd)) if cd is not None else di.run(argv)

@@ -29,7 +29,8 @@ class SelectTest(unittest.TestCase):
         comps = run_cmd.select(P([]), UP_1X)
         self.assertEqual(comps, UP_1X)  # memory stays off: Ruflo memory is kept
         pv = run_cmd.providers(P([]), comps, UP_1X)
-        self.assertEqual(pv, {"judge": None, "memory": "ruflo", "process": "dryas"})
+        self.assertEqual(pv["memory"], "ruflo")
+        self.assertIsNotNone(pv["judge"])  # the current judge.provider is recorded, never null
 
     def test_upgrade_of_no_jev_install_keeps_gates_off_until_judge_flag(self):
         rec = ["core", "design"]

@@ -64,6 +64,12 @@ def parse(argv: List[str]) -> argparse.Namespace:
     for c in ("ruflo", "superpowers", "design"):
         if getattr(a, "with_" + c) and getattr(a, "no_" + c):
             ap.error("--with-%s and --no-%s together" % (c, c))
+    for bad, why in ((a.judge == "local" and a.openrouter_key, "--judge local with --openrouter-key"),
+                     (a.memory == "ruflo" and a.no_ruflo, "--memory ruflo with --no-ruflo"),
+                     (a.memory == "dryas" and a.no_memory, "--memory dryas with --no-memory"),
+                     (a.memory == "none" and a.with_ruflo, "--memory none with --with-ruflo")):
+        if bad:
+            ap.error(why + " contradict each other")
     return a
 
 
@@ -77,8 +83,6 @@ def select(a: argparse.Namespace, recorded: Optional[List[str]]) -> List[str]:
         have = set(FRESH)
     else:
         have = set(recorded)
-        if "ruflo" not in have:
-            have.add("memory")
     for c in ("ruflo", "superpowers", "design"):
         if getattr(a, "with_" + c):
             have.add(c)
@@ -92,6 +96,8 @@ def select(a: argparse.Namespace, recorded: Optional[List[str]]) -> List[str]:
         have -= {"ruflo", "memory"}
     elif a.memory == "dryas":
         have.add("memory")
+    if "memory" not in have and "ruflo" not in have and a.memory != "none" and not a.no_memory:
+        have.add("memory")
     if a.judge or a.no_jev or a.openrouter_key:
         have.add("jev")
     return ["core"] + [c for c in OPTIONAL if c in have]
@@ -102,8 +108,17 @@ def components(a: argparse.Namespace) -> List[str]:
 
 
 def providers(a: argparse.Namespace, comps: List[str], recorded: Optional[List[str]]) -> Dict[str, Optional[str]]:
-    """Provider slots to record. judge None leaves the user's current value (upgrade)."""
-    judge = "jev" if (a.judge == "jev" or a.openrouter_key) else "local" if (a.judge == "local" or a.no_jev) else None
+    """Provider slots to record. Without a judge flag the current judge.provider is recorded (and left alone)."""
+    if a.judge:
+        judge = a.judge
+    elif a.openrouter_key:
+        judge = "jev"
+    elif a.no_jev:
+        judge = "local"
+    else:
+        sys.path.insert(0, str(Path(a.repo) / "claude" / "jev"))
+        import thresholds
+        judge = thresholds.load()["judge"]["provider"]
     mem = "dryas" if "memory" in comps else "ruflo" if "ruflo" in comps else "none"
     return {"judge": judge, "memory": mem, "process": "dryas"}
 
