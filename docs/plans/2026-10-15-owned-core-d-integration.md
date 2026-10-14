@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-14-owned-core-design.md`. It covers all of Sub-project D: Hook chain, MCP server, Installer and manifest, Docs, Repositioning, Local judge for users without Jev, Memory consolidation outside the hook budget, Before 2.0 ships, No-loss inventory, Learning loop and shared language, Release, and Cut-over. The plan also draws on its Decisions, Error handling and Testing sections. Each earlier plan's "left to D" notes are folded in: B (`docs/plans/2026-10-14-owned-core-b-memory.md`, last section), C (`docs/plans/2026-10-14-owned-core-c-process-skills.md`: `--with-superpowers`, default flip, docs) and A2 (task-level judge; lines-per-task metric from the Ponytail lessons).
 
-**Start:** the D worktree (`feat/owned-core-d`) branches from `spec/owned-core` **after plan A2 has merged into it**. Tasks 7, 8 and 15 consume A2's modules (`pathclass.py`, `tune_tasks.py`, `tune_window.py`, the two-record `log_dispatch`). Check before Task 1: `git log --oneline spec/owned-core | grep -i "a2"` shows the A2 merge, and `ls claude/jev/pathclass.py claude/jev/tune_tasks.py` succeeds. If A2 has not merged, Tasks 1–6, 9 and 12 may start, and Tasks 7, 8 and 15 wait.
+**Start:** the D worktree (`feat/owned-core-d`) branches from `spec/owned-core` at or after 25529e6 (A2 merged 2026-10-15; this plan branch already contains it). Tasks 7, 8 and 15 consume A2's modules (`pathclass.py`, `tune_tasks.py`, `tune_window.py`, the two-record `log_dispatch`). Check before Task 1: `git log --oneline spec/owned-core | grep -i "a2"` shows the A2 merge, and `ls claude/jev/pathclass.py claude/jev/tune_tasks.py` succeeds. If A2 has not merged, Tasks 1–6, 9 and 12 may start, and Tasks 7, 8 and 15 wait.
 
 ## Global Constraints
 
@@ -1179,11 +1179,11 @@ Failing test first: claude/jev/tests/test_tune_judge.py :: ProposalTest :: test_
 - Produces:
   - `gate.py` adds `tool_use_id` (string, from the hook event, absent when missing) to the `base` dict, so every gate record carries it.
   - `gate_outcome.py` is the stage `gate-outcome` (component `core`, kind `post`, match `Bash`, observe, timeout 2). It appends `jevlog.append("outcomes", dict(tool_use_id=..., tool="Bash"))` and exits 0.
-  - `thresholds.DEFAULTS["gate"]["allowlist_min_approvals"] = 3`. `thresholds.validate("gate.allowlist", v)` returns an error string when any entry has a non-empty `local_judge.danger(entry)` or `local_judge.destructive(entry)`.
-  - `tune_judge.pattern(rec: dict) -> str`: a Bash record gives `redact.redact(rec["head"])`, capped at 80 chars. Any other record gives `rec["tool"]` plus `:` plus the file suffix when a `file` field exists.
+  - `thresholds.DEFAULTS["gate"]["allowlist_min_approvals"] = 3`. `thresholds.validate("gate.allowlist", v)` returns an error string when `local_judge.danger(entry)` or `local_judge.destructive(entry)` returns a name (both return `Optional[str]`) for any entry.
+  - `tune_judge.pattern(rec: dict) -> str`: a Bash record gives `redact.redact(rec["head"])`, capped at 80 chars. Any other record gives `rec["tool"]` plus `:` plus the file suffix of `rec["rel"]` (A2: a worktree-relative string, or a list of at most 16 whose first item is used; `<outside>` stays as is) when present. Gate records never carry absolute paths.
   - `tune_judge.disagreements(gate_rows) -> List[dict]`: items `{"pattern", "decision", "shadow_decision", "provider", "shadow_provider", "count"}`, sorted by count descending, top 10. `none` and `skipped` decisions both count as `allow`.
   - `tune_judge.approved_asks(gate_rows, outcome_rows) -> Dict[str, int]`: pattern → count of local `ask` decisions whose `tool_use_id` ran.
-  - `tune_judge.allowlist_proposal(approved, current: List[str], min_approvals: int) -> Optional[dict]`: a `{"key": "gate.allowlist", "old": current, "new": current + additions, "why": ...}` proposal or None. A candidate needs `count >= min_approvals`, must not already be covered by `current`, and must be free of danger and destructive patterns.
+  - `tune_judge.allowlist_proposal(approved, current: List[str], min_approvals: int) -> Optional[dict]`: a `{"key": "gate.allowlist", "old": current, "new": current + additions, "why": ...}` proposal or None. A candidate needs `count >= min_approvals`, must not already be covered by `current`, and must have `local_judge.danger(c)` and `local_judge.destructive(c)` both None.
   - `tune_judge.lines(rep) -> List[str]` with labels `- Judge disagreements (deciding vs shadow): N patterns` and `- Approved local asks: N (M patterns)`, then a `CORPUS_CANDIDATES_JSON: [...]` line.
 
 - [ ] **Step 1: Write the failing tests.** `claude/jev/tests/test_tune_judge.py`:
@@ -1691,7 +1691,7 @@ Failing test first: server/test/golden.test.ts :: replays 2026-10-15-dryas-2
 
 **Interfaces:**
 - Consumes the 2.0 records:
-  - `gate.jsonl` with `provider`, `local_ms`, `reasons`, `shadow_provider`, `shadow_decision`, `task_id`, `tool_use_id`;
+  - `gate.jsonl` with `provider`, `local_ms`, `reasons`, `shadow_provider`, `shadow_decision`, `task_id`, `rel`, `tool_use_id`;
   - `dispatch.jsonl` with a `phase: "return"` record (`tokens`, `duration_ms`, `agent_id`, `lines`) after each dispatch record;
   - new files `memory.jsonl` and `outcomes.jsonl`;
   - hook-spool tool names `mcp__plugin_dryas_jev__{jev_judge,log_dispatch,log_escalation,log_review,memory_search,memory_store,swarm_init}`.
@@ -1891,6 +1891,7 @@ class ReleaseTest(unittest.TestCase):
   - All switches are off by default.
   - Codex workers carry no identity, so `task_skip` is never enforced for them.
   - A2's cleanup made the three timing tests (parity, heredoc, redact) take the median of 3 runs against a 40x same-length benign baseline in the same child, with a strict 2 s hang check; 5/5 passed at load ~43. Known residual risk: the `$(` x30000 parity case under extreme load. If it alone fails in Task 15 Step 5, report it with the load average instead of loosening the budget. `local_git.py` has no dedicated test file (covered by existing tests).
+  - A2 as merged (25529e6): `task_review.rels(root, tool, ti, cwd="", cap=16)`; gate records with a task verdict carry `rel`; `tune_window.check(task_rows, until, review=None, gate=...)` prints six Done-when lines; the scored-tier ON proposal needs helps >= 2 x hurts and helps >= 1; `docs/governance.md` already states the evidence rules (Task 10 extends, does not restate). Suite at 25529e6: 1621 passed, 2 skipped, 1 known Mac-only Ruflo e2e failure.
   - Removed by A2's cleanup (do not use): `gate._sensitive` (use `pathclass.sensitive`), `taskctx._root` (use `taskctx.root`), `tune_tasks._attempt` (now `tune_tasks.as_int`); `FILE_TOOLS` lives only in `pathclass.py`.
   - A2's cleanup moved the git rules out of `local_judge.py` into `claude/jev/local_git.py`; `local_judge` keeps its public API (`gate_answers`). Tasks 6 and 7 call `local_judge.danger`/`destructive`: if those moved too, import them from where the merged code exposes them.
 
