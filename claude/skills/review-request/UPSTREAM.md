@@ -15,7 +15,7 @@ Upstream: `requesting-code-review/`
 | When to Request Review | review-request/SKILL.md § When |
 | When to Request Review — mandatory: after each task in sub-agent-driven development | review-request/SKILL.md § When |
 | When to Request Review — mandatory: after completing a major feature | review-request/SKILL.md § When |
-| When to Request Review — mandatory: before merge to main | review-request/SKILL.md § When; orchestrate: "Run `/wreview` on the worktree diff" |
+| When to Request Review — mandatory: before merge to main | review-request/SKILL.md § When; orchestrate: "Review the worktree diff with the `dryas:review-request` skill" |
 | When to Request Review — optional: when stuck | review-request/SKILL.md § When |
 | When to Request Review — optional: before refactoring | review-request/SKILL.md § When |
 | When to Request Review — optional: after fixing a complex bug | review-request/SKILL.md § When |

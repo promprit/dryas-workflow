@@ -1222,3 +1222,240 @@ git commit -m "feat(install): Superpowers is an optional extra, not a plugin dep
 - **Names:** `PROCESS_SKILLS`, `SKILL_FILES`, `HARNESS_REQUIRED`, `render_skill`, `skill_plan`, `harness_drift` are defined in Task 1 and used with the same names in Tasks 2–6; skill names match the spec table.
 - **Inventory:** every baseline entry this plan removes (11 allowed tools, 7 skill refs, 1 plugin dependency) is mapped; the five deny rules and their skill refs stay.
 - **Deviation from the spec, flagged:** the spec puts Codex-only instructions in harness blocks; this plan's `--check` verifies the rendered Codex copy instead, so an instruction may also live in shared text. Upstream's Visual Companion (Node) and its self-tests are mapped to `extra:superpowers`, not rebuilt.
+
+## Amendment (2026-10-14): change request
+
+This amendment is a user-approved change request, with ideas from mattpocock/skills (MIT). It shortens the process skills and adds writing rules (Tasks 8 and 9), and splits user-invoked from model-invoked skills across both editions (Task 10). Order: 1 → 2 → 3 → 4 → 8 → 9 → 5 → 6 ∥ 7 → 10. Task 4 began with a split of the coverage tables into `claude/skills/<skill>/UPSTREAM.md`, for the 500-line rule.
+
+## Task 8: Short skills and writing rules (brainstorm, plan, worktree, verify)
+
+Goal: bring `brainstorm`, `plan`, `worktree` and `verify` to the 50–150-line target under the skill-writing rules, moving long reference material into companion files, and add brainstorm's question rounds; the coverage tables keep every rule.
+Scope:
+- install/tests/test_process_skills.py
+- claude/skills/brainstorm/**
+- claude/skills/plan/**
+- claude/skills/worktree/**
+- claude/skills/verify/**
+- codex/skills/brainstorm/**
+- codex/skills/plan/**
+- codex/skills/worktree/**
+- codex/skills/verify/**
+- CONTRIBUTING.md
+- NOTICE.md
+Done:
+- `python3 -m pytest -q -rs install/tests/test_process_skills.py install/tests/test_codex_skill_render.py install/tests/test_codex_plugin_sync.py` passes, upstream-completeness test run (not skipped)
+- the four SKILL.md files are 50–150 lines each
+- `python3 tools/sync_codex_plugin.py --check` exits 0; `python3 tools/inventory.py --check` prints `0 problems`
+Failing test first: install/tests/test_process_skills.py :: ProcessSkillsTest :: test_skill_length
+
+Source: change request approved by the user on 2026-10-14 (lessons from mattpocock/skills, MIT: ideas only, no text copied).
+
+- [ ] **Step 1: Failing tests.** In `install/tests/test_process_skills.py` add, at module level, `SHORT = {"brainstorm", "plan", "worktree", "verify"}` (Task 9 extends it to all eight) and `TECHNIQUES = {"brainstorm": ("## Question rounds", "recommended answer", "look it up yourself")}`, and these methods:
+
+```python
+    def test_skill_length(self):
+        for n in sorted(SHORT):
+            lines = len((SKILLS / n / "SKILL.md").read_text(encoding="utf-8").splitlines())
+            self.assertTrue(50 <= lines <= 150, "%s/SKILL.md is %d lines; target 50-150" % (n, lines))
+
+    def test_techniques(self):
+        for n, needles in TECHNIQUES.items():
+            text = (SKILLS / n / "SKILL.md").read_text(encoding="utf-8")
+            for s in needles:
+                self.assertIn(s, text, (n, s))
+
+    def test_model_invoked(self):
+        # process skills hold reusable discipline: the model may invoke them; their description names triggers
+        for n in present():
+            head = (SKILLS / n / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[1]
+            self.assertNotIn("disable-model-invocation", head, n)
+            self.assertRegex(head, r"\ndescription: Use (when|before|on) ", n)
+```
+
+Run them: `test_skill_length` fails (brainstorm 206 lines) and `test_techniques` fails.
+
+- [ ] **Step 2: Writing rules.** Add a `## Writing skills` section to `CONTRIBUTING.md` (in our own words):
+  - A skill's description and every pointer start with the trigger: the words that decide when the agent reaches for it (`Use when …`, `Before …`, `On …`).
+  - Text that is always loaded costs context every turn; choices offered to the user cost their attention. Keep SKILL.md to the process (target 50–150 lines) and put reference material in companion files behind a pointer that says when to read them.
+  - Every step ends on a checkable bound (a command and its expected result, a count, a named artifact). A vague bound invites stopping early.
+  - Say what to do. Keep "never" for hard guardrails, each paired with what to do instead.
+  - One source of truth per meaning: state a rule once (template, skill or companion) and point to it; delete lines that change nothing.
+  - A rewrite of an upstream skill keeps every rule: its coverage table in `<skill>/UPSTREAM.md` maps each one.
+  - User-invoked skills and commands (`/orchestrate`, `/wplan`, `/wreview`, `/commit`, `/tune`, `/handoff`, `/interrogate`) orchestrate; model-invoked skills (the eight process skills) hold reusable discipline. A user-invoked skill may call model-invoked skills, never another user-invoked one.
+  In `NOTICE.md` add a section `## Ideas` with one paragraph: "The skill-writing rules in CONTRIBUTING.md, the brainstorm question rounds, the debug feedback loop and the parallel two-stage review draw on ideas from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT). No text is copied."
+
+- [ ] **Step 3: Brainstorm question rounds.** Add `## Question rounds` to `claude/skills/brainstorm/SKILL.md`, with this content (wording may tighten, every rule stays): "Ask in numbered rounds of at most five questions. Each question carries your recommended answer, phrased so that "yes" accepts it. When a question is a fact about the code, docs or history, look it up yourself and state what you found; bring only decisions to the user. A round ends when the user has answered it; the questioning ends when every open decision the selected path needs has an answer, listed before you present the design. The hard gate still applies." Keep `## Hard gate`, `## Three paths` and `## Red flags` in SKILL.md.
+
+- [ ] **Step 4: Shorten the four skills.** For each of brainstorm, plan, worktree, verify: keep in SKILL.md the trigger, the hard rules, the steps (each ending on a checkable bound) and a pointer list; move reference material (long examples, rationalization tables, detailed sub-procedures, templates) into companion files in the same folder (`reference.md` or a named file), each pointer starting with when to read it (e.g. "When writing the spec header, read `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/reference.md`"). Apply the writing rules. Keep every harness block and every verbatim Dryas binding from Tasks 2–3. Update the targets in each `<skill>/UPSTREAM.md` for every moved item (`<skill>/<file>.md § <heading>`); add rows for the new question-rounds rules only if they replace an upstream row's target. Row counts may only grow.
+
+- [ ] **Step 4b: Codex launcher in `plan`.** `install/tests/test_codex_rules.py::test_root_paths_exist_in_plugin` fails on `codex/skills/plan/SKILL.md: bin/dryas-py` (Codex has no `bin/dryas-py`). In `claude/skills/plan/SKILL.md`, put the `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section` line inside a `<!-- claude -->` block and add the Codex form inside a `<!-- codex -->` block: `"<dryas-py>" -X utf8 "<dryas-root>/jev/planfile.py" section .orchestrate/PLAN.md <N>` (as in `codex/skills/orchestrate/SKILL.md`). Check the other rendered Codex skills for the same pattern.
+
+- [ ] **Step 5: Sync and run.** `python3 tools/sync_codex_plugin.py`, then the Done commands (`-rs`), then `python3 -m pytest -q install/tests`: everything passes except `test_pstack_skills.py::test_skills_exist` (Task 6 changes it). Commit with explicit paths: `refactor(skills): short brainstorm, plan, worktree and verify; skill-writing rules`.
+
+## Task 9: Short skills and techniques (debug, tdd, review-request, review-receive)
+
+Goal: bring `debug`, `tdd`, `review-request` and `review-receive` to the 50–150-line target under the writing rules, and build in the debug feedback loop and ranked hypotheses and the parallel two-report review.
+Scope:
+- install/tests/test_process_skills.py
+- claude/skills/debug/**
+- claude/skills/tdd/**
+- claude/skills/review-request/**
+- claude/skills/review-receive/**
+- codex/skills/debug/**
+- codex/skills/tdd/**
+- codex/skills/review-request/**
+- codex/skills/review-receive/**
+Done:
+- `python3 -m pytest -q -rs install/tests/test_process_skills.py install/tests/test_codex_skill_render.py install/tests/test_codex_plugin_sync.py` passes, upstream-completeness test run
+- all eight process SKILL.md files are 50–150 lines
+- `python3 tools/sync_codex_plugin.py --check` exits 0; `python3 tools/inventory.py --check` prints `0 problems`
+Failing test first: install/tests/test_process_skills.py :: ProcessSkillsTest :: test_skill_length
+
+- [ ] **Step 1: Failing tests.** Set `SHORT = set(scp.PROCESS_SKILLS)` and extend `TECHNIQUES` with:
+
+```python
+    "debug": ("## Feedback loop first", "3-5 ranked", "prediction", "unique prefix", "commit message", "redact"),
+    "review-request": ("two reviewers in parallel", "separately", "do not merge or re-rank"),
+```
+
+Run: fails on length (debug 172 lines) and techniques.
+
+- [ ] **Step 2: Debug.** Add to `claude/skills/debug/SKILL.md`, before Phase 1, `## Feedback loop first`: "Before any hypothesis, build a loop that shows the bug: one command, fast (seconds), deterministic, failing on the bug. Without such a loop, say what blocks it and stop there; no hypotheses yet." Then, in the hypothesis phase: "Write 3-5 ranked, falsifiable hypotheses, each with the prediction that would confirm or kill it, and show them to the user before testing. Test them in rank order with the loop." Add: "Tag every temporary debug log line with a unique prefix (for example `DBG-<topic>:`) and remove them all before reporting the fix: a search for the prefix returns zero hits." "Record the confirmed hypothesis in the fix's commit message." "Redact secrets (keys, tokens, passwords, connection strings) in any output you show." Keep the iron law, the four phases, the Dryas climb binding and the fix-root-causes pointer.
+
+- [ ] **Step 3: Review request.** In `claude/skills/review-request/SKILL.md` `## Two stages`: "Run the two stages as two reviewers in parallel, each given the diff and its own brief (stage 1: spec compliance against the plan or spec; stage 2: code quality). Present the two reports separately, as returned: do not merge or re-rank them. The reviewer enforces the standards: the implementer worked under context pressure, so the reviewer reports what is missing instead of assuming it was intended." Update the claude harness block to dispatch two reviewers with the Agent tool in one message (`subagent_type: "dryas:executor"`, role reviewer, one per stage, each with `${CLAUDE_PLUGIN_ROOT}/skills/review-request/reviewer-prompt.md` filled in for its stage). Update the codex block: "On Codex: run the two reviewers as Codex sub-agents in parallel when available; otherwise review twice yourself, one fresh pass per stage, and still report them separately. Change nothing unless asked." (keeps both `HARNESS_REQUIRED` phrases). Adjust `reviewer-prompt.md` so it takes a stage.
+
+- [ ] **Step 4: Shorten** debug, tdd, review-request, review-receive exactly as Task 8 Step 4 describes (companions behind trigger-first pointers, writing rules from `CONTRIBUTING.md` § Writing skills, every harness block and Dryas binding kept, targets updated, row counts only grow).
+
+- [ ] **Step 5: Sync and run.** `python3 tools/sync_codex_plugin.py`, then the Done commands. Commit with explicit paths: `refactor(skills): short debug, tdd and review skills; feedback loop and parallel review`.
+
+## Task 10: Invocation split, synced across editions
+
+Goal: make user-invoked versus model-invoked explicit in both editions (Claude `disable-model-invocation`, Codex `agents/openai.yaml`), check in `--check` that they agree and that no user-invoked skill or command calls another, and record Tasks 8–10 in the plan document.
+Scope:
+- claude/skills/orchestrate/SKILL.md
+- claude/commands/*.md
+- codex/skills/*/agents/openai.yaml
+- codex/skills/orchestrate/SKILL.md
+- install/tests/fixtures/pre_pstack/orchestrate-claude.md
+- install/tests/fixtures/pre_pstack/orchestrate-codex.md
+- install/tests/test_pstack_loop.py
+- install/tests/test_codex_skill_render.py
+- install/tests/test_invocation.py
+- tools/sync_codex_plugin.py
+- claude/skills/*/UPSTREAM.md
+- docs/plans/2026-10-14-owned-core-c-process-skills.md
+Done:
+- `python3 -m pytest -q install/tests claude/jev/tests` passes (except the known machine-local Ruflo test)
+- `python3 tools/sync_codex_plugin.py --check` exits 0; `python3 tools/inventory.py --check` prints `0 problems`
+Failing test first: install/tests/test_invocation.py :: InvocationTest :: test_editions_agree
+
+**Interfaces:**
+- Produces (in `sync_codex_plugin`): `USER_INVOKED = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "benchmark-checklist")`; `user_invoked(repo: Path, name: str) -> Optional[bool]` (reads the front matter of `claude/skills/<name>/SKILL.md`, else `claude/commands/<name>.md`; True when it has `disable-model-invocation: true`; None when neither exists); `openai_yaml(implicit: bool) -> str`; `invocation_drift(repo: Path) -> List[str]`. `skill_plan` also emits `codex/skills/<process skill>/agents/openai.yaml` (implicit true).
+
+- [ ] **Step 1: Failing test.** `install/tests/test_invocation.py`:
+
+```python
+"""User-invoked skills orchestrate; model-invoked skills hold discipline; both editions agree (owned core C)."""
+import re
+import sys
+import unittest
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+import sync_codex_plugin as scp
+
+
+class InvocationTest(unittest.TestCase):
+    def test_user_invoked_on_claude(self):
+        for n in scp.USER_INVOKED:
+            self.assertIs(scp.user_invoked(ROOT, n), True, n)
+        for n in scp.PROCESS_SKILLS:
+            self.assertIs(scp.user_invoked(ROOT, n), False, n)
+
+    def test_editions_agree(self):
+        self.assertEqual(scp.invocation_drift(ROOT), [])
+        for d in sorted((ROOT / "codex/skills").iterdir()):
+            if (d / "SKILL.md").is_file():
+                y = (d / "agents/openai.yaml").read_text(encoding="utf-8")
+                want = "false" if d.name in scp.USER_INVOKED else "true"
+                self.assertIn("allow_implicit_invocation: %s" % want, y, d.name)
+
+    def test_user_invoked_never_calls_user_invoked(self):
+        for n in scp.USER_INVOKED:
+            for p in (ROOT / "claude/skills" / n / "SKILL.md", ROOT / "claude/commands" / (n + ".md")):
+                if p.is_file():
+                    head = p.read_text(encoding="utf-8").split("---", 2)[1]
+                    for other in scp.USER_INVOKED:
+                        self.assertNotIn("Skill(dryas:%s)" % other, head, (p, other))
+
+    def test_drift_reports_disagreement(self):
+        import shutil, tempfile
+        t = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(t), True)
+        (t / "claude/commands").mkdir(parents=True)
+        (t / "claude/commands/tune.md").write_text("---\ndescription: d\ndisable-model-invocation: true\n---\n", encoding="utf-8")
+        (t / "codex/skills/tune/agents").mkdir(parents=True)
+        (t / "codex/skills/tune/SKILL.md").write_text("---\nname: tune\ndescription: d\n---\n", encoding="utf-8")
+        (t / "codex/skills/tune/agents/openai.yaml").write_text(scp.openai_yaml(True), encoding="utf-8")
+        self.assertEqual(scp.invocation_drift(t), ["skill tune: codex allow_implicit_invocation is true, "
+                                                   "claude says user-invoked"])
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+Run: FAIL (`USER_INVOKED` missing).
+
+- [ ] **Step 2: Sync tool.** Add to `tools/sync_codex_plugin.py`:
+
+```python
+USER_INVOKED = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "benchmark-checklist")
+
+
+def user_invoked(repo: Path, name: str) -> Optional[bool]:
+    for p in (Path(repo) / "claude/skills" / name / "SKILL.md", Path(repo) / "claude/commands" / (name + ".md")):
+        if p.is_file():
+            m = _FRONT.match(p.read_text(encoding="utf-8").replace("\r\n", "\n"))
+            return bool(m and re.search(r"^disable-model-invocation:\s*true\s*$", m.group(1), re.M))
+    return None
+
+
+def openai_yaml(implicit: bool) -> str:
+    return "policy:\n  allow_implicit_invocation: %s\n" % ("true" if implicit else "false")
+
+
+def invocation_drift(repo: Path) -> List[str]:
+    """One line per Codex skill whose implicit-invocation policy disagrees with its Claude counterpart."""
+    out = []
+    base = Path(repo) / "codex/skills"
+    for d in sorted(base.iterdir()) if base.is_dir() else []:
+        if not (d / "SKILL.md").is_file():
+            continue
+        y = d / "agents/openai.yaml"
+        if not y.is_file():
+            out.append("skill %s: codex agents/openai.yaml is missing" % d.name)
+            continue
+        m = re.search(r"^\s*allow_implicit_invocation:\s*(true|false)\s*$", y.read_text(encoding="utf-8"), re.M)
+        ui = user_invoked(repo, d.name)
+        if m is None:
+            out.append("skill %s: codex agents/openai.yaml sets no allow_implicit_invocation" % d.name)
+        elif ui is None:
+            out.append("skill %s: no Claude counterpart" % d.name)
+        elif (m.group(1) == "true") == ui:
+            out.append("skill %s: codex allow_implicit_invocation is %s, claude says %s"
+                       % (d.name, m.group(1), "user-invoked" if ui else "model-invoked"))
+    return out
+```
+
+In `skill_plan`, for each process skill whose folder exists, add `out["codex/skills/%s/agents/openai.yaml" % name] = openai_yaml(not user_invoked(repo, name))`. In `_run`'s check branch, print `invocation_drift` lines with the hint "set disable-model-invocation in claude/ and allow_implicit_invocation in codex/skills/<name>/agents/openai.yaml to agree" and include them in the exit code. Update `install/tests/test_codex_skill_render.py::TreeTest::test_missing_differs_extra_and_sync`'s expected first drift list to include `"missing codex/skills/brainstorm/agents/openai.yaml"` (sorted position) — the only edit to that file; `test_check_passes_on_synced_tree` must also pass (give the temp tree's codex `wplan` skill an `agents/openai.yaml` and a `claude/commands/wplan.md` with `disable-model-invocation: true`, or have the test assert on drift only — choose the smaller change and say which).
+
+- [ ] **Step 3: Claude front matter.** Add `disable-model-invocation: true` to the front matter of `claude/skills/orchestrate/SKILL.md` and `claude/commands/{orchestrate,wplan,wreview,commit,tune,handoff}.md` (interrogate and benchmark-checklist have it already). Process skills stay model-invoked.
+
+- [ ] **Step 4: Codex policy files.** Write `codex/skills/<name>/agents/openai.yaml` = `openai_yaml(False)` for orchestrate, wplan, wreview, commit, tune, interrogate, benchmark-checklist (hand-written); run `python3 tools/sync_codex_plugin.py` to generate the eight process ones.
+
+- [ ] **Step 5: Orchestrate calls no user-invoked skill.** In `claude/skills/orchestrate/SKILL.md` §8 (and the matching lines of `codex/skills/orchestrate/SKILL.md` step 7 and both `install/tests/fixtures/pre_pstack/orchestrate-*.md`), replace "Run `/wreview` on the worktree diff, then dryas:verify, then `/commit`" with: "Review the worktree diff with the `dryas:review-request` skill (two-stage, reports kept separate) and handle findings with `dryas:review-receive`; after each review round call `mcp__plugin_dryas_jev__log_review` (task = the worktree branch, round, counts of critical, important and minor findings). Then run `dryas:verify`. Then commit by reading `${CLAUDE_PLUGIN_ROOT}/commands/commit.md` and following its Jev-gated steps (the same pattern as interrogate in §7b)." Codex wording: `$dryas:review-request`, `$dryas:review-receive`, `log_review`, `$dryas:verify`, "commit by reading `<dryas-root>/skills/commit/SKILL.md` and following its steps". Keep whatever text the coverage targets in `claude/skills/*/UPSTREAM.md` quote, or update those targets in the same commit; update `test_pstack_loop.py` expected strings only where they quote a replaced line. Add a check to `test_invocation.py` (`test_orchestrate_finish_uses_skills`) asserting the Claude orchestrate skill contains `dryas:review-request`, `log_review` and `commands/commit.md`, and no longer contains "Run `/wreview`".
+
+- [ ] **Step 6: Record the amendment.** Append to `docs/plans/2026-10-14-owned-core-c-process-skills.md` a section `## Amendment (2026-10-14): change request` with one paragraph naming the source (user-approved change request, ideas from mattpocock/skills, MIT) and the order (1 → 2 → 3 → 4 → 8 → 9 → 5 → 6 ∥ 7 → 10), followed by the full text of Tasks 8, 9 and 10 exactly as they stand in `.orchestrate/PLAN.md` (including Task 4's Step 0 as a note: "Task 4 began with a split of the coverage tables into `claude/skills/<skill>/UPSTREAM.md`, for the 500-line rule").
+
+- [ ] **Step 7: Run everything and commit.** `python3 tools/sync_codex_plugin.py && python3 -m pytest -q install/tests claude/jev/tests && python3 tools/sync_codex_plugin.py --check && python3 tools/inventory.py --check`. Commit with explicit paths: `feat(skills): explicit invocation split, synced to Codex agents/openai.yaml`.

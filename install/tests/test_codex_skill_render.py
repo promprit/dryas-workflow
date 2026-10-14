@@ -68,11 +68,16 @@ class TreeTest(unittest.TestCase):
         (t / "claude/skills/UPSTREAM.md").write_text("# Upstream\n", encoding="utf-8")
         (t / "codex/skills/wplan").mkdir(parents=True)
         (t / "codex/skills/wplan/SKILL.md").write_text("hand-written\n", encoding="utf-8")
+        (t / "codex/skills/wplan/agents").mkdir()
+        (t / "codex/skills/wplan/agents/openai.yaml").write_text(scp.openai_yaml(False), encoding="utf-8")
+        (t / "claude/commands").mkdir(parents=True)
+        (t / "claude/commands/wplan.md").write_text("---\ndisable-model-invocation: true\n---\n", encoding="utf-8")
         return t
 
     def test_missing_differs_extra_and_sync(self):
         t = self._tree()
         self.assertEqual(scp.drift(t), ["missing codex/skills/UPSTREAM.md", "missing codex/skills/brainstorm/SKILL.md",
+                                        "missing codex/skills/brainstorm/agents/openai.yaml",
                                         "missing codex/skills/brainstorm/spec-reviewer-prompt.md"])
         scp.sync(t)
         self.assertEqual(scp.drift(t), [])

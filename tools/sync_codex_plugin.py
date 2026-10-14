@@ -52,6 +52,7 @@ HARNESS_REQUIRED: Dict[str, Tuple[str, ...]] = {
     "plan": ("`docs/superpowers/plans/` if the project uses that", "$dryas:orchestrate"),
     "review-request": ("Change nothing unless asked", "Codex sub-agent"),
 }
+USER_INVOKED = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "benchmark-checklist")
 _HARNESS = re.compile(r"^<!-- (/?)(claude|codex) -->\n?", re.M)
 _FRONT = re.compile(r"\A---\n(.*?\n)---\n", re.S)
 _CODEX_NAMES = (
@@ -135,6 +136,42 @@ def render_skill(text: str, harness: str) -> str:
     return out
 
 
+def user_invoked(repo: Path, name: str) -> Optional[bool]:
+    for p in (Path(repo) / "claude/skills" / name / "SKILL.md", Path(repo) / "claude/commands" / (name + ".md")):
+        if p.is_file():
+            m = _FRONT.match(p.read_text(encoding="utf-8").replace("\r\n", "\n"))
+            return bool(m and re.search(r"^disable-model-invocation:\s*true\s*$", m.group(1), re.M))
+    return None
+
+
+def openai_yaml(implicit: bool) -> str:
+    return "policy:\n  allow_implicit_invocation: %s\n" % ("true" if implicit else "false")
+
+
+def invocation_drift(repo: Path) -> List[str]:
+    """One line per Codex skill whose implicit-invocation policy disagrees with its Claude counterpart."""
+    out = []
+    base = Path(repo) / "codex/skills"
+    for d in sorted(base.iterdir()) if base.is_dir() else []:
+        if not (d / "SKILL.md").is_file():
+            continue
+        y = d / "agents/openai.yaml"
+        if not y.is_file():  # no policy file: Codex allows implicit invocation, which only a user-invoked skill forbids
+            if user_invoked(repo, d.name):
+                out.append("skill %s: codex agents/openai.yaml is missing" % d.name)
+            continue
+        m = re.search(r"^\s*allow_implicit_invocation:\s*(true|false)\s*$", y.read_text(encoding="utf-8"), re.M)
+        ui = user_invoked(repo, d.name)
+        if m is None:
+            out.append("skill %s: codex agents/openai.yaml sets no allow_implicit_invocation" % d.name)
+        elif ui is None:
+            out.append("skill %s: no Claude counterpart" % d.name)
+        elif (m.group(1) == "true") == ui:
+            out.append("skill %s: codex allow_implicit_invocation is %s, claude says %s"
+                       % (d.name, m.group(1), "user-invoked" if ui else "model-invoked"))
+    return out
+
+
 def skill_plan(repo: Path) -> Dict[str, str]:
     """Target rel path under codex/skills -> its text, for every process skill and provenance file in claude/skills."""
     src, out = Path(repo) / "claude/skills", {}
@@ -148,6 +185,8 @@ def skill_plan(repo: Path) -> Dict[str, str]:
             except ValueError as e:
                 raise ValueError("%s: %s" % (f.relative_to(repo).as_posix(), e))
             out["codex/skills/%s/%s" % (name, f.name)] = text
+        if (src / name).is_dir():
+            out["codex/skills/%s/agents/openai.yaml" % name] = openai_yaml(not user_invoked(repo, name))
     return out
 
 
@@ -267,7 +306,13 @@ def _run(repo: Path, check: bool) -> int:
         if harness:
             print("a Codex instruction carried over from 1.x is missing: restore it in claude/skills, inside a "
                   "<!-- codex --> block if it is Codex-only (see HARNESS_REQUIRED in tools/sync_codex_plugin.py)")
-        return 1 if bad or skills or harness else 0
+        inv = invocation_drift(repo)
+        for line in inv:
+            print(line)
+        if inv:
+            print("set disable-model-invocation in claude/ and allow_implicit_invocation in "
+                  "codex/skills/<name>/agents/openai.yaml to agree")
+        return 1 if bad or skills or harness or inv else 0
     for rel in sync(repo):
         print("synced " + rel)
     return 0
