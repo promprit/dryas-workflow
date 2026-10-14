@@ -16,6 +16,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gate_outcome
 import jevlog
 import thresholds
 import local_judge
@@ -313,6 +314,8 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
                 pass
         if not d:
             return None
+        if d[0] == "ask" and tool == "Bash" and "tool_use_id" in base:
+            gate_outcome.note_ask(base["tool_use_id"])  # gate-outcome logs it if the call then runs (approved)
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": d[0], "permissionDecisionReason": d[1]}}
     except (KeyError, TypeError, ValueError, AttributeError) as e:
         jevlog.append("gate", dict(base, decision="none", error=type(e).__name__))

@@ -12,7 +12,7 @@
   ],
   "post": [
     {"name": "mem-edit", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "edit"], "match": "Write|Edit|MultiEdit|NotebookEdit", "timeout": 2, "observe": true},
-    {"name": "gate-outcome", "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/gate_outcome.py"], "match": "Bash", "timeout": 2, "observe": true}
+    {"name": "gate-outcome", "component": "core", "inproc": "gate_outcome", "cmd": ["$PY", "-X", "utf8", "$CD/jev/gate_outcome.py"], "match": "Bash", "timeout": 2, "observe": true}
   ],
   "subagent-stop": [
     {"name": "mem-task", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "task"], "timeout": 2, "observe": true}

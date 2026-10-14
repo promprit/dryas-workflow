@@ -31,6 +31,9 @@ class GateOutcomeTest(unittest.TestCase):
             return []
 
     def test_logs_the_tool_use_id(self):
+        os.makedirs(self.logs)
+        with open(os.path.join(self.logs, "asks_pending.json"), "w", encoding="utf-8") as f:
+            json.dump(["t1"], f)  # gate.py noted an ask for t1; only asked calls are logged
         r = self.run_stage(json.dumps({"tool_name": "Bash", "tool_use_id": "t1"}))
         self.assertEqual(r.returncode, 0)
         self.assertEqual(r.stdout, "")

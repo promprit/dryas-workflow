@@ -108,8 +108,8 @@ def rows(gate: List[Any], dispatch: List[Any], esc: List[Any], mcp: List[Any]) -
         if isinstance(r.get("ts"), str) and (row["first_ts"] is None or r["ts"] < row["first_ts"]):
             row["first_ts"] = r["ts"]
     for r in dispatch:
-        if isinstance(r, dict) and r.get("phase") == "return" and r.get("task") in out and as_int(r.get("lines")) is not None \
-                and 0 <= as_int(r["lines"]) <= 1000000:
+        if isinstance(r, dict) and r.get("phase") == "return" and isinstance(r.get("task"), str) and r["task"] in out \
+                and as_int(r.get("lines")) is not None and 0 <= as_int(r["lines"]) <= 1000000:
             out[r["task"]]["lines"] = as_int(r["lines"])
     usage = _usage(dispatch)
     top: Dict[Tuple[str, Any], int] = {}

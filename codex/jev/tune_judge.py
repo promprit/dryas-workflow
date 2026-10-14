@@ -18,11 +18,11 @@ TOP = 10
 MAX_PATTERN = 80
 _ALLOW = ("none", "skipped")
 _PLAIN_WORD = re.compile(r"[A-Za-z0-9._+/-]+")
-_NOT_A_COMMAND = ("other", "env-assign")  # gate._head placeholders
-# Commands whose risk the local judge reads from their arguments (local_judge._judge). Allowlisting one by its
-# head alone would let every argument form skip the judge, so they are never proposed.
-_ARG_JUDGED = (local_judge._SHELLS | local_judge._SQL_CLIENTS | local_judge._POWERSHELL | set(local_judge._WRAPPERS)
-               | {"rm", "dd", "eval", "chmod", "git", "format", "del", "erase"})
+# The only heads /tune ever proposes: read-only tools with no argument that runs a command or writes a file.
+# Left out on purpose: rg (--pre), fd (-x), bat (--pager), less/more (+!), sort (-o), uniq (OUTPUT), tree (-o),
+# yq (-i), file (-C), and every multi-purpose tool (git, gh, tar, docker, npm, terraform, ...).
+PROPOSABLE_HEADS = frozenset({"jq", "stat", "du", "df", "which", "cut", "tr", "basename", "dirname", "realpath",
+                              "readlink", "column", "nl", "diff", "cmp", "comm", "grep", "exa", "eza"})
 
 
 def pattern(rec: Dict[str, Any]) -> str:
@@ -63,23 +63,19 @@ def approved_asks(gate_rows: List[Dict[str, Any]], outcome_rows: List[Dict[str, 
     out: Counter = Counter()
     for r in gate_rows:
         if isinstance(r, dict) and r.get("tool") == "Bash" and r.get("provider") == "local" \
-                and r.get("decision") == "ask" and r.get("tool_use_id") in ran:
+                and r.get("decision") == "ask" and isinstance(r.get("tool_use_id"), str) and r["tool_use_id"] in ran:
             out[pattern(r)] += 1
     return dict(out)
 
 
 def _proposable(c: str, current: List[str]) -> bool:
     words = c.split()
-    if not words or c in _NOT_A_COMMAND or not all(_PLAIN_WORD.fullmatch(w) for w in words):
+    if not words or not all(_PLAIN_WORD.fullmatch(w) for w in words):
         return False
-    head = words[0].lower()
-    if head in _ARG_JUDGED or head.startswith("mkfs"):
+    head = words[0]
+    if head not in PROPOSABLE_HEADS or head in local_judge.ARG_JUDGED_HEADS or gate.allowlisted(c, current):
         return False
-    if gate.allowlisted(c, current):
-        return False
-    # An allowlist entry bypasses the gate. validate also refuses danger/destructive and dangerous heads.
-    if local_judge.danger(c) or local_judge.destructive(c):
-        return False
+    # An allowlist entry bypasses the gate; validate refuses dangerous heads and danger/destructive patterns.
     return thresholds.validate("gate.allowlist", current + [c]) is None
 
 

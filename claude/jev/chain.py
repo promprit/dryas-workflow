@@ -287,10 +287,21 @@ def observe(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> No
     ignored and nothing is printed, so a slow, crashing or noisy stage never changes the session."""
     for st in stages:
         try:
-            if _applies(st, event):
+            if not _applies(st, event):
+                continue
+            if "inproc" in st:
+                _inproc(st, event)
+            else:
                 _run(st, raw)
         except Exception:
             continue
+
+
+def _inproc(stage: Dict[str, Any], event: Dict[str, Any]) -> None:
+    """A stage with an "inproc" module runs in this process (no subprocess). Only known modules; anything else is skipped."""
+    if stage["inproc"] == "gate_outcome":
+        import gate_outcome
+        gate_outcome.record(event)
 
 
 def main(argv: List[str]) -> int:

@@ -52,9 +52,9 @@ class ProposalTest(unittest.TestCase):
         return g, o
 
     def test_repeated_approvals_become_a_proposal(self):
-        g, o = self.rows("rg", 3)
+        g, o = self.rows("jq", 3)
         p = tune_judge.allowlist_proposal(tune_judge.approved_asks(g, o), ["ls"], 3)
-        self.assertEqual(p["new"], ["ls", "rg"])
+        self.assertEqual(p["new"], ["ls", "jq"])
 
     def test_below_min_or_already_covered_is_not_proposed(self):
         g, o = self.rows("rg", 2)
