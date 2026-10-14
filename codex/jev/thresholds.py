@@ -36,6 +36,9 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     "compact": {"keep_above": 0.5},
     "handoff": {"keep_min": 0.5},
     "context": {"warn_pct": 0.65},
+    # Who decides gate questions ("jev" | "local") and who answers in shadow ("local" | "jev" | "none").
+    # "auto": jev when a key is set, else local; shadow local when jev decides, else none (providers.py).
+    "judge": {"provider": "auto", "shadow": "auto"},
 }
 
 
@@ -152,6 +155,11 @@ def validate(dotted: str, value: Any) -> Optional[str]:
         valid_risks = {"routine", "worth_a_look", "destructive"}
         if value not in valid_risks:
             return f"{dotted} must be one of {valid_risks}, got {value}"
+
+    if section == "judge":
+        allowed = {"provider": ("auto", "local", "jev"), "shadow": ("auto", "local", "jev", "none")}[key]
+        if value not in allowed:
+            return f"{dotted} must be one of {list(allowed)}"
 
     return None
 
