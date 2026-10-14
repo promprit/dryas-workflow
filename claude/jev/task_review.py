@@ -128,7 +128,7 @@ def edit_verdict(cwd: str, tool: str, ti: Dict[str, Any],
         if not paths:
             return ("review", "no_path")
         rels_ = rels(root, tool, ti, cwd, cap=None)
-        if any(always_judged(r) for r in rels_):
+        if any(r == "<outside>" or always_judged(r) for r in rels_):
             return ("review", "always")
         sig = content_signal(edit_text(tool, ti))
         if sig:
