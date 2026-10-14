@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jev_client
 import jevlog
+import memory_mcp
 import providers
 import thresholds
 
@@ -65,6 +66,7 @@ TOOLS = [
                         "required": ["task", "branch", "tasks_merged"]},
     },
 ]
+TOOLS += memory_mcp.TOOLS  # owned core B: memory tools from the Dryas store
 
 
 def _error(mid: Any, code: int, message: str) -> Dict[str, Any]:
@@ -348,6 +350,9 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
             if name == "log_override":
                 jevlog.append("overrides", _sanitize_log_override(args))
                 return _text(mid, "logged")
+            if name in memory_mcp.NAMES:
+                obj, is_error = memory_mcp.call(name, args)
+                return _text(mid, obj, is_error)
             if name in LOG_TOOLS:
                 file, strs, ints = LOG_TOOLS[name]
                 rec, bad = _validate_log(args, strs, ints)
