@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-BANNER = "Deprecated: removed in 2.2. Dryas memory and the Dryas skills replace them."
+BANNER = "Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them."
 
 
 def read(rel):

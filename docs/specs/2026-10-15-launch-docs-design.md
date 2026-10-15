@@ -168,3 +168,4 @@ Code removal of Ruflo and Superpowers (2.2), renaming `docs/superpowers/`, launc
 - Test count wording is "over 2,000 tests" (pytest collects 2,042), not a rounded figure.
 - After a design critique: the hero is a 1600x400 band (lockup plus the real scope-lock deny line) so the README H1 is the only headline; the scope-lock card is 1400x480 and the ladder 1400x440; labels are at least 24px; ladder failure marks use ink, not the accent; the install block is split per OS; the ladder image sits under Escalate.
 - The README command table also lists `/dryas:brainstorm` and `/wplan`, and the install section names `/dryas-cloud`.
+- Dryas 2.2.0 shipped the OpenCode edition (core) without removing the Ruflo and Superpowers extras, so the deprecation banners say "removed in a future release", OpenCode is listed as shipping, and the roadmap carries the retirement as its own next step.

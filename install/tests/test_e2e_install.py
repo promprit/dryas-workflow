@@ -38,7 +38,9 @@ class E2ETest(unittest.TestCase):
         self.env["CODEX_HOME"] = str(self.home / ".codex")
         self.env.update(HOME=str(self.home), USERPROFILE=str(self.home), PATH=str(fb) + os.pathsep + os.environ["PATH"],
                         JEV_LOG_DIR=str(self.tmp / "logs"), JEV_HANDOFF_DIR=str(self.tmp / "handoff"),
-                        JEV_COMPACT_DIR=str(self.tmp / "compact"))
+                        JEV_COMPACT_DIR=str(self.tmp / "compact"),
+                        # CI runs the Jev suite directly; a nested run in every install multiplied its timing flakes
+                        DRYAS_VERIFY_SKIP_TESTS="1")
 
     def tearDown(self):
         shutil.rmtree(str(self.tmp), ignore_errors=True)
@@ -49,8 +51,14 @@ class E2ETest(unittest.TestCase):
                               + (["--yes"] if yes else []) + ["--no-ruflo", "--no-superpowers", "--no-design"] + list(args),
                               capture_output=True, text=True, env=self.env, timeout=900, input=answer)
 
+    def installed(self):
+        """Run a plain install and fail with its output, so a CI failure shows which step broke."""
+        r = self.installer()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return r
+
     def test_uninstall_asks_and_yes_bypasses(self):
-        self.assertEqual(self.installer().returncode, 0)
+        self.installed()
         cd = self.home / ".claude"
         u = self.installer("--uninstall", "--purge", yes=False, answer="n\n")
         self.assertEqual(u.returncode, 1, u.stdout + u.stderr)
@@ -65,7 +73,7 @@ class E2ETest(unittest.TestCase):
         self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
         self.assertFalse((cd / ".dryas-plugin.json").exists())
         self.assertFalse((self.home / ".dryas").exists())
-        self.assertEqual(self.installer().returncode, 0)
+        self.installed()
         u = self.installer("--uninstall")  # --yes: listed, not asked
         self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
         self.assertIn("--uninstall will remove:", u.stdout)
@@ -104,7 +112,7 @@ class E2ETest(unittest.TestCase):
                 json.loads(out)
 
     def test_plugin_uninstall(self):
-        self.assertEqual(self.installer().returncode, 0)
+        self.installed()
         u = self.installer("--uninstall")
         self.assertEqual(u.returncode, 0, u.stdout + u.stderr)
         cd = self.home / ".claude"

@@ -84,6 +84,30 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertIn("[codex-patch]", out["hookSpecificOutput"]["permissionDecisionReason"])
 
+    def test_opencode_harness_uses_patch_path(self):
+        code = ("import sys,json;e=json.load(sys.stdin);p=e['tool_input']['file_path'];"
+                "print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','permissionDecision':'deny',"
+                "'permissionDecisionReason':'out: '+p}}) if p.startswith('out/') else '')")
+        cfg = os.path.join(self.tmp, "chain.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"pretool": [stage("lock", code, harness=["opencode"], per_file=True)]}, f)
+        patch = "*** Begin Patch\n*** Update File: src/ok.py\n+b\n*** Add File: out/bad.py\n+x\n*** End Patch\n"
+        ev = {"tool_name": "apply_patch", "tool_input": {"command": patch}, "cwd": self.tmp}
+        env = dict(os.environ, JEV_CHAIN_CONFIG=cfg, JEV_LOG_DIR=self.tmp,
+                   JEV_CHAIN_LOCAL=os.path.join(self.tmp, "none.json"))
+        p = subprocess.run([sys.executable, os.path.join(HERE, "chain.py"), "pretool", "--harness", "opencode"],
+                           input=json.dumps(ev), capture_output=True, text=True, env=env)
+        out = json.loads(p.stdout)["hookSpecificOutput"]
+        self.assertEqual(out["permissionDecision"], "deny")
+        self.assertIn("out/bad.py", out["permissionDecisionReason"])
+
+    def test_shipped_chain_runs_core_stages_on_opencode(self):
+        with open(os.path.join(HERE, "chain.json"), encoding="utf-8") as f:
+            d = json.load(f)
+        on = sorted(s["name"] for v in d.values() if isinstance(v, list) for s in v
+                    if isinstance(s, dict) and "opencode" in s.get("harness", []))
+        self.assertEqual(on, ["jev-gate", "jev-route", "scope-lock"])
+
     def test_codex_patch_outside_worktree_denied_by_real_scope_lock(self):
         wt = self._worktree()
         lock = {"name": "scope-lock", "cmd": [sys.executable, os.path.join(HERE, "scope_lock.py")],

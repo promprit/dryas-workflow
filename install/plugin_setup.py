@@ -201,7 +201,8 @@ def _shared_warning(root: Path, old, new: List[str], cd: Optional[Path] = None) 
 
     def others(key):
         return [d for d in _dirs(acc, key) if not (cd and pu.same_path(d, norm(cd)))]
-    users = others("claude_dirs") + ["Codex in %s" % d for d in others("codex_dirs")]
+    users = others("claude_dirs") + ["Codex in %s" % d for d in others("codex_dirs")] + \
+        ["OpenCode in %s" % d for d in others("opencode_dirs")]
     if not _dirs(acc, "codex_dirs") and _codex_legacy():
         users.append("Codex")
     if not users:
@@ -230,7 +231,7 @@ def write_workflow_doc(repo: Path, root: Path) -> None:
 
 
 def add_account(root: Path, cd: Path, key: str = "claude_dirs") -> None:
-    """Record a config dir under `key` in accounts.json ("claude_dirs" or "codex_dirs"); other keys are kept."""
+    """Record a config dir under `key` in accounts.json ("claude_dirs", "codex_dirs" or "opencode_dirs"); other keys are kept."""
     p, cd = Path(root) / "accounts.json", str(norm(cd))
     acc = _load_json(p, {})
     dirs = _dirs(acc, key)
@@ -546,12 +547,12 @@ def purge_shared() -> bool:
         return False
     try:
         acc = json.loads((root / "accounts.json").read_text(encoding="utf-8"))
-        if not isinstance(acc, dict) or any(not isinstance(acc.get(k, []), list) for k in ("claude_dirs", "codex_dirs")):
+        if not isinstance(acc, dict) or any(not isinstance(acc.get(k, []), list) for k in ("claude_dirs", "codex_dirs", "opencode_dirs")):
             raise ValueError("not an object with lists")
     except (OSError, ValueError):
         print("kept %s: the list of accounts using it is missing or unreadable" % root)
         return False
-    left = [d for k in ("claude_dirs", "codex_dirs") for d in _dirs(acc, k)]
+    left = [d for k in ("claude_dirs", "codex_dirs", "opencode_dirs") for d in _dirs(acc, k)]
     legacy = _codex_legacy()
     if left:
         why = "still used by " + ", ".join(left)
@@ -670,14 +671,15 @@ def extras_marketplaces(rec: dict) -> List[str]:
     return names
 
 
-def other_accounts(cd: Path, cdx: Optional[Path] = None) -> List[str]:
-    """Config dirs and Codex homes listed in accounts.json other than cd (and cdx, uninstalled in the same run)."""
+def other_accounts(cd: Path, cdx: Optional[Path] = None, od: Optional[Path] = None) -> List[str]:
+    """Config dirs, Codex homes and OpenCode config dirs listed in accounts.json other than cd (and cdx, od, uninstalled in the same run)."""
     acc = _load_json(norm(data_root()) / "accounts.json", {})
     cd = norm(cd)
     # entries are stored resolved, but compare resolved anyway: a symlinked temp dir (macOS /var), an 8.3 short
     # name (Windows) or a hand-edited entry must not count as another account forever
     out = [d for d in _dirs(acc, "claude_dirs") if not pu.same_path(str(norm(d)), str(cd))]
     out += [d for d in _dirs(acc, "codex_dirs") if not (cdx is not None and pu.same_path(str(norm(d)), str(norm(cdx))))]
+    out += [d for d in _dirs(acc, "opencode_dirs") if not (od is not None and pu.same_path(str(norm(d)), str(norm(od))))]
     return out
 
 
@@ -778,6 +780,9 @@ def uninstall(cd: Path, purge: bool, extras: Optional[List[List[str]]] = None) -
         elif _codex_installed():
             why = "your Codex Dryas install uses it (%s); uninstall Codex first or in the same run (--harness both)" \
                 % _codex_installed()
+        elif _dirs(_load_json(root / "accounts.json", {}), "opencode_dirs"):
+            why = "your OpenCode Dryas install uses it (%s); uninstall OpenCode first or in the same run (--harness all)" \
+                % _dirs(_load_json(root / "accounts.json", {}), "opencode_dirs")[0]
         else:
             why = "it is a symlink" if raw.is_symlink() else _purge_refusal(root, cd)
         if why:

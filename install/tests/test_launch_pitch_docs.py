@@ -24,10 +24,10 @@ class PitchDocsTest(unittest.TestCase):
 
     def test_roadmap_and_harnesses(self):
         r = read("docs/roadmap.md")
-        self.assertIn("2.2", r)
+        self.assertIn("## Next: retire the optional extras", r)
         self.assertIn("owned core", r)
         h = read("docs/harnesses.md")
-        self.assertIn("| OpenCode | Next (2.2) |", h)
+        self.assertIn("| OpenCode | Supported (core)", h)
 
     def test_contributing(self):
         self.assertNotIn("rough edges", read("CONTRIBUTING.md"))

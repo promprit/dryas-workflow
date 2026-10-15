@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SessionStart hook (startup, resume, clear, compact): Dryas rules as additionalContext.
 A plugin's CLAUDE.md is not loaded, so CLAUDE.md.template is injected here, with <!-- pstack-picks --> blocks
-resolved from chain.local.json "off". With --harness codex it injects AGENTS.md.template instead, with {{CD}}
+resolved from chain.local.json "off". With --harness codex or opencode it injects AGENTS.md.template instead, with {{CD}}
 resolved to the plugin root and a "Dryas paths:" line naming <dryas-root> and <dryas-py> for the skills.
 On resume the context is injected again on purpose: additionalContext is not part of the saved transcript.
 For Claude Code, when the account's settings.json lacks the deny rules of settings.fragment.json (setup not run),
@@ -22,7 +22,7 @@ import paths  # noqa: E402
 from gating import gate_blocks  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES = {"claude": "CLAUDE.md.template", "codex": "AGENTS.md.template"}
+TEMPLATES = {"claude": "CLAUDE.md.template", "codex": "AGENTS.md.template", "opencode": "AGENTS.md.template"}
 PATHS_LINE = "Dryas paths: <dryas-root> = %s, <dryas-py> = %s. Substitute them in Dryas skill commands."
 ALL = ("core", "jev", "ruflo", "superpowers", "design", "pstack-picks")
 SKIP_LINE = ("pstack-picks is not installed: in Dryas skills and agents, skip any block wrapped in "
@@ -49,7 +49,7 @@ def harness(argv: List[str]) -> str:
 
 def build(template: str, off: List[str], harness: str = "claude", root: str = "", py: str = "") -> str:
     text = gate_blocks(template, [c for c in ALL if c not in off]).strip()
-    if harness == "codex":
+    if harness in ("codex", "opencode"):
         text = text.replace("{{CD}}", root) + "\n\n" + PATHS_LINE % (root, py)
     return text + ("\n\n" + SKIP_LINE if "pstack-picks" in off else "") + "\n"
 

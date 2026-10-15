@@ -4,7 +4,7 @@ Rules your AI agents can't ignore, in detail. Start with the door that fits.
 
 ## Use it
 
-- [Install](install.md): Claude Code, Codex, Windows, WSL, every flag, upgrade and uninstall
+- [Install](install.md): Claude Code, Codex, OpenCode, Windows, WSL, every flag, upgrade and uninstall
 - [Cloud sessions](cloud-sessions.md): run Dryas in claude.ai/code on any repo
 - [Harnesses](harnesses.md): what each harness gets, and several accounts side by side
 - [Workflow reference](workflow.md): the rules, hooks, commands and model policy in full

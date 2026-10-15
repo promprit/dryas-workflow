@@ -463,14 +463,14 @@ SMOKE_PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 
 
 def scope_smoke(chain_py: Path, env_extra: Dict[str, str], harness: str = "claude") -> bool:
-    """Run `chain.py pretool` on an out-of-scope Write (Codex: an apply_patch adding a file) in a temp worktree;
+    """Run `chain.py pretool` on an out-of-scope Write (Codex and OpenCode: an apply_patch adding a file) in a temp worktree;
     True when it denies. Logs and chain.local.json point into that temp dir, so the user's own files are never touched."""
     wt = Path(tempfile.mkdtemp())
     try:
         (wt / ".orchestrate").mkdir()
         (wt / ".orchestrate" / "PLAN.md").write_text(SMOKE_PLAN, encoding="utf-8")
         (wt / ".orchestrate" / "active.json").write_text(json.dumps({"active": ["1"]}), encoding="utf-8")
-        if harness == "codex":
+        if harness in ("codex", "opencode"):
             patch = "*** Begin Patch\n*** Add File: src/other.ts\n+x\n*** End Patch\n"
             event = {"tool_name": "apply_patch", "tool_input": {"command": patch}, "cwd": str(wt)}
         else:
@@ -479,7 +479,7 @@ def scope_smoke(chain_py: Path, env_extra: Dict[str, str], harness: str = "claud
         env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
         env.update(JEV_LOG_DIR=str(wt / "logs"), JEV_CHAIN_LOCAL=str(wt / "none.json"))
         env.update(env_extra)
-        argv = PYX + [str(chain_py), "pretool"] + (["--harness", "codex"] if harness == "codex" else [])
+        argv = PYX + [str(chain_py), "pretool"] + (["--harness", harness] if harness != "claude" else [])
         rc, out = capture(argv, json.dumps(event), env)
         try:
             return json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -493,6 +493,8 @@ def jev_tests(tdir: Path) -> Tuple[str, str, str]:
     """(status, name, detail) for the Jev test suite in tdir."""
     if not tdir.is_dir():
         return "SKIP", "Jev tests", "no jev/tests folder"
+    if os.environ.get("DRYAS_VERIFY_SKIP_TESTS") == "1":
+        return "SKIP", "Jev tests", "DRYAS_VERIFY_SKIP_TESTS=1"
     if run(PYX + ["-c", "import pytest"]) != 0:
         return "SKIP", "Jev tests", "install pytest to run the Jev tests"
     rc = run(PYX + ["-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(tdir), str(tdir)], cwd=str(tdir))

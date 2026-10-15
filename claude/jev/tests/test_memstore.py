@@ -151,21 +151,28 @@ class StoreCases:
         self.assertEqual([x["id"] for x in memstore.search(ro, "proj", "alpha")["results"]], [a["id"]])
 
     def test_concurrent_writers_lose_nothing(self):
+        # Transactions must not lose writes. Writers wait generously for the lock: the default 1.5 s busy timeout is
+        # a hook-latency budget (a busy store fails fast, MEM-5), and a slow CI runner can exceed it under contention.
         path = os.environ["DRYAS_DB"]
+        errors = []
 
         def work(n):
-            c = memdb.connect(path)
             try:
-                for i in range(25):
-                    memstore.store(c, "proj", "w%d-%d" % (n, i), "body %d %d" % (n, i))
-            finally:
-                c.close()
+                c = memdb.connect(path, busy_ms=60000)
+                try:
+                    for i in range(25):
+                        memstore.store(c, "proj", "w%d-%d" % (n, i), "body %d %d" % (n, i))
+                finally:
+                    c.close()
+            except Exception as e:  # a dead worker must fail the test with its reason, not a short count
+                errors.append("writer %d: %r" % (n, e))
 
         threads = [threading.Thread(target=work, args=(n,)) for n in range(4)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
+        self.assertEqual(errors, [])
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM memory").fetchone()[0], 100)
 
 

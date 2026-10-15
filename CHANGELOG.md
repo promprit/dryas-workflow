@@ -7,7 +7,20 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Docs
 - The README is rewritten for launch: what Dryas does in one line, the problem, asked vs enforced, the loop, a 60-second install, the commands, proof from our own logs, and the operating model for teams. Brand images in `docs/assets/` (light and dark), with their sources in `docs/assets/src/`.
 - New `docs/README.md` (docs landing page) and `docs/judge-scorecard.md` (the scorecard moved out of the README).
-- Ruflo and Superpowers are marked deprecated in `docs/install.md` and `docs/workflow.md`; they are removed in 2.2 with the OpenCode edition.
+- Ruflo and Superpowers are marked deprecated in `docs/install.md` and `docs/workflow.md`; they will be removed in a future release.
+
+## 2.2.0 - 2026-10-15
+
+### Added
+- The OpenCode edition (core): `opencode/plugin/dryas.ts`, skills, commands and executor agents, with the `jev` MCP server. Memory hook stages, context warnings, compaction keep/restore and `/handoff` come in plan 2.
+- `install/install.sh --harness opencode|all` (and the same in `install.ps1`), `--opencode-dir` and `--tier-fast|standard|strong|frontier`.
+- OpenCode: a gate or scope-lock `ask` blocks the call with a 4-hex code, and the user allows it once with `dryas allow <code>`; Dryas never changes OpenCode's permission settings.
+- `tools/sync_opencode.py`, which generates the OpenCode files from the Claude Code sources.
+- An OpenCode check in `tools/release_check.py` (`--opencode-dir`) and OpenCode CI jobs.
+- An OC column in the conformance table (`reference/README.md`).
+
+### Changed
+- The scope lock no longer asks about the orchestrator's own shell writes in Claude Code and OpenCode (it asked for every write-like shell command while a task was active); executors still get the ask, Codex still asks for every write, and executors are told to write files with Edit or Write.
 
 ## 2.0.1 - 2026-10-15
 

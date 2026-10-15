@@ -4,9 +4,9 @@
 
 **Stop asking your agent to behave. Make it.**
 
-Dryas turns Claude Code and Codex into a disciplined delivery team. It agrees the design before it writes code. It edits only the files its task names. It proves the tests pass. It pays for the big model only when the small one fails. Every rule is enforced by a hook, not hoped for in a prompt.
+Dryas turns Claude Code, Codex and OpenCode into a disciplined delivery team. It agrees the design before it writes code. It edits only the files its task names. It proves the tests pass. It pays for the big model only when the small one fails. Every rule is enforced by a hook, not hoped for in a prompt.
 
-`v2` · MIT · Claude Code · Codex · Cloud sessions · macOS, Linux, Windows
+`v2` · MIT · Claude Code · Codex · OpenCode · Cloud sessions · macOS, Linux, Windows
 
 ## Brilliant agents. No discipline.
 
@@ -25,7 +25,7 @@ Dryas turns Claude Code and Codex into a disciplined delivery team. It agrees th
 | Runs everything on the default model. | **Model ladder.** Cheapest first, a stronger model only after a failure, every step logged with its reason. |
 | Installs, deletes and pushes on its own. | **Judge and human gates.** Risky commands are judged; installs, deletes, pushes, overwrites and settings changes always need you. |
 
-¹ The lock covers the file-edit tools. A write from a shell command is asked about, not blocked.
+¹ The lock covers the file-edit tools. A write from an executor's shell command is asked about, not blocked.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/scope-lock-dark.png"><img src="docs/assets/scope-lock-light.png" alt="A terminal: the scope lock denies an edit to src/billing/invoice.ts because it is outside task 2's scope." width="100%"></picture>
 
@@ -74,7 +74,7 @@ Then, in Claude Code:
 
 No API key. No Node. Python 3.9+ and git.
 
-Codex: `install/install.sh --harness codex`. Cloud sessions on claude.ai/code: `/dryas-cloud`, see [docs/cloud-sessions.md](docs/cloud-sessions.md). Every flag, several accounts, upgrade and uninstall: [docs/install.md](docs/install.md).
+Codex: `install/install.sh --harness codex`. OpenCode: `install/install.sh --harness opencode`. Cloud sessions on claude.ai/code: `/dryas-cloud`, see [docs/cloud-sessions.md](docs/cloud-sessions.md). Every flag, several accounts, upgrade and uninstall: [docs/install.md](docs/install.md).
 
 ## What you get
 
@@ -119,7 +119,7 @@ Dryas is also a target operating model for AI software delivery: roles, a RACI, 
 | Claude Code | Shipping: plugin `dryas@dryas-workflow` |
 | Codex | Shipping: plugin `dryas@dryas-workflow` |
 | Claude Code cloud sessions | Shipping: `dryas cloud init` commits the core into your repo |
-| OpenCode | Next, in 2.2 |
+| OpenCode | Shipping: core edition, `install/install.sh --harness opencode` |
 | Pi, Roo, Cursor | Later |
 
 macOS, Linux, WSL and Windows. Details: [harnesses](docs/harnesses.md).
