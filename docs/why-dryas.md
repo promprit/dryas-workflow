@@ -1,8 +1,8 @@
 # Why Dryas exists
 
-The Dryas Workflow Framework (Dryas for short) is a target operating model for AI-assisted software delivery. It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to spend more on a stronger model, and what must be true before work merges.
+**Brilliant agents. No discipline.** They build before anyone agreed what. They tidy files nobody asked about. They report tests they never ran. They spend big-model money on small-model questions.
 
-What this repo ships (Claude Code, Codex, the Dryas core, and optional extras such as the Jev model, Ruflo, Superpowers and the design skills) is one way to run it. They are replaceable. The model is the asset.
+Dryas fixes that with rules your agents can't ignore. It is a target operating model for AI software delivery (process, decision rights, roles, controls, cost rules and metrics) and a reference implementation that enforces it with hooks on Claude Code and Codex. The tools are replaceable. The model is the asset.
 
 ## The problems it solves
 
@@ -21,16 +21,15 @@ Teams that hand real delivery work to AI agents hit the same failures, whatever 
 
 ## Why not just install the skills?
 
-Process skills, a memory server, a model router and design skills can each be installed on their own. Installed side by side, though, they are a pile of parts rather than a method. Each assumes it runs the show, none knows the others exist, and their rules are prompts the agent may follow or skip. Dryas owns the core of those jobs and makes them one system; Superpowers, Ruflo and the Jev model stay available as optional extras.
+Process skills, a memory server, a model router and design skills can each be installed on their own. Installed side by side, though, they are a pile of parts rather than a method. Each assumes it runs the show, none knows the others exist, and their rules are prompts the agent may follow or skip. Dryas owns the core of those jobs and makes them one system.
 
 | Skills installed side by side | Dryas |
 | --- | --- |
 | **Rules are requests.** A skill tells the agent to stay in scope or run the tests; nothing stops it when it does not. | **Rules are enforced.** Hooks deny edits outside a task's Scope, gate risky commands and gate the commit. The prompt is backed by a check. |
-| **Tools compete for the same job.** Third-party plan executors, agent swarms and your own subagents each want to run the plan; two memory systems each want to remember it. | **One owner per job.** The Dryas skills own process, Dryas memory owns memory, the judge (local, or Jev) owns judgement, the scope lock owns scope, `/orchestrate` runs the plan. When an extra such as Superpowers is added, the skills it overlaps are denied in settings, so there is one path. |
+| **Tools compete for the same job.** Third-party plan executors, agent swarms and your own subagents each want to run the plan; two memory systems each want to remember it. | **One owner per job.** The Dryas skills own process, Dryas memory owns memory, the judge (local, or Jev) owns judgement, the scope lock owns scope, `/orchestrate` runs the plan. |
 | **Hooks run in install order.** Whichever plugin was installed last decides what fires first, and a noisy hook can mask a blocking one. | **One hook chain, in a fixed order.** Scope lock, then gate, then memory, then observer. The order is a file in the repo, tested like code. |
 | **No cost policy.** Each tool picks its own model, so work runs on whatever is default: often too strong, sometimes too weak. | **A model ladder.** The cheapest model that can do the task goes first; a stronger one is used only after a failure, and every step up is logged with its reason. |
 | **No feedback.** Nobody can say whether the guardrails are too tight or too loose. | **A learning loop.** Escalations and overrides of the judge are logged; `/tune` reads them weekly and proposes threshold changes. |
-| **Each tool's defaults ship as they are.** Third-party hooks may fetch and run unpinned packages on every session. | **Third-party parts are hardened on install.** Helpers that would spawn unpinned `npx` from a hook are patched out, and plugins that do it are left disabled. |
 | **Every machine is set up by hand** and drifts from the others. | **One installer from one repo.** It merges into your settings without overwriting values you already set, and re-running it brings every machine back in line. |
 
 The skills are still doing the work. Dryas decides which one does which part, in what order, under which checks, and at what cost.
@@ -39,7 +38,7 @@ Skills side by side also give you no view of the whole loop. [FlowObserve](https
 
 ## What Dryas is not
 
-- **Not only a plugin.** The Claude Code edition ships as a plugin (`dryas@dryas-workflow`), but Dryas itself is a specification with one binding per harness. This repo ships two bindings (Claude Code and Codex); Pi, OpenCode, Roo and Cursor are planned. Others can be written against the [specification](../spec/dryas-spec-v1.md).
+- **Not only a plugin.** The Claude Code edition ships as a plugin (`dryas@dryas-workflow`), but Dryas itself is a specification with one binding per harness. This repo ships three bindings (Claude Code, Codex and OpenCode); Pi, Roo and Cursor are planned. Others can be written against the [specification](../spec/dryas-spec-v1.md).
 - **Not a prompt pack.** The rules are enforced where they can be (hooks, scope lock, gates), not only asked for.
 - **Not autonomous.** Dryas puts a human at the two points that matter most, design approval and the final say on anything outward-facing, and keeps agents fast everywhere else.
 - **Not an organisation-wide AI policy.** The scope is software delivery.

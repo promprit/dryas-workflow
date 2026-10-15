@@ -212,6 +212,8 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
 ## 7. Dryas memory, and the optional extra Ruflo
 
+> Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`.
+
 **Dryas memory** is the default memory provider (`memory: dryas`):
 - One SQLite file, `~/.dryas/dryas.db` (under `DRYAS_DATA_ROOT` when set), served by the `jev` MCP server: `memory_search`, `memory_store`, `memory_list`, `memory_forget` and `swarm_init`, named `mcp__plugin_dryas_jev__<tool>`. The namespace is the main repo folder name. Model: [memory-model.md](memory-model.md).
 - The stages in §5 fill it. If the file is locked or missing, memory is degraded: the hooks exit 0, and work goes on without history.
@@ -234,6 +236,8 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - Ruflo's `CLAUDE.md` planning sections ("Implementation Loop", "Concurrency and authority") are not used, because the orchestrator owns planning.
 
 ## 8. Optional extra: Superpowers
+
+> Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`.
 
 The process skills Dryas uses are its own (`dryas:brainstorm`, `dryas:worktree`, `dryas:tdd`, `dryas:review-request`, `dryas:review-receive`, `dryas:verify`, `dryas:plan`, `dryas:debug`; see `claude/skills/UPSTREAM.md`). Superpowers is not required. With `--with-superpowers` the upstream plugin is installed too, and the notes below apply to it.
 

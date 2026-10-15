@@ -1,0 +1,53 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "docs/assets/src/hero.html"
+        ],
+        "createdAt": "2026-10-15T11:10:01.693Z",
+        "reason": "orchestrator: Paper #EFEEE8 is the Dryas brand's documented light ground (projects/dryas/brand-assets/README.txt); palette approved by Promprit in docs/specs/2026-10-15-launch-docs-design.md section 5"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "docs/assets/src/loop.html"
+        ],
+        "createdAt": "2026-10-15T11:10:03.139Z",
+        "reason": "orchestrator: Paper #EFEEE8 is the Dryas brand's documented light ground (projects/dryas/brand-assets/README.txt); palette approved by Promprit in docs/specs/2026-10-15-launch-docs-design.md section 5"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "docs/assets/src/ladder.html"
+        ],
+        "createdAt": "2026-10-15T11:10:04.342Z",
+        "reason": "orchestrator: Paper #EFEEE8 is the Dryas brand's documented light ground (projects/dryas/brand-assets/README.txt); palette approved by Promprit in docs/specs/2026-10-15-launch-docs-design.md section 5"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "docs/assets/src/social-preview.html"
+        ],
+        "createdAt": "2026-10-15T11:10:05.259Z",
+        "reason": "orchestrator: Paper #EFEEE8 is the Dryas brand's documented light ground (projects/dryas/brand-assets/README.txt); palette approved by Promprit in docs/specs/2026-10-15-launch-docs-design.md section 5"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "docs/assets/src/scope-lock.html"
+        ],
+        "createdAt": "2026-10-15T11:43:28.165Z",
+        "reason": "orchestrator: Paper #EFEEE8 is the Dryas brand's documented light ground (projects/dryas/brand-assets/README.txt); palette approved by Promprit in docs/specs/2026-10-15-launch-docs-design.md section 5"
+      }
+    ]
+  }
+}
