@@ -32,7 +32,7 @@ Success:
 1. Executor shell writes never ask. Readable targets are checked before the run (B); everything is checked at task return (C).
 2. Writes into the current session's own scratchpad are allowed; `/tmp` and build directories in general are not exempt.
 3. Out-of-scope changes are sent back to the executor to revert; nothing is reverted automatically.
-4. During a run, a Jev-gate "ask" becomes a deny with a reason, except for actions the approved plan lists (D).
+4. During a run, the human is the last resort for risky actions: plan, then judge, then orchestrator, then the user only for what cannot be undone outside the worktree (D).
 5. The planner proposes the risky actions a plan expects; approving the plan approves them. The user writes nothing extra.
 6. `/orchestrate` checks before starting that the run cannot prompt; if it could, it does not start and says what to change. It never changes settings itself.
 7. One report and one push notification when the run ends or stops; a blocked task is reported as not done.
@@ -88,7 +88,14 @@ Known limit (stated in GOV-2): inline code that writes outside the worktree, oth
 
 ### D. Jev gate during a run (`gate.py`) and planned risky actions
 
-- While a run is active, `gate.decide` turns "ask" into "deny" with reason "Jev gate: looks destructive (<reason>); denied during an unattended run. Find a safer way, or report `NEEDS USER: <action> because <reason>`". The orchestrator, too, receives the deny rather than a prompt.
+**The human is the last resort.** A risky action during a run climbs this ladder and stops at the first rung that decides:
+
+1. **Planned**: it matches the plan's `Risky actions` (below) → allow.
+2. **Judge**: the Jev gate (Jev model, or the local judge) judges it as today → allow when it is safe enough.
+3. **Orchestrator** (strong tier, as the model policy already says: "below threshold or escalate, the strong tier decides"): where the gate would ask today, `gate.decide` instead denies with reason "Jev gate: looks destructive (<reason>). Report `NEEDS DECISION: <exact command> because <reason>` to the orchestrator, or find a safer way." The orchestrator decides with the plan, the task and the command in front of it. If it approves, it adds the exact command to `.orchestrate/approved.json` (`{"commands": [{"cmd": ..., "task": N, "reason": ...}]}`, written only by the main thread, like `PLAN.md`), logs it with `log_override`, and re-dispatches; the gate allows that exact command for the rest of the run. Its own risky commands go through the same file, so it is never prompted either.
+4. **Human**: only what the orchestrator judges it must not decide alone: an action that cannot be undone and reaches outside the worktree (for example deleting data outside the repo, pushing, touching production, spending money), or one that contradicts the approved design. That task is reported as not done, with a `NEEDS USER` item in the end report; the run carries on with other tasks.
+
+Every rung is logged (`rule`: `planned`, `judge`, `orchestrator`, `user`), so `/tune` shows how often each rung decides and the orchestrator's approvals can be calibrated like any other Jev decision.
 - **Planned risky actions.** The plan header gets an optional section `Risky actions:` listing exact commands or command prefixes ending in `*` (for example `rm -rf dist`, `pnpm db:reset*`). `/wplan` proposes it from the tasks; the user approves it with the plan. During a run the gate allows a command that matches an entry exactly or by prefix, as a whole simple command (a match inside `a && b` covers only that part; every other part is judged as usual). Matches are logged with `"rule": "planned"`.
 - `planfile.py` parses the section; a malformed section is ignored (nothing pre-approved), never fatal.
 - Outside a run the gate behaves as today.
@@ -143,7 +150,7 @@ At the end of a run the orchestrator:
 - `shellwrites.targets`: each readable form, `cd` tracking, unknown cases.
 - `scope_lock._bash`: decision table per harness; scratchpad match and near misses (`scratchpad2`, other session id, symlink out).
 - `scope_audit`: in scope, committed out of scope, uncommitted out of scope, another task's in-scope file, `.orchestrate`, bad sha.
-- `gate`: ask→deny during a run, unchanged outside; planned exact and prefix match; compound command; malformed section.
+- `gate`: ask→deny with NEEDS DECISION during a run, unchanged outside; planned exact and prefix match; orchestrator-approved exact match from `approved.json` (and no match for a near variant); executor cannot write `approved.json`; compound command; malformed section.
 - `preflight`: each mode; missing log.
 - **Regression corpus** `claude/jev/tests/fixtures/scope_shell_corpus.jsonl`: about 200 real executor commands from 2026-10-13..15, paths rewritten to a fixture worktree, code bodies and messages trimmed, run through `redact.py` and checked by hand (its own plan task). Each line has the expected B outcome; the test asserts 0 asks.
 - Three-edition parity for every changed or new module (existing parity checks extended).
