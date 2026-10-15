@@ -41,7 +41,11 @@ class HandoffTest(unittest.TestCase):
                 n = len(s.requests())
                 s.prompt("hello")  # the next root session gets the handoff in its system prompt
                 first = s.requests()[n:]
-                self.assertTrue(any(HEADER in str(x) and "WRITE_ALLOWED" in str(x) for r in first for x in r["system"]), first)
+                main = [r for r in first if r.get("tools")]  # title requests carry no tools
+                self.assertTrue(any(HEADER in str(x) and "WRITE_ALLOWED" in str(x) for r in main for x in r["system"]), first)
+                n = len(s.requests())
+                s._http("POST", "/session/%s/message" % sid, {"parts": [{"type": "text", "text": "more"}]})
+                self.assertFalse(any(HEADER in str(x) for r in s.requests()[n:] for x in r["system"]))  # an already started session never takes it
                 n = len(s.requests())
                 s.prompt("hello again")  # the file was used once: a later session starts clean
                 self.assertFalse(any(HEADER in str(x) for r in s.requests()[n:] for x in r["system"]))

@@ -87,7 +87,7 @@ function taskActive(dir: string): boolean {
 }
 
 type Usage = { input_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }
-type Session = { agent?: string; parentID?: string; known?: boolean; contextLimit?: number; usage?: Usage; model?: string; ended?: boolean; restore?: string | null }
+type Session = { agent?: string; parentID?: string; known?: boolean; contextLimit?: number; usage?: Usage; model?: string; ended?: boolean; fresh?: boolean; restoring?: Promise<string | null> }
 
 function toolCwd(dir: string, tool: string, args: any): string {
   const wd = args?.workdir
@@ -164,6 +164,7 @@ export const DryasPlugin = async (ctx: any) => {
         const s = session(p.info.id)
         s.parentID = p.info.parentID
         s.known = true
+        if (!s.parentID) s.fresh = true // only sessions this process saw created can take a handoff
         if (!s.parentID) void observe("session-start", { ...base(p.info.id), hook_event_name: "SessionStart", source: "startup" })
       } else if (type === "session.deleted" && p.info?.id) {
         await end(p.info.id, "deleted")
@@ -292,13 +293,18 @@ export const DryasPlugin = async (ctx: any) => {
       const sid = input?.sessionID
       if (sid) {
         const s = await resolveSession(sid)
-        if (s.known && !s.parentID && s.restore === undefined) {
-          s.restore = null // first request of this root session: a fresh /handoff for this project, used once
-          const out = parse(await runScript("handoff_restore.py", [], { cwd: ctx.directory, source: "clear", session_id: sid }, RESTORE_MS))
-          const add = out?.hookSpecificOutput?.additionalContext
-          if (add) s.restore = String(add)
+        if (s.fresh && !s.parentID) {
+          // The handoff FILE is read once, on this session's first request; concurrent requests (title) wait for that read.
+          // The restored text then stays in this session's system prompt on every request.
+          s.restoring ??= runScript("handoff_restore.py", [], { cwd: ctx.directory, source: "clear", session_id: sid }, RESTORE_MS).then(
+            (raw) => {
+              const add = parse(raw)?.hookSpecificOutput?.additionalContext
+              return add ? String(add) : null
+            },
+          )
+          const restore = await s.restoring
+          if (restore) output.system.push(restore)
         }
-        if (s.restore) output.system.push(s.restore)
       }
     },
 
