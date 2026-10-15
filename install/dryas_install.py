@@ -493,6 +493,8 @@ def jev_tests(tdir: Path) -> Tuple[str, str, str]:
     """(status, name, detail) for the Jev test suite in tdir."""
     if not tdir.is_dir():
         return "SKIP", "Jev tests", "no jev/tests folder"
+    if os.environ.get("DRYAS_VERIFY_SKIP_TESTS") == "1":
+        return "SKIP", "Jev tests", "DRYAS_VERIFY_SKIP_TESTS=1"
     if run(PYX + ["-c", "import pytest"]) != 0:
         return "SKIP", "Jev tests", "install pytest to run the Jev tests"
     rc = run(PYX + ["-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", str(tdir), str(tdir)], cwd=str(tdir))
