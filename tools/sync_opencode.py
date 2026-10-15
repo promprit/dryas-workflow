@@ -19,10 +19,10 @@ import sync_codex_plugin as scp  # noqa: E402
 REPO = scp.REPO
 MARK = "<!-- dryas-managed -->"
 TREES = (("claude/jev", "opencode/dryas/jev"), ("claude/pstack", "opencode/dryas/pstack"))
-HAND = ("orchestrate", "interrogate", "benchmark-checklist")  # opencode/skill/dryas-<name>/SKILL.md, hand-written
-CLAUDE_ONLY = ("ruflo-tools.md",)  # skill reference files OpenCode has no use for (no Ruflo on OpenCode)
-THIN = ("orchestrate", "interrogate")  # commands that only load the skill of the same name
-FROM_CODEX = ("wplan", "wreview", "commit", "tune", "retro")  # commands rendered from codex/skills/<name>
+HAND = ("orchestrate", "interrogate", "benchmark-checklist")
+CLAUDE_ONLY = ("ruflo-tools.md",)
+THIN = ("orchestrate", "interrogate")
+FROM_CODEX = ("wplan", "wreview", "commit", "tune", "retro")
 TIERS = ("fast", "standard", "strong", "frontier")
 JEV_TOOLS = ("jev_judge|log_override|log_escalation|log_dispatch|log_review|log_merge|memory_search|memory_store|"
              "memory_list|memory_forget|swarm_init")
@@ -96,7 +96,8 @@ def render_rules(codex_rules: str) -> str:
 
 def plan(repo: Path) -> Dict[str, Union[Path, str]]:
     """Target rel path (posix, from the repo root) -> source file (copied) or text (rendered)."""
-    repo, out = Path(repo), {}  # type: ignore[var-annotated]
+    repo = Path(repo)
+    out: Dict[str, Union[Path, str]] = {}
     for src, dst in TREES:
         for rel, f in scp._files(repo / src):
             out[(Path(dst) / rel).as_posix()] = f
@@ -160,7 +161,6 @@ def leaks(repo: Path) -> List[str]:
     return out
 
 
-# shared names (sync_codex_plugin.SHARED) only one side may name: {skill: {"claude": {...}, "opencode": {...}}}
 HAND_ALLOW: Dict[str, Dict[str, Set[str]]] = {}
 _OC_PREFIX = re.compile(r"\bjev_(?=(?:" + JEV_TOOLS + r")\b)")
 

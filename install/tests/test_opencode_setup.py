@@ -143,7 +143,7 @@ class OpenCodeSetupTest(unittest.TestCase):
             self.ver.start()
 
     def test_scope_smoke_opencode(self):
-        self.ver.stop()  # needs the real capture: scope_smoke runs chain.py as a subprocess
+        self.ver.stop()
         try:
             self.assertTrue(di.scope_smoke(REPO / "claude/jev/chain.py", {}, harness="opencode"))
         finally:

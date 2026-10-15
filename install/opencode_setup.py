@@ -134,7 +134,6 @@ def setup(repo: Path, od: Path, comps: List[str], tiers: Dict[str, str], yes: bo
         print("would write %d files into %s" % (len(want), od))
         return 0
     written = {}
-    # record every planned file first, so a run that stops half-way still owns what it wrote
     ps._save_json(od / RECORD, {"version": _version(repo), "py": str(di.PY).replace("\\", "/"), "tiers": chosen,
                                 "files": {**{r: _sha(d) for r, d in want.items()}, **old}, "partial": True})
     for rel, data in want.items():
@@ -150,7 +149,7 @@ def setup(repo: Path, od: Path, comps: List[str], tiers: Dict[str, str], yes: bo
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(data)
         written[rel] = _sha(data)
-    for rel in sorted(set(old) - set(written)):  # shipped by an older Dryas, not by this one
+    for rel in sorted(set(old) - set(written)):
         if not _remove(od, rel, old[rel]):
             print("kept %s (edited after setup; no longer shipped)" % (od / rel))
     ps._save_json(od / RECORD, {"version": _version(repo), "py": str(di.PY).replace("\\", "/"), "tiers": chosen,
@@ -176,19 +175,29 @@ def uninstall(od: Path) -> int:
     rec = rec if isinstance(rec, dict) else {}
     files = rec.get("files") if isinstance(rec.get("files"), dict) else {}
     kept = [rel for rel, sha in sorted(files.items()) if not _remove(od, rel, sha)]
-    if kept:  # a reinstall must still recognise these as Dryas's
+    if kept:
         rec.pop("partial", None)
         ps._save_json(p, {**rec, "files": {rel: files[rel] for rel in kept}})
     else:
         p.unlink()
-        for d in (od / "dryas",):
-            if d.is_dir() and not os.listdir(str(d)):
-                d.rmdir()
+        d = od / "dryas"
+        if d.is_dir() and not os.listdir(str(d)):
+            d.rmdir()
     ps.forget_account(ps.data_root(), od, "opencode_dirs")
     for rel in kept:
         print("kept %s (edited after setup)" % (od / rel))
     print("uninstalled Dryas from %s" % od)
     return 0
+
+
+def rules_ok(od: Path, env: Optional[dict] = None) -> bool:
+    """True when the installed rules hook prints the OpenCode rules."""
+    rc, out = di.capture(di.PYX + [str(od / "dryas/jev/rules_inject.py"), "--harness", "opencode"], "{}", env=env,
+                         timeout=60)
+    try:
+        return "Dryas paths:" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    except (ValueError, KeyError, TypeError):
+        return False
 
 
 def verify(od: Path, comps: List[str]) -> int:
@@ -206,12 +215,7 @@ def verify(od: Path, comps: List[str]) -> int:
         return fails
     missing = [rel for rel in files if not (od / rel).is_file()]
     fails += say("FAIL" if missing else "PASS", "installed files present", ", ".join(missing[:3]))
-    rc, out = di.capture(di.PYX + [str(od / "dryas/jev/rules_inject.py"), "--harness", "opencode"], "{}", timeout=60)
-    try:
-        ok = "Dryas paths:" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
-    except (ValueError, KeyError, TypeError):
-        ok = False
-    fails += say("PASS" if ok else "FAIL", "rules hook prints the OpenCode rules")
+    fails += say("PASS" if rules_ok(od) else "FAIL", "rules hook prints the OpenCode rules")
     fails += say("PASS" if di.scope_smoke(od / "dryas/jev/chain.py", {}, harness="opencode") else "FAIL",
                  "scope lock blocks an out-of-scope apply_patch")
     return fails

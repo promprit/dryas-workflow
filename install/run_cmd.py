@@ -304,8 +304,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                         print("Legacy Ruflo pieces (each asked separately):")
                     for label, _, _ in legacy:
                         print("  " + label)
-        rc_cdx = cps.uninstall(cdx) if want_codex else 0
-        rc = max(rc_cdx, ocs.uninstall(od) if want_oc else 0)
+        rc = max(cps.uninstall(cdx) if want_codex else 0, ocs.uninstall(od) if want_oc else 0)
         if rc:
             return rc
         if want_claude:
@@ -331,7 +330,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if want_codex and a.openrouter_key:
         print("note: --openrouter-key is not used for Codex; Codex reads OPENROUTER_API_KEY from your shell.")
     pre = sorted(set(comps) | set(codex_comps if want_codex else []))
-    if a.harness == "opencode":  # OpenCode never uses Ruflo: no node/npm or path checks for it
+    if a.harness == "opencode":
         pre = [c for c in pre if c != "ruflo"]
     probs = preflight(pre, a.harness, cd,
                       [repo / "claude", cd] if want_claude else [])

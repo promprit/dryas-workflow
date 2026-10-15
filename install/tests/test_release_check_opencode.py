@@ -37,7 +37,7 @@ class ReleaseCheckOpenCodeTest(unittest.TestCase):
             with redirect_stdout(buf), mock.patch.object(rco.di, "capture", return_value=(0, "1.18.32\n")), \
                     mock.patch.object(rco.di, "scope_smoke", return_value=True), \
                     mock.patch.object(rco, "_mcp_connected", return_value=(True, "")), \
-                    mock.patch.object(rco, "_rules_ok", return_value=True):
+                    mock.patch.object(rco.ocs, "rules_ok", return_value=True):
                 rco.check(rep, od, "/usr/bin/opencode", {})
             out = buf.getvalue()
             self.assertIn("WARN  executor tiers", out)
@@ -54,7 +54,7 @@ class ReleaseCheckOpenCodeTest(unittest.TestCase):
             with redirect_stdout(buf), mock.patch.object(rco.di, "capture", return_value=(0, "1.18.32\n")), \
                     mock.patch.object(rco.di, "scope_smoke", return_value=True), \
                     mock.patch.object(rco, "_mcp_connected", return_value=(True, "")) as mcp, \
-                    mock.patch.object(rco, "_rules_ok", return_value=True):
+                    mock.patch.object(rco.ocs, "rules_ok", return_value=True):
                 rco.check(rep, od, "/usr/bin/opencode", {})
             self.assertIn("SKIP  jev MCP server connects  (OpenCode reads <XDG_CONFIG_HOME>/opencode; "
                           "re-run with a dir named opencode)", buf.getvalue())

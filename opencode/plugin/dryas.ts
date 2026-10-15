@@ -1,6 +1,3 @@
-// Dryas Workflow for OpenCode: maps OpenCode plugin hooks onto the Dryas hook chain (dryas/jev/chain.py).
-// The chain decides; this file only translates. Spec: docs/specs/2026-10-15-opencode-edition-design.md section 5.
-// OpenCode's own permission rules are never touched: a chain "ask" blocks the call with a code the user types to allow it once.
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
@@ -23,7 +20,6 @@ function installRecord(): Record<string, any> {
 
 const PY: string = process.env.DRYAS_PY || installRecord().py || (process.platform === "win32" ? "python" : "python3")
 
-// Runs one Dryas script with `input` as JSON on stdin; resolves to its stdout, or null on spawn error, timeout or exit code != 0.
 function runScript(script: string, args: string[], input: unknown, timeoutMs: number): Promise<string | null> {
   return new Promise((resolve) => {
     let out = ""
@@ -57,7 +53,6 @@ function parse(out: string | null): any {
   }
 }
 
-// OpenCode tool call -> Claude-shaped tool_name and tool_input; null for tools the chain does not judge.
 function toolEvent(tool: string, args: any): { tool_name: string; tool_input: Record<string, unknown> } | null {
   const a = args ?? {}
   switch (tool) {
@@ -82,12 +77,10 @@ function toolEvent(tool: string, args: any): { tool_name: string; tool_input: Re
   return null
 }
 
-// The code a user types to allow one exact call the chain answered "ask".
 function approvalCode(tool: string, args: unknown): string {
   return createHash("sha1").update(tool + "\n" + JSON.stringify(args)).digest("hex").slice(0, 4)
 }
 
-// True when .orchestrate/active.json exists in `dir` or any parent: a task is active, so a broken chain fails closed.
 function taskActive(dir: string): boolean {
   for (let d = resolve(dir); ; d = dirname(d)) {
     if (existsSync(join(d, ".orchestrate", "active.json"))) return true
@@ -95,11 +88,11 @@ function taskActive(dir: string): boolean {
   }
 }
 
-type Session = { agent?: string; parentID?: string; known?: boolean } // known: parentID came from OpenCode
+type Session = { agent?: string; parentID?: string; known?: boolean }
 
 export const DryasPlugin = async (ctx: any) => {
   const sessions = new Map<string, Session>()
-  const approved = new Set<string>() // codes the user typed in a root session; each allows one call
+  const approved = new Set<string>()
   let rules: string | null = null
 
   const session = (id: string): Session => {
@@ -107,7 +100,6 @@ export const DryasPlugin = async (ctx: any) => {
     if (!s) sessions.set(id, (s = {}))
     return s
   }
-  // Fetches a session's parentID once when no session.created event recorded it; keeps going on any error.
   const resolveSession = async (id: string): Promise<Session> => {
     const s = session(id)
     if (!s.known) {
@@ -131,7 +123,7 @@ export const DryasPlugin = async (ctx: any) => {
   return {
     config: async (cfg: any) => {
       cfg.mcp = cfg.mcp ?? {}
-      if (cfg.mcp.jev) return // the user's own jev entry wins
+      if (cfg.mcp.jev) return
       cfg.mcp.jev = {
         type: "local",
         command: [PY, "-X", "utf8", join(ROOT, "jev", "jev_mcp.py")],
@@ -165,7 +157,7 @@ export const DryasPlugin = async (ctx: any) => {
       const cwd = input.tool === "bash" && typeof wd === "string" && wd ? resolve(ctx.directory, wd) : ctx.directory
       const ev = { ...base(input.sessionID, cwd), hook_event_name: "PreToolUse", ...te }
       const raw = await runScript("chain.py", ["pretool", "--harness", "opencode"], ev, PRETOOL_MS)
-      const out = parse(raw) // an empty stdout is the chain's "allow"
+      const out = parse(raw)
       if ((raw === null || (raw.trim() && out === null)) && taskActive(cwd)) {
         throw new Error(`Dryas could not run its checks (python: ${PY}) while a task is active; fix Python or re-run install.sh --harness opencode`)
       }
@@ -184,7 +176,6 @@ export const DryasPlugin = async (ctx: any) => {
     "chat.message": async (input: any, output: any) => {
       const parts: any[] = output?.parts ?? []
       const prompt = parts.filter((p) => p?.type === "text" && !p.synthetic).map((p) => p.text).join("\n")
-      // Only a root session (the user types there) approves; subagent task prompts never do.
       if (!(await resolveSession(input.sessionID)).parentID) for (const m of prompt.matchAll(APPROVE)) approved.add(m[1].toLowerCase())
       const ev = { ...base(input.sessionID), hook_event_name: "UserPromptSubmit", prompt }
       const out = parse(await runScript("chain.py", ["prompt", "--harness", "opencode"], ev, PROMPT_MS))
@@ -201,7 +192,7 @@ export const DryasPlugin = async (ctx: any) => {
       if (rules === null) {
         const out = parse(await runScript("rules_inject.py", ["--harness", "opencode"], {}, RULES_MS))
         const text = String(out?.hookSpecificOutput?.additionalContext ?? "")
-        if (text) rules = text // "" leaves rules null so the next request retries
+        if (text) rules = text
       }
       if (rules) output.system.push(rules)
     },

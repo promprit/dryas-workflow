@@ -15,15 +15,6 @@ import dryas_install as di  # noqa: E402
 import opencode_setup as ocs  # noqa: E402
 
 
-def _rules_ok(od: Path, env: dict) -> bool:
-    rc, out = di.capture(di.PYX + [str(od / "dryas/jev/rules_inject.py"), "--harness", "opencode"], "{}", env=env,
-                         timeout=60)
-    try:
-        return "Dryas paths:" in json.loads(out)["hookSpecificOutput"]["additionalContext"]
-    except (ValueError, KeyError, TypeError):
-        return False
-
-
 def _mcp_connected(opencode: str, od: Path, env: dict) -> Tuple[bool, str]:
     """`opencode mcp list` from a temp dir, with XDG_CONFIG_HOME pointing at od's parent when od is named opencode."""
     run_env = dict(env)
@@ -68,7 +59,7 @@ def check(rep, od: Path, opencode: Optional[str], env: dict) -> None:
     else:
         ok, why = _mcp_connected(opencode, od, env)
         rep.say("PASS" if ok else "FAIL", "jev MCP server connects", why)
-    rep.say("PASS" if _rules_ok(od, env) else "FAIL", "rules hook prints the OpenCode rules")
+    rep.say("PASS" if ocs.rules_ok(od, env) else "FAIL", "rules hook prints the OpenCode rules")
     rep.say("PASS" if di.scope_smoke(od / "dryas/jev/chain.py", {}, harness="opencode") else "FAIL",
             "scope lock blocks an out-of-scope apply_patch")
     models = set()
