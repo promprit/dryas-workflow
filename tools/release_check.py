@@ -260,8 +260,9 @@ def no_node(rep, repo, tmp):
                 os.symlink(src, str(dst))
         except OSError:
             pass
+    # which() honours PATHEXT, so node.cmd and node.exe shims on Windows are dropped too
     env["PATH"] = os.pathsep.join([str(shim)] + [d for d in env.get("PATH", "").split(os.pathsep)
-                                  if not any(os.path.isfile(os.path.join(d, n)) for n in ("node", "node.exe"))])
+                                  if d and not shutil.which("node", path=d)])
     argv = [sys.executable, str(Path(repo) / "install" / "dryas_install.py"), "preflight", "--harness", "claude",
             "--claude-dir", str(home / ".claude")]
     try:

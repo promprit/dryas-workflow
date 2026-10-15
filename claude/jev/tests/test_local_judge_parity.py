@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 
@@ -86,7 +87,7 @@ _CHILD = (
     "        res = local_judge.gate_answers('Bash', cmd, True)\n"
     "        runs.append(time.perf_counter() - start)\n"
     "    return statistics.median(runs), res\n"
-    "cmd = sys.argv[2]\n"
+    "cmd = open(sys.argv[2], encoding='utf-8', newline='').read()\n"
     "base, _ = secs('ls -la ' * (min(len(cmd), local_judge.MAX_CHARS) // 7))\n"
     "took, res = secs(cmd)\n"
     "print(json.dumps({'secs': took, 'base': base, 'res': res}))\n"
@@ -95,7 +96,11 @@ _CHILD = (
 
 def _timed(cmd):
     """Return (hung, box) where box has 'secs', 'base' and 'res', or 'err' if the child failed."""
-    p = subprocess.Popen([sys.executable, "-c", _CHILD, JEV_DIR, cmd],
+    # the command goes through a file: Windows caps a whole command line at 32767 characters
+    fd, path = tempfile.mkstemp(suffix=".txt")
+    with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+        f.write(cmd)
+    p = subprocess.Popen([sys.executable, "-c", _CHILD, JEV_DIR, path],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     started = False
     try:
@@ -118,6 +123,7 @@ def _timed(cmd):
         p.wait()
         p.stdout.close()
         p.stderr.close()
+        os.unlink(path)
 
 
 def assert_fast(test, name, box):
