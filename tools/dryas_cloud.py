@@ -474,7 +474,8 @@ def check(a: argparse.Namespace, repo: Path) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    a = parse(sys.argv[1:] if argv is None else list(argv))
+    argv = sys.argv[1:] if argv is None else list(argv)
+    a = parse(argv[1:] if argv[:1] == ["cloud"] else argv)  # dryas.cmd forwards its whole line
     repo = Path(a.repo).resolve()
     try:
         if a.cmd == "check":

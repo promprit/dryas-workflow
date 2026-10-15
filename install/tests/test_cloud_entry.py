@@ -134,9 +134,7 @@ class EntryTest(unittest.TestCase):
     def test_cmd_cloud_block_shape(self):
         t = (ROOT / "claude/bin/dryas.cmd").read_text(encoding="utf-8")
         lines = [ln.strip() for ln in t.splitlines()]
-        self.assertIn("shift /1", lines)  # D's fix stays
-        self.assertNotIn("shift", lines)
-        self.assertEqual([ln for ln in lines if ln.startswith("shift")], ["shift /1", "shift /1"])  # leading word, then the collect loop; never a bare shift
+        self.assertEqual([ln for ln in lines if ln.startswith("shift")], [])  # %0 stays; nothing is collected or shifted
         i_plain, i_cloud = lines.index(":plain"), lines.index(":cloud")
         self.assertLess(i_plain, i_cloud)
         between = [ln for ln in lines[i_plain + 1:i_cloud] if ln]
@@ -144,7 +142,7 @@ class EntryTest(unittest.TestCase):
         self.assertTrue(between[0].startswith("python -X utf8"))
         self.assertLess(t.index("goto cloud"), t.index(":envpy"))  # dispatch precedes both launcher blocks
         block = "\n".join(lines[i_cloud:])
-        self.assertEqual(block.count("%DRYAS_ARGS%"), 4)  # all four launchers pass the collected arguments
+        self.assertEqual(block.count('.py" %*'), 4)  # all four launchers pass the whole original line
         self.assertNotIn("%1", block)
         self.assertEqual(block.count("exit /b %ERRORLEVEL%"), 4)
         for label in (":cloudenv", ":cloudpy", ":cloudpy3"):
@@ -215,20 +213,18 @@ class CmdShapeTest(unittest.TestCase):
     def setUp(self):
         self.text = (ROOT / "claude/bin/dryas.cmd").read_bytes().decode("utf-8")
 
-    def test_no_positional_cap(self):
+    def test_forwards_with_percent_star(self):
         t = self.text
         self.assertNotRegex(t, r"%\d %\d")  # no %2 %3 ... lists
         self.assertNotIn("%9", t)
-        self.assertIn("%DRYAS_ARGS%", t)
-        self.assertIn(":collect", t)
-        self.assertIn("goto collect", t)
-        self.assertEqual(t.count("%DRYAS_ARGS%"), 9)  # collector once, eight launchers (memory + cloud x4)
+        self.assertNotIn("DRYAS_ARGS", t)  # no collector variable
+        self.assertNotIn(":collect", t)
+        self.assertNotIn("goto collect", t)
+        self.assertFalse([ln for ln in t.splitlines() if ln.strip().startswith("shift")])
+        self.assertEqual(t.count('.py" %*'), 8)  # memory x4 and cloud x4 launchers forward the original line
 
-    def test_setlocal_and_quoted_set(self):
-        lines = self.text.splitlines()
-        self.assertEqual(lines[:2], ["@echo off", "setlocal"])  # variables never leak into the caller
-        self.assertIn('set "DRYAS_ARGS=%DRYAS_ARGS% %1"', lines)  # & | < > inside quotes cannot split the line
-        self.assertNotIn("set DRYAS_ARGS=%DRYAS_ARGS% %1", lines)
+    def test_setlocal_first(self):
+        self.assertEqual(self.text.splitlines()[:2], ["@echo off", "setlocal"])  # variables never leak into the caller
 
     def test_crlf_and_lookup_order_kept(self):
         raw = (ROOT / "claude/bin/dryas.cmd").read_bytes()
@@ -251,6 +247,29 @@ class CmdShapeTest(unittest.TestCase):
         self.assertNotIn("unrecognized", p.stderr)
         self.assertNotIn("Traceback", p.stderr)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+    @unittest.skipUnless(os.name == "nt", "Windows wrapper")
+    def test_cmd_empty_argument_then_yes(self):
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(base), True)
+        repo = fx.git_repo(base / "repo")
+        env = dict(os.environ, DRYAS_PYTHON=sys.executable, DRYAS_PY=sys.executable, CLAUDE_CONFIG_DIR=str(base / "cfg"))
+        p = subprocess.run(["cmd", "/c", str(ROOT / "claude/bin/dryas.cmd"), "cloud", "init", "--repo", str(repo),
+                            "--prefix", "", "--yes"], capture_output=True, text=True, env=env, timeout=300)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue((repo / ".dryas" / "manifest.json").exists())  # --yes after the empty argument still arrived
+
+    @unittest.skipUnless(os.name == "nt", "Windows wrapper")
+    def test_cmd_repo_path_with_ampersand(self):
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(base), True)
+        repo = fx.git_repo(base / "a&b" / "repo")
+        env = dict(os.environ, DRYAS_PYTHON=sys.executable, DRYAS_PY=sys.executable, CLAUDE_CONFIG_DIR=str(base / "cfg"))
+        p = subprocess.run(["cmd", "/c", str(ROOT / "claude/bin/dryas.cmd"), "cloud", "init", "--repo", str(repo)],
+                           capture_output=True, text=True, env=env, timeout=300)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("Dry run: nothing written.", p.stdout)
+        self.assertNotIn("is not recognized", p.stderr)
 
     @unittest.skipUnless(os.name == "nt", "Windows wrapper")
     def test_cmd_ampersand_in_a_quoted_argument_is_not_a_cmd_error(self):
