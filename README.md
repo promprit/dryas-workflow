@@ -74,12 +74,14 @@ Then, in Claude Code:
 
 No API key. No Node. Python 3.9+ and git.
 
-Codex: `install/install.sh --harness codex`. Cloud sessions on claude.ai/code: [docs/cloud-sessions.md](docs/cloud-sessions.md). Every flag, several accounts, upgrade and uninstall: [docs/install.md](docs/install.md).
+Codex: `install/install.sh --harness codex`. Cloud sessions on claude.ai/code: `/dryas-cloud`, see [docs/cloud-sessions.md](docs/cloud-sessions.md). Every flag, several accounts, upgrade and uninstall: [docs/install.md](docs/install.md).
 
 ## What you get
 
 | Command | What it does |
 | --- | --- |
+| `/dryas:brainstorm` | Settles the design with you before any code; nothing is built until you approve it |
+| `/wplan` | Turns an approved design into a plan of small, test-first tasks |
 | `/orchestrate` | Runs the loop on a task: brainstorm, plan, build, review |
 | `/wreview` | Three fresh reviewers check the branch: spec, quality, over-engineering |
 | `/interrogate` | Two-model adversarial review for contested changes |

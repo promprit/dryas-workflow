@@ -51,11 +51,15 @@ class LaunchReadmeTest(unittest.TestCase):
 
     def test_listed_commands_exist(self):
         t = readme().split("## What you get", 1)[1].split("\n## ", 1)[0]
-        cmds = set(re.findall(r"`/([a-z-]+)`", t))
-        self.assertGreaterEqual(len(cmds), 7)
+        cmds = set(re.findall(r"`/((?:dryas:)?[a-z-]+)`", t))
+        for must in ("dryas:brainstorm", "wplan", "orchestrate"):
+            self.assertIn(must, cmds)
+        self.assertGreaterEqual(len(cmds), 9)
         for c in cmds:
-            self.assertTrue((REPO / "claude/commands" / (c + ".md")).is_file()
-                            or (REPO / "claude/skills" / c / "SKILL.md").is_file(), c)
+            name = c.split(":", 1)[-1]
+            self.assertTrue((REPO / "claude/commands" / (name + ".md")).is_file()
+                            or (REPO / "claude/skills" / name / "SKILL.md").is_file(), c)
+        self.assertIn("`/dryas-cloud`", readme().split("## Install in 60 seconds", 1)[1].split("\n## ", 1)[0])
 
     def test_install_block(self):
         t = readme().split("## Install in 60 seconds", 1)[1].split("\n## ", 1)[0]
