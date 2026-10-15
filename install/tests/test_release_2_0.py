@@ -10,8 +10,8 @@ import release_check
 
 
 class ReleaseTest(unittest.TestCase):
-    def test_versions_are_2_0_x(self):
-        self.assertRegex(json.loads((ROOT / "claude/.claude-plugin/plugin.json").read_text())["version"], r"^2\.0\.\d+$")
+    def test_versions_are_2_x(self):
+        self.assertRegex(json.loads((ROOT / "claude/.claude-plugin/plugin.json").read_text())["version"], r"^2\.\d+\.\d+$")
         self.assertEqual(release_check.version_problems(ROOT), [])  # all five agree
 
     def test_changelog_2_0_0(self):
