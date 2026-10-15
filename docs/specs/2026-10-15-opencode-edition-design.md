@@ -71,7 +71,8 @@ opencode/
 Changes to shared code:
 
 - `tools/sync_codex_plugin.py` syncs two targets (`codex`, `opencode`); `--check` reports drift for both; the harness-block regex and the harness-name tables learn `opencode`.
-- `chain.py` and `rules_inject.py` accept `--harness opencode`; `chain.json` stage `harness` lists add `"opencode"` for every stage except `ruflo-pre-bash` and `flowobserve` (step 1 adds it to the pretool and prompt stages, step 2 to the rest).
+- `chain.py` and `rules_inject.py` accept `--harness opencode`. In `chain.py`, OpenCode takes the Claude-shaped `pretool` path (not `pretool_codex`); `apply_patch` splitting happens in the shim, and the shim translates the `hookSpecificOutput.permissionDecision` answer.
+- `chain.json`: every stage except `ruflo-pre-bash` and `flowobserve` runs on OpenCode. Stages with no `harness` key today (they default to `["claude"]`: `context-watch`, `gate-outcome`, the `mem-*` stages) get an explicit list `["claude", "opencode"]`; stages listing `codex` keep it. Codex coverage is unchanged by this spec: its memory stages stay off by the 2.0 choice pinned by a test. Step 1 adds `opencode` to the pretool and prompt stages, step 2 to the rest.
 - `context_watch.py` reads `usage` and `context_limit` from the event when `transcript_path` is absent (step 2). Memory stages that read Claude's transcript get the same event-field input.
 
 ## 5. The shim (`opencode/plugin/dryas.ts`)
@@ -143,7 +144,7 @@ Setup writes a copy (re-run after `git pull`, as with Codex):
 
 ## 9. Delivery
 
-**Plan 1: core (about 3 days).** Task 1 checks the three unprobed items (section 3) and records the outcome in this spec. Then: layout and sync, `--harness opencode` in chain and rules, the shim's step-1 rows, skills, commands, executor agents and the tier ladder, installer, uninstall, release check, step-1 tests, CI jobs, docs with the OC column. The OC rows for the step-2 features say `partial: step 2`. Release 2.1.0.
+**Plan 1: core (about 3 days).** Task 1 checks the three unprobed items (section 3) and records the outcome in this spec; the `chat.message` and `config` rows of the shim table, and the setup MCP step, are written after it, from its outcome. Then: layout and sync, `--harness opencode` in chain and rules, the shim's step-1 rows, skills, commands, executor agents and the tier ladder, installer, uninstall, release check, step-1 tests, CI jobs, docs with the OC column. The OC rows for the step-2 features say `partial: step 2`; the rows touched by section 8 (session end, headless ask) say `partial` with the reason. `accounts.json` readers are checked to tolerate the new `opencode_dirs` key. Release 2.1.0.
 
 **Plan 2: full (about 1.5 days).** The shim's step-2 rows, `chain.json` lists, `context_watch.py` and memory-stage event input, `/handoff` on OpenCode, step-2 tests, the OC column updated to Full. Release 2.2.0.
 
