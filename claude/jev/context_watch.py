@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Chain stage on UserPromptSubmit: warn when context use passes warn_pct so the user can /handoff then
-/clear before auto-compaction. Reads only the last ~2 MB of the transcript, no network.
+/clear before auto-compaction. Reads only the last ~2 MB of the transcript, or the event's `usage` when there is
+no transcript (OpenCode), no network.
 Tiers: once at warn_pct, once more at warn_pct+0.05; a tier never repeats within a session."""
 import hashlib
 import json
@@ -37,15 +38,17 @@ def _million_model(model: str) -> bool:
     return major > 4 or (major == 4 and minor >= 6)
 
 
-def _window(model: str, max_tokens: int) -> int:
-    """JEV_CONTEXT_WINDOW if valid; else 1M when the model id says [1m], names a 1M-default model, or usage ever
-    exceeded 200k; else 200k."""
+def _window(model: str, max_tokens: int, limit: int = 0) -> int:
+    """JEV_CONTEXT_WINDOW if valid; else the harness's own limit for the model (OpenCode `context_limit`) when known;
+    else 1M when the model id says [1m], names a 1M-default model, or usage ever exceeded 200k; else 200k."""
     try:
         w = int(os.environ.get("JEV_CONTEXT_WINDOW", ""))
         if w > 0:
             return w
     except ValueError:
         pass
+    if limit > 0:
+        return limit
     big = "[1m]" in model or _million_model(model) or max_tokens > DEFAULT_WINDOW
     return 1000000 if big else DEFAULT_WINDOW
 
@@ -102,6 +105,25 @@ def read_usage(path: str) -> Optional[Tuple[int, int, str]]:
     return (last[0], biggest, last[1]) if last else None
 
 
+USAGE_KEYS = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+
+
+def _count(v: Any) -> int:
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else 0
+
+
+def event_usage(event: Dict[str, Any]) -> Optional[Tuple[int, int, str]]:
+    """Same shape as read_usage, from the event's `usage` (harnesses with no Claude transcript: OpenCode)."""
+    u = event.get("usage")
+    if not isinstance(u, dict):
+        return None
+    total = sum(_count(u.get(k)) for k in USAGE_KEYS)
+    if total <= 0:
+        return None
+    model = event.get("model")
+    return total, total, model if isinstance(model, str) else ""
+
+
 def _read_state(sfile: str) -> Tuple[int, int]:
     try:
         with open(sfile, encoding="utf-8") as f:
@@ -114,13 +136,13 @@ def _read_state(sfile: str) -> Tuple[int, int]:
 def run(event: Dict[str, Any]) -> Optional[str]:
     try:
         path, sid = event.get("transcript_path"), event.get("session_id")
-        if not isinstance(path, str) or not os.path.isfile(path) or not isinstance(sid, str) or not sid:
+        if not isinstance(sid, str) or not sid:
             return None
-        usage = read_usage(path)
+        usage = read_usage(path) if isinstance(path, str) and os.path.isfile(path) else event_usage(event)
         if usage is None:
             return None
         tokens, biggest, model = usage
-        pct = tokens / float(_window(model, biggest))
+        pct = tokens / float(_window(model, biggest, _count(event.get("context_limit"))))
         warn = _warn_pct()
         tier = 1 if pct >= warn + STEP - 1e-9 else 0 if pct >= warn - 1e-9 else -1
         sdir = _state_dir()
@@ -142,6 +164,9 @@ def run(event: Dict[str, Any]) -> Optional[str]:
             os.chmod(sfile, 0o600)  # portable-ok: POSIX file privacy; no-op on Windows
         if not emit:
             return None
+        if os.environ.get("DRYAS_HARNESS") == "opencode":
+            return ("Context %d%% — tell the user: run /handoff then /new to continue with a Jev-scored context "
+                    "(OpenCode compacts on its own near the limit)." % int(pct * 100 + 1e-9))
         return ("Context %d%% — tell the user: run /handoff then /clear to continue with a Jev-scored context "
                 "(auto-compaction is at %d%%)." % (int(pct * 100 + 1e-9), _autocompact_pct()))
     except Exception:
