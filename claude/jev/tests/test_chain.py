@@ -101,12 +101,14 @@ class ChainTest(unittest.TestCase):
         self.assertEqual(out["permissionDecision"], "deny")
         self.assertIn("out/bad.py", out["permissionDecisionReason"])
 
-    def test_shipped_chain_runs_core_stages_on_opencode(self):
+    def test_shipped_chain_runs_all_but_ruflo_and_flowobserve_on_opencode(self):
         with open(os.path.join(HERE, "chain.json"), encoding="utf-8") as f:
             d = json.load(f)
         on = sorted(s["name"] for v in d.values() if isinstance(v, list) for s in v
                     if isinstance(s, dict) and "opencode" in s.get("harness", []))
-        self.assertEqual(on, ["jev-gate", "jev-route", "scope-lock"])
+        self.assertEqual(on, ["context-watch", "gate-outcome", "jev-gate", "jev-route", "mem-edit",
+                              "mem-notes", "mem-notes", "mem-notes", "mem-session-end", "mem-session-end",
+                              "mem-session-start", "mem-task", "scope-lock"])
 
     def test_codex_patch_outside_worktree_denied_by_real_scope_lock(self):
         wt = self._worktree()

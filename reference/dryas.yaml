@@ -2,7 +2,7 @@
 # Descriptive in spec v1: the installer still reads its flags and install/components.json.
 dryas: "1.0-draft"  # spec version 1.0 while it is a draft; "1.0" once the spec is final
 edition: dryas-reference
-harness: [claude-code, codex, opencode]  # opencode: core in plan 1, memory hooks in plan 2
+harness: [claude-code, codex, opencode]  # opencode: Dryas Full (memory hooks, compaction, /handoff)
 conformance: {level: full, table: README.md}
 
 workflow:

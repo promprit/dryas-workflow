@@ -22,6 +22,17 @@ class OpenCodeDocsTest(unittest.TestCase):
         self.assertIn("--harness opencode", (REPO / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("parked 2026-10-15", (REPO / "docs/roadmap.md").read_text(encoding="utf-8"))
 
+    def test_no_plan_2_rows_left(self):
+        text = (REPO / "reference/README.md").read_text(encoding="utf-8")
+        rows = [l for l in text.splitlines() if re.match(r"^\| [A-Z]+-\d", l)]
+        for row in rows:
+            oc = [c.strip() for c in row.strip("|").split("|")][3]
+            self.assertNotRegex(oc, r"plan 2|step 2", row)
+        harn = (REPO / "docs/harnesses.md").read_text(encoding="utf-8")
+        self.assertIn("/handoff", harn)
+        self.assertIn("/new", harn)
+        self.assertNotIn("plan 2", (REPO / "reference/dryas.yaml").read_text(encoding="utf-8"))
+
     def test_docs_describe_approval_code(self):
         harn = (REPO / "docs/harnesses.md").read_text(encoding="utf-8")
         self.assertIn("dryas allow", harn)

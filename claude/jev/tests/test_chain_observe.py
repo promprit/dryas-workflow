@@ -101,7 +101,8 @@ class ShippedChainTest(unittest.TestCase):
         pre = [s for s in c["precompact"] if s["name"] == "mem-session-end"][0]
         self.assertEqual(pre["cmd"][-1], "auto")  # summary only: never a full consolidation inside PreCompact
         start = [s for s in c["session-start"] if s["name"] == "mem-session-start"][0]
-        self.assertEqual(start.get("harness", ["claude"]), ["claude"])
+        self.assertEqual(start["harness"], ["claude", "opencode"])
+        self.assertNotIn("codex", start["harness"])
 
     def test_hook_files_route_events(self):
         root = os.path.dirname(os.path.dirname(JEV))

@@ -34,6 +34,8 @@ def plan(messages, tools):
     names = {t.get("function", {}).get("name") for t in tools or []}
     if "NO_RETRY" in text:
         return ("text", "ok")
+    if "BIGUSAGE" in text:
+        return ("text", "big")
     for key, tool, args in SCRIPT:
         if key in text and tool in names:
             return ("tool", tool, args)
@@ -57,17 +59,20 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("content-length") or 0)) or b"{}")
         msgs = body.get("messages") or []
         p = plan(msgs, body.get("tools"))
+        users = [m for m in msgs if m.get("role") == "user"]
+        text = json.dumps(users[-1].get("content")) if users else ""
+        usage = dict(USAGE, prompt_tokens=190000, total_tokens=190005) if p == ("text", "big") else USAGE
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps({"model": body.get("model"),
                                 "tools": sorted(t.get("function", {}).get("name") for t in body.get("tools") or []),
                                 "system": [m.get("content") for m in msgs if m.get("role") == "system"],
-                                "plan": list(p[:2])}) + "\n")
+                                "plan": list(p[:2]), "user": text[:20000]}) + "\n")
 
         def chunk(delta, finish=None):
             c = {"id": "mock", "object": "chat.completion.chunk", "created": int(time.time()), "model": body.get("model"),
                  "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
             if finish:
-                c["usage"] = USAGE
+                c["usage"] = usage
             return c
         if p[0] == "text":
             chunks = [chunk({"role": "assistant", "content": p[1]}), chunk({}, "stop")]
