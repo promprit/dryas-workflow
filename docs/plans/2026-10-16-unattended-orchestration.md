@@ -2343,6 +2343,13 @@ Scope:
 - claude/jev/chain.py
 - claude/jev/chain.json
 - claude/jev/tests/test_chain_inproc_scope.py
+- claude/jev/shellwrites.py
+- claude/jev/prescreen.py
+- claude/jev/gate.py
+- claude/jev/runrules.py
+- claude/jev/scope_lock.py
+- claude/jev/local_judge.py
+- claude/jev/tests/test_import_cost.py
 - tools/compare_v1.py
 - install/tests/test_compare_v1.py
 Done:
