@@ -1,0 +1,34 @@
+{
+  "pretool": [
+    {"name": "scope-lock", "harness": ["claude", "codex", "opencode"], "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/scope_lock.py"], "match": "Bash|Edit|Write|MultiEdit|NotebookEdit", "timeout": 3, "per_file": true, "fail_closed": true},
+    {"name": "jev-gate", "harness": ["claude", "codex", "opencode"], "component": "jev", "cmd": ["$PY", "-X", "utf8", "$CD/jev/gate.py"], "match": "Bash|Write|Edit|MultiEdit|NotebookEdit", "timeout": 5},
+    {"name": "ruflo-pre-bash", "component": "ruflo", "cmd": ["$PY", "-X", "utf8", "$CD/ruflo/run.py", "helper", "node", "$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs", "pre-bash"], "requires_path": "$DRYAS_DATA_ROOT", "timeout": 5, "match": "Bash", "observe": true},
+    {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["$PY", "-X", "utf8", "-S", "$HOME/.flowobserve/bin/fo_hook.py"], "timeout": 1, "observe": true}
+  ],
+  "prompt": [
+    {"name": "jev-route", "harness": ["claude", "codex", "opencode"], "component": "jev", "cmd": ["$PY", "-X", "utf8", "$CD/jev/route.py"], "timeout": 5},
+    {"name": "context-watch", "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/context_watch.py"], "timeout": 2},
+    {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["$PY", "-X", "utf8", "-S", "$HOME/.flowobserve/bin/fo_hook.py"], "timeout": 1, "observe": true}
+  ],
+  "post": [
+    {"name": "mem-edit", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "edit"], "match": "Write|Edit|MultiEdit|NotebookEdit", "timeout": 2, "observe": true},
+    {"name": "gate-outcome", "component": "core", "inproc": "gate_outcome", "cmd": ["$PY", "-X", "utf8", "$CD/jev/gate_outcome.py"], "match": "Bash", "timeout": 2, "observe": true}
+  ],
+  "subagent-stop": [
+    {"name": "mem-task", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "task"], "timeout": 2, "observe": true}
+  ],
+  "session-start": [
+    {"name": "mem-session-start", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-start"], "timeout": 2, "observe": true}
+  ],
+  "session-end": [
+    {"name": "mem-session-end", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-end"], "timeout": 2, "observe": true},
+    {"name": "mem-notes", "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memnotes.py", "export"], "requires_path": "$CD/memory/notes", "observe": true, "timeout": 2}
+  ],
+  "precompact": [
+    {"name": "mem-session-end", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-end", "auto"], "timeout": 2, "observe": true},
+    {"name": "mem-notes", "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memnotes.py", "export"], "requires_path": "$CD/memory/notes", "observe": true, "timeout": 2}
+  ],
+  "stop": [
+    {"name": "mem-notes", "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memnotes.py", "export"], "requires_path": "$CD/memory/notes", "observe": true, "timeout": 2}
+  ]
+}

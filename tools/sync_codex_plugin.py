@@ -9,6 +9,7 @@ named by both, except the harness-specific ones listed in SKILL_ALLOW. sync neve
 The process skills (PROCESS_SKILLS) are one source in claude/skills: sync renders them into codex/skills (harness
 blocks kept or dropped, Claude names rewritten), and --check also fails when a Codex instruction carried over from 1.x
 (HARNESS_REQUIRED) is missing from a rendered copy.
+The OpenCode edition (opencode/) is rendered by tools/sync_opencode.py; this tool runs it too.
 """
 import argparse
 import re
@@ -52,7 +53,7 @@ HARNESS_REQUIRED: Dict[str, Tuple[str, ...]] = {
 }
 COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "retro")
 COMMAND_RE = re.compile(r"(?<![\w$/.<-])/(" + "|".join(COMMANDS) + r")\b(?![/\w-]|\.\w)")
-_HARNESS = re.compile(r"^<!-- (/?)(claude|codex) -->\n?", re.M)
+_HARNESS = re.compile(r"^<!-- (/?)(claude|codex|opencode) -->\n?", re.M)
 _FRONT = re.compile(r"\A---\n(.*?\n)---\n", re.S)
 _CODEX_NAMES = (
     (re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}"), "<dryas-root>"),
@@ -315,10 +316,13 @@ def _run(repo: Path, check: bool) -> int:
         if inv:
             print("set disable-model-invocation in claude/ and allow_implicit_invocation in "
                   "codex/skills/<name>/agents/openai.yaml to agree")
-        return 1 if bad or skills or harness or inv else 0
+        import sync_opencode
+        oc = sync_opencode.run(repo, True) if (repo / "opencode").is_dir() else 0
+        return 1 if bad or skills or harness or inv or oc else 0
     for rel in sync(repo):
         print("synced " + rel)
-    return 0
+    import sync_opencode
+    return sync_opencode.run(repo, False) if (repo / "opencode").is_dir() else 0
 
 
 if __name__ == "__main__":
