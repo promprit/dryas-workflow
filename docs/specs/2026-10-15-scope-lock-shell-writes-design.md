@@ -1,7 +1,7 @@
 # Unattended orchestration: design
 
 Date: 2026-10-15. Status: draft for review. Branch: `feat/scope-shell-writes`.
-Contested: yes (changes how GOV-2 is enforced during a run, turns Jev-gate asks into denies while a task is active, adds a plan section the gate reads, and changes the scope log record that `/tune` reads).
+Contested: yes (adds GOV-12 and REL-1, changes how GOV-2 is enforced during a run, turns Jev-gate asks into denies while a task is active, adds a plan section the gate reads, and changes the scope log record that `/tune` reads).
 
 ## 1. Principle and goal
 
@@ -57,7 +57,10 @@ The shell-write ask arrived in 1.0.2 (2026-10-13); the first one in the logs is 
 
 "During a run" means `.orchestrate/active.json` exists with a non-empty `active` list (today's `task_active`).
 
-### A. Detector accuracy (`prescreen.writes`)
+### A. Detector accuracy (new `shellwrites.py` replaces `prescreen.writes`)
+
+Write detection moves onto local_judge's quote- and heredoc-aware parser (one parser, shared with the gate's local judge); `prescreen.writes` and its regexes are removed. The rules below describe what the parser-based detector must get right.
+
 
 - Heredoc bodies (`<<[-]WORD ... WORD`, quoted or not) are removed before scanning; the consuming command is still scanned (`python3 - <<EOF` stays an inline-interpreter write, `cat > f <<EOF` stays a redirect to `f`).
 - Redirects are found on the quote-masked copy only, so `=>`, `->`, `>=` inside quotes are not redirects.
@@ -66,7 +69,7 @@ The shell-write ask arrived in 1.0.2 (2026-10-13); the first one in the logs is 
 
 ### B. Pre-run target check (`scope_lock._bash`, new `shellwrites.py`)
 
-`shellwrites.targets(cmd, cwd) -> (paths, unknown)` is a pure function:
+`shellwrites.analyse(cmd, cwd) -> Analysis(writes, paths, unknown, rule)` is a pure function:
 
 - Splits into simple commands on unquoted `;`, `&&`, `||`, `|`, newline; follows `cd <literal>` (`cd -`, `pushd`, `cd $X` make the rest unknown).
 - Readable forms: `sed -i[SUFFIX] [-e S]... FILES` (the first non-option argument is the script unless `-e` is given; `-f` makes it unknown); `perl -[0]pi[.bak] -e S FILES`; redirects `>`, `>>`, `&>`, `>|`; `tee [-a] FILES`; `cp`/`mv`/`ln`/`install` destination (`-t DIR` → DIR); `mkdir`, `touch`, `rm`, `rmdir`, `truncate` operands; `git checkout -- PATHS`, `git restore PATHS`.
@@ -76,7 +79,7 @@ For a write-like command during a run, in this order (the main session on Claude
 
 | Case | Decision |
 | --- | --- |
-| Executor command names `.orchestrate` | deny (unchanged) |
+| Executor write whose quote-free text names `orchestr`, `active.json` or `approved.json` | deny (`.orchestrate/` is git-ignored, so the audit cannot see it); reads pass |
 | A readable target is outside the union Scope and not in the session scratchpad | deny: "scope lock: `<path>` is outside the scope of task(s) N; use Edit/Write inside your Scope or report `SCOPE: need <path> because <reason>`" |
 | Otherwise (all readable targets allowed, or some part unknown) | allow, no output; C checks the result |
 
@@ -153,6 +156,13 @@ The user may not read code. Everything this design shows the user is written so 
 - **End report**: leads with outcomes in plain words ("3 of 4 parts are done; the payment part is waiting for you because it needs to delete the test database"). Numbers, paths and commits come after, under a "Details" heading.
 - **Notification**: one sentence, plain words.
 - The brainstorm and plan questions already follow this (one decision per question, a recommended answer); `/wplan` checks the Risky actions sentences in its self-review.
+
+### H. Framework core rules
+
+Two rules move into the Dryas spec, the injected rules (`claude/CLAUDE.md.template`), `docs/workflow.md` and the release check:
+
+- **GOV-12** *(Core)*: after a human approves the design and the plan, the harness MUST NOT prompt the human while the run is active; hooks decide or defer to the orchestrator; what needs the human waits for the end report.
+- **REL-1** *(Core)*: a release MUST NOT be worse for the user than the release before it (prompts per task, hook latency, cost), compared on logged data and on a replay of real commands through both versions; worse MUST NOT ship. `tools/release_check.py` runs `tools/compare_v1.py` against every cached older release.
 
 ## 5. Executor rules
 
