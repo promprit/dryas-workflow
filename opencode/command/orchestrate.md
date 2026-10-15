@@ -3,3 +3,5 @@ description: "Run a multi-step coding task with a plan file, scope-locked worker
 ---
 <!-- dryas-managed -->
 Load the `dryas-orchestrate` skill with the skill tool and follow it for: $ARGUMENTS
+
+The user decides in brainstorm and plan; during the run nobody is asked.
