@@ -51,6 +51,13 @@ class RulesInjectTest(unittest.TestCase):
         self.assertIn(rules_inject.PATHS_LINE % ("/p/root", "/usr/bin/python3"), out)
         self.assertIn("$dryas:orchestrate", out)
 
+    def test_opencode_harness_works_like_codex(self):
+        self.assertEqual(rules_inject.harness(["--harness", "opencode"]), "opencode")
+        self.assertEqual(rules_inject.TEMPLATES["opencode"], "AGENTS.md.template")
+        out = rules_inject.build("Rules {{CD}}/pstack/\n", [], "opencode", "/p/root", "/usr/bin/python3")
+        self.assertIn("/p/root/pstack/", out)
+        self.assertIn(rules_inject.PATHS_LINE % ("/p/root", "/usr/bin/python3"), out)
+
     def test_codex_under_8k_for_every_combination(self):
         opt = ["jev", "ruflo", "superpowers", "design", "pstack-picks"]
         for n in range(len(opt) + 1):

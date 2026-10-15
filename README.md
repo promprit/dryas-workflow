@@ -2,12 +2,12 @@
 
 ![ci](https://github.com/promprit/dryas-workflow/actions/workflows/ci.yml/badge.svg)
 
-**The Dryas Workflow Framework (Dryas for short) is a target operating model plugin for AI software delivery: a framework, a draft specification and a reference implementation that runs on its own core (a deterministic local judge, its own memory and process skills) on Claude Code and Codex. Superpowers, Ruflo and the Jev model are optional extras or upgrades.** It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
+**The Dryas Workflow Framework (Dryas for short) is a target operating model plugin for AI software delivery: a framework, a draft specification and a reference implementation that runs on its own core (a deterministic local judge, its own memory and process skills) on Claude Code, Codex and OpenCode. Superpowers, Ruflo and the Jev model are optional extras or upgrades.** It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
 
 The method is the asset; the tools are replaceable. This repo holds both:
 
 - **The framework:** why it exists, five layers, one loop, and a draft specification any harness can implement.
-- **A reference implementation**: a Claude Code plugin (`dryas@dryas-workflow`) and a Codex plugin, with the Dryas core (judge, memory, process skills) built in, a few design skills, and Ruflo, Superpowers and the Jev model as optional extras.
+- **A reference implementation**: a Claude Code plugin (`dryas@dryas-workflow`), a Codex plugin and an OpenCode plugin, with the Dryas core (judge, memory, process skills) built in, a few design skills, and Ruflo, Superpowers and the Jev model as optional extras.
 
 This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
 
@@ -116,6 +116,15 @@ install/install.sh --harness codex --codex-dir ~/.codex-work  # once more for ea
 
 Codex 0.162.1 or newer. Setup adds the plugin to that Codex home, then lists the Dryas hooks and asks before it trusts them (`--yes` answers yes); untrusted hooks do not run. Codex reaches Dryas memory through the MCP tools; the memory hooks run on Claude Code only. For the Jev judge, set `OPENROUTER_API_KEY` in the shell Codex runs in; without it the local judge decides. Codex runs a copy of the plugin, so re-run setup for each Codex home after `git pull`. `codex plugin marketplace add promprit/dryas-workflow` on its own is not enough: the hooks stay untrusted and setup does not run. Details: [docs/install.md](docs/install.md#codex-plugin-plus-setup).
 
+### OpenCode
+
+```
+install/install.sh --harness opencode                              # ~/.config/opencode (--harness all: Claude Code, Codex and OpenCode)
+install/install.sh --harness opencode --opencode-dir ~/oc-work     # another OpenCode config dir
+```
+
+OpenCode 1.18.0 or newer. Setup copies the plugin, skills, commands and executor agents into the config dir and never edits `opencode.json`; re-run it after `git pull`. Set a model for each executor tier with `--tier-fast`, `--tier-standard`, `--tier-strong` and `--tier-frontier` (`PROVIDER/MODEL`). The memory hooks come in plan 2. Details: [docs/install.md](docs/install.md#opencode-config-dir-install).
+
 ### Cloud sessions
 
 claude.ai/code cloud sessions do not install plugins, so `claude/bin/dryas cloud init --repo <repo>` (or `install/install.sh --repo <repo>`) commits a pinned, version-stamped copy of the Dryas core into that repo (`.dryas/`, `.claude/`, `.mcp.json`, the rules block). A cloud session on the repo then runs the workflow with the local judge, no key and no network; Jev is a per-environment opt-in (`DRYAS_JUDGE=jev` plus an `OPENROUTER_API_KEY` secret). Every run is a dry run until `--yes`; `dryas cloud check | update | remove` keep it in step. Details: [docs/cloud-sessions.md](docs/cloud-sessions.md).
@@ -129,7 +138,8 @@ Details, flags and troubleshooting: [docs/install.md](docs/install.md).
 | Claude Code | Plugin `dryas@dryas-workflow` |
 | Codex | Plugin `dryas@dryas-workflow` (`install/install.sh --harness codex`) |
 | Claude Code cloud sessions (claude.ai/code) | A pinned copy of the Dryas core committed to the repo (`dryas cloud init`) |
-| Pi, OpenCode, Roo, Cursor | Later |
+| OpenCode | Plugin file plus config-dir install (`install/install.sh --harness opencode`) |
+| Pi, Roo, Cursor | Later |
 
 Several accounts side by side (for example in T3 Code) share one `~/.dryas`. Details: [docs/harnesses.md](docs/harnesses.md).
 

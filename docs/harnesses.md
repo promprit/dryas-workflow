@@ -5,7 +5,8 @@
 | Claude Code | Supported: plugin `dryas@dryas-workflow` |
 | Codex | Supported: plugin `dryas@dryas-workflow` |
 | Claude Code cloud sessions | Supported: a pinned copy of the core committed to the repo (`dryas cloud init`) |
-| Pi, OpenCode, Roo, Cursor | Later |
+| OpenCode | Supported (core): plugin file plus config-dir install (`install/install.sh --harness opencode`) |
+| Pi, Roo, Cursor | Later |
 
 
 ## Claude Code
@@ -21,6 +22,18 @@ Codex gets: the rules, injected at session start by a SessionStart hook (Codex p
 The memory hook stages are not wired for Codex in 2.0, so `mem-session-start` is Claude Code only, like every other memory stage: Codex reaches Dryas memory through the MCP tools and writes to it only when the agent calls `memory_store`. That is the line between memory-tool parity and the hook-driven recording that Claude Code adds.
 
 Claude Code only: context-window warnings, compaction keep/restore, `/handoff`, the memory stages (`mem-edit`, `mem-task`, `mem-session-start`, `mem-session-end`) and `gate-outcome`, the Ruflo hooks (extra), the `dryas:executor` agent and the fast → standard → strong → frontier ladder on Claude Code models, FlowObserve, the read-only executor review panel (scope lock with an empty Scope). In Codex, use its own sub-agents and the models configured there (see the tier table in [workflow.md §3](workflow.md)): `fast` tier first, a higher tier on failure, every step logged with `log_escalation`.
+
+## OpenCode
+
+Supported (core). Conformance is partial: the memory hook stages, context-window warnings, compaction keep/restore, `/handoff` and `gate-outcome` come in plan 2. It ships as one plugin file, `plugin/dryas.ts`, plus files copied into the OpenCode config dir by `install/install.sh --harness opencode` (see [install.md](install.md#opencode-config-dir-install)). OpenCode 1.18.0 or newer is required.
+
+OpenCode gets: the rules, injected by the plugin's system-prompt hook; the process skills as `dryas-<name>`; the commands `/orchestrate`, `/wplan`, `/wreview`, `/commit`, `/tune`, `/retro` and `/interrogate`; the `jev` MCP server, added by the plugin, with tools named `jev_<tool>` (for example `jev_memory_search`); the scope lock, applied per executor subagent; the Jev gate, whose `ask` blocks the call (see below); and the executor agents `dryas-executor-<tier>`, with models taken from `--tier-fast`, `--tier-standard`, `--tier-strong` and `--tier-frontier`.
+
+Plan 2 adds the memory hooks, context-window warnings, compaction keep/restore and `/handoff`. Until then OpenCode reaches Dryas memory through the MCP tools and writes to it only when the agent calls `jev_memory_store`.
+
+Two OpenCode limits apply. OpenCode has no session-end event when you quit the TUI. Headless `opencode run` has no follow-up message, so an ask stays a block there.
+
+Dryas never reads or changes OpenCode's permission settings. OpenCode's own rules, and its built-in agents such as Plan, apply as before. When the gate or the scope lock returns `ask`, the call is blocked. The message gives the reason and a 4-hex code. To allow that exact call once, reply `dryas allow <code>` in your main session. A code in a subagent prompt never counts. While a task is active (`.orchestrate/active.json`), a chain that cannot run (Python missing, crash, timeout) blocks edits and shell calls; with no active task it lets them through, like a failing Claude Code hook. Setup never edits `opencode.json`; the plugin adds the `jev` server when OpenCode loads it.
 
 ## Claude Code cloud sessions
 
@@ -43,4 +56,4 @@ FlowObserve reads the Jev logs in `~/.dryas/jev/logs`, so it sees escalations an
 
 ## Later
 
-Pi, OpenCode, Roo and Cursor are planned, not started. Each needs an edition written against the [specification](../spec/dryas-spec-v1.md).
+Pi, Roo and Cursor are planned, not started. Each needs an edition written against the [specification](../spec/dryas-spec-v1.md).

@@ -141,9 +141,11 @@ To move a 1.x install (Ruflo, Superpowers and a Jev key) to the owned core:
 | `--purge` | With `--uninstall`: also remove Dryas's entries in `~/.dryas` (logs, `/tune` thresholds, handoffs; keeps `dryas-local.md`) when no other Claude config dir or Codex home uses it. The paths are listed and confirmed first |
 | `--keep-extras` | With `--uninstall`: leave the third-party plugins setup installed (Ruflo plugins, Impeccable, UI UX Pro Max, the global `ruflo` npm package) in place without asking |
 | `--preflight-only` | Run the prerequisite checks and stop |
-| `--harness claude\|codex\|both` | Choose what to install for. Claude Code is the default |
+| `--harness claude\|codex\|both\|opencode\|all` | Choose what to install for. Claude Code is the default. `both` is Claude Code and Codex; `all` adds OpenCode |
 | `--claude-dir DIR` | The Claude config dir to set up (default `$CLAUDE_CONFIG_DIR`, else `~/.claude`) |
 | `--codex-dir DIR` | The Codex home to set up, one per run (default `$CODEX_HOME`, else `~/.codex`) |
+| `--opencode-dir DIR` | The OpenCode config dir to set up, one per run (default `$XDG_CONFIG_HOME/opencode`, else `~/.config/opencode`) |
+| `--tier-fast P/M`, `--tier-standard P/M`, `--tier-strong P/M`, `--tier-frontier P/M` | OpenCode only: the `provider/model` each executor tier uses |
 | `--flowobserve` | Turn on the FlowObserve stage |
 | `--no-flowobserve` | Turn the FlowObserve stage off (not with `--flowobserve`) |
 | `--openrouter-key KEY` | Implies `--judge jev`. Claude Code only: also store the key as the plugin option (explicit only; see [the key](#the-openrouter-key)). Codex ignores it |
@@ -229,6 +231,28 @@ A `--harness claude` run on a `~/.claude` that an old Codex copy install still u
 ```
 
 `--uninstall --harness codex` works on one Codex home: it runs `codex plugin remove dryas@dryas-workflow`, removes the marketplace (when setup added it), the hook trust setup recorded, the config block, and drops that home from `~/.dryas/accounts.json`. An old copy install there is removed as in the migration. Other Codex homes, Claude Code and `~/.dryas` are not touched. `--purge` removes `~/.dryas` only when no Claude config dir and no Codex home is left in `accounts.json` (see [Uninstall and purge](#uninstall-and-purge)); with `--harness both`, Codex is removed first, so one run can remove the last of both.
+
+## OpenCode: config-dir install
+
+```
+install/install.sh --harness opencode [--opencode-dir DIR] \
+  [--tier-fast P/M --tier-standard P/M --tier-strong P/M --tier-frontier P/M]
+```
+
+OpenCode 1.18 or newer is required; setup checks `opencode --version` before it writes anything. `--harness all` sets up Claude Code, Codex and OpenCode in one run. Setup writes a copy into the config dir:
+
+```
+<dir>/plugin/dryas.ts
+<dir>/dryas/{jev,pstack}/ and <dir>/dryas/AGENTS.md.template
+<dir>/dryas/install.json           version, tier map, installed files with hashes
+<dir>/skill/dryas-*/
+<dir>/command/*.md
+<dir>/agent/dryas-executor-*.md    model: from the tier map
+```
+
+Setup never edits `opencode.json`. The plugin adds the `jev` MCP server when OpenCode loads it. Dryas never changes OpenCode's permission settings; a gate `ask` blocks the call and you allow it once with `dryas allow <code>` (see [harnesses.md](harnesses.md#opencode)). Setup refuses to overwrite a file it did not write and names it. Without `--tier-*` flags every executor tier uses the same model; give each tier its own model to get the ladder.
+
+OpenCode runs a copy, so re-run setup after `git pull`. A file you edited is kept as `<name>.dryas-old` on a re-run; an earlier `.dryas-old` copy is not overwritten (the next one is `.dryas-old.<n>`). Setup keeps other installs' component choices, and an interrupted setup can be re-run. Remove Dryas with `install/install.sh --uninstall --harness opencode`: it removes the files whose hashes still match `install.json` and keeps and names the ones you edited, and keeps `accounts.json` when it cannot read it. Check the install with `python3 tools/release_check.py --opencode-dir DIR`.
 
 ## The API key
 
