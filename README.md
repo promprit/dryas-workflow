@@ -123,7 +123,7 @@ install/install.sh --harness opencode                              # ~/.config/o
 install/install.sh --harness opencode --opencode-dir ~/oc-work     # another OpenCode config dir
 ```
 
-OpenCode 1.18.0 or newer. Setup copies the plugin, skills, commands and executor agents into the config dir and never edits `opencode.json`; re-run it after `git pull`. Set a model for each executor tier with `--tier-fast`, `--tier-standard`, `--tier-strong` and `--tier-frontier` (`PROVIDER/MODEL`). The memory hooks come in plan 2. Details: [docs/install.md](docs/install.md#opencode-config-dir-install).
+OpenCode 1.18.0 or newer. Setup copies the plugin, skills, commands and executor agents into the config dir and never edits `opencode.json`; re-run it after `git pull`. Set a model for each executor tier with `--tier-fast`, `--tier-standard`, `--tier-strong` and `--tier-frontier` (`PROVIDER/MODEL`). The memory hooks, context-window warnings, compaction keep and `/handoff` run on OpenCode too. Details: [docs/install.md](docs/install.md#opencode-config-dir-install).
 
 ### Cloud sessions
 

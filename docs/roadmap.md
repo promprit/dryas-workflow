@@ -54,7 +54,7 @@ Only once the spec is stable.
 - [x] Claude Code edition (this repo's `claude/`)
 - [x] Codex edition (this repo's `codex/`, partial conformance, see [harnesses.md](harnesses.md))
 - [x] Codex plugin (`dryas@dryas-workflow` from `codex/`)
-- [x] OpenCode edition, core (opencode/; plan 2 adds the memory hooks)
+- [x] OpenCode edition at Dryas Full (opencode/: memory hooks, context warnings, compaction keep, /handoff)
 - [ ] Pi, Roo and Cursor editions (later), by anyone, against the spec
 - [ ] Packaged plugins per harness, generated from the manifest (Claude Code and Codex done: plugin dryas@dryas-workflow)
 
@@ -94,11 +94,11 @@ A cheap way for the orchestrator to see a large repo's structure without reading
 
 ## OpenCode edition
 
-Core shipped (plan 1). Most of Dryas carries over unchanged: OpenCode reads `AGENTS.md` (the Codex template plus a harness block), skills and commands are markdown (one more render target in `tools/sync_codex_plugin.py`), the `jev` MCP server runs as a local stdio server (memory, judge and logging as-is), and per-agent models give the tier table.
+Shipped at Dryas Full (plans 1 and 2). Most of Dryas carries over unchanged: OpenCode reads `AGENTS.md` (the Codex template plus a harness block), skills and commands are markdown (one more render target in `tools/sync_codex_plugin.py`), the `jev` MCP server runs as a local stdio server (memory, judge and logging as-is), and per-agent models give the tier table.
 
 - [x] Spike (half a day): confirm OpenCode's plugin events before and after a tool call, whether a plugin can ask the user or only block (if only block, the local judge's `ask` becomes a deny with a reason on OpenCode), and whether the acting agent's identity reaches the plugin (the scope lock needs it; Codex does not provide it).
 - [x] Hook shim (1–2 days): a small plugin, run by OpenCode itself (no Node for the user), that maps tool events to the hook JSON `claude/jev/chain.py` reads, like `codex_event.py` does for Codex.
 - [x] Installer target (about 1 day): `--harness opencode` writes OpenCode's config (MCP server, plugin, agents, commands), with uninstall and a `tools/release_check.py` check.
 - [x] Executor and orchestration (half a day to a day): map `dryas:executor` and the fast → standard → strong → frontier ladder onto OpenCode agents and subagents.
 - [x] Tests, docs and conformance (about 1 day): mock-event tests like the Codex ones, an OpenCode column in [harnesses.md](harnesses.md) and the conformance table, a CI job.
-- [ ] Plan 2: memory hooks, context warnings, compaction keep/restore, /handoff on OpenCode.
+- [x] Plan 2: memory hooks, context warnings, compaction keep/restore, /handoff on OpenCode.

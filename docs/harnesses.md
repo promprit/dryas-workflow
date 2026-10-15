@@ -5,7 +5,7 @@
 | Claude Code | Supported: plugin `dryas@dryas-workflow` |
 | Codex | Supported: plugin `dryas@dryas-workflow` |
 | Claude Code cloud sessions | Supported: a pinned copy of the core committed to the repo (`dryas cloud init`) |
-| OpenCode | Supported (core): plugin file plus config-dir install (`install/install.sh --harness opencode`) |
+| OpenCode | Supported (Dryas Full): plugin file plus config-dir install (`install/install.sh --harness opencode`) |
 | Pi, Roo, Cursor | Later |
 
 
@@ -25,13 +25,17 @@ Claude Code only: context-window warnings, compaction keep/restore, `/handoff`, 
 
 ## OpenCode
 
-Supported (core). Conformance is partial: the memory hook stages, context-window warnings, compaction keep/restore, `/handoff` and `gate-outcome` come in plan 2. It ships as one plugin file, `plugin/dryas.ts`, plus files copied into the OpenCode config dir by `install/install.sh --harness opencode` (see [install.md](install.md#opencode-config-dir-install)). OpenCode 1.18.0 or newer is required.
+Supported at Dryas Full. Conformance is partial only where OpenCode lacks the capability: session end is best effort and a headless ask cannot be approved (see the limits below). It ships as one plugin file, `plugin/dryas.ts`, plus files copied into the OpenCode config dir by `install/install.sh --harness opencode` (see [install.md](install.md#opencode-config-dir-install)). OpenCode 1.18.0 or newer is required.
 
-OpenCode gets: the rules, injected by the plugin's system-prompt hook; the process skills as `dryas-<name>`; the commands `/orchestrate`, `/wplan`, `/wreview`, `/commit`, `/tune`, `/retro` and `/interrogate`; the `jev` MCP server, added by the plugin, with tools named `jev_<tool>` (for example `jev_memory_search`); the scope lock, applied per executor subagent; the Jev gate, whose `ask` blocks the call (see below); and the executor agents `dryas-executor-<tier>`, with models taken from `--tier-fast`, `--tier-standard`, `--tier-strong` and `--tier-frontier`.
+OpenCode gets: the rules, injected by the plugin's system-prompt hook; the process skills as `dryas-<name>`; the commands `/orchestrate`, `/wplan`, `/wreview`, `/commit`, `/tune`, `/retro`, `/interrogate` and `/handoff`; the `jev` MCP server, added by the plugin, with tools named `jev_<tool>` (for example `jev_memory_search`); the scope lock, applied per executor subagent; the Jev gate, whose `ask` blocks the call (see below); and the executor agents `dryas-executor-<tier>`, with models taken from `--tier-fast`, `--tier-standard`, `--tier-strong` and `--tier-frontier`.
 
-Plan 2 adds the memory hooks, context-window warnings, compaction keep/restore and `/handoff`. Until then OpenCode reaches Dryas memory through the MCP tools and writes to it only when the agent calls `jev_memory_store`.
+The memory hook stages run on OpenCode through the same chain as Claude Code: `mem-edit` after an edit, `gate-outcome` after a shell command, `mem-task` when a subagent stops, `mem-session-start` when a root session starts, `mem-session-end` and `mem-notes` at session end and before compaction, and `mem-notes` at each stop.
 
-Two OpenCode limits apply. OpenCode has no session-end event when you quit the TUI. Headless `opencode run` has no follow-up message, so an ask stays a block there.
+Context-window warnings come from the `context-watch` prompt stage. The warning tells the agent to say: run `/handoff` then `/new`. OpenCode also compacts on its own near the limit. Compaction keep adds the Jev-kept lines to that compaction through `experimental.session.compacting` (`claude/jev/opencode_session.py`).
+
+`/handoff` saves a Jev-scored handoff and tells you to type `/new`. The next new root session in the same project, started within 30 minutes, gets the handoff once, in its system prompt; the handoff file is deleted after it is used.
+
+Known gaps against the spec. OpenCode has no session-end event when you quit the TUI. The plugin sends session end when a session is deleted and when the plugin is disposed, both best effort. Headless `opencode run` has no follow-up message, so an ask stays a block there. Compaction keep and the handoff restore use OpenCode's `experimental.*` hooks, which may change between OpenCode releases.
 
 Dryas never reads or changes OpenCode's permission settings. OpenCode's own rules, and its built-in agents such as Plan, apply as before. When the gate or the scope lock returns `ask`, the call is blocked. The message gives the reason and a 4-hex code. To allow that exact call once, reply `dryas allow <code>` in your main session. A code in a subagent prompt never counts. While a task is active (`.orchestrate/active.json`), a chain that cannot run (Python missing, crash, timeout) blocks edits and shell calls; with no active task it lets them through, like a failing Claude Code hook. Setup never edits `opencode.json`; the plugin adds the `jev` server when OpenCode loads it.
 
