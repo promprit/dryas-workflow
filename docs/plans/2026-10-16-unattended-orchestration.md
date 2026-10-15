@@ -2220,6 +2220,7 @@ Goal: `install/install.sh` (plugin_setup.setup) upgrades the installed Dryas plu
 Scope:
 - install/plugin_setup.py
 - install/tests/test_plugin_setup_upgrade.py
+- install/tests/test_plugin_setup.py
 Done:
 - `python3 -m pytest -q install/tests/test_plugin_setup_upgrade.py install/tests/test_plugin_setup.py` passes
 Failing test first: install/tests/test_plugin_setup_upgrade.py :: UpgradeTest.test_stale_install_is_updated
