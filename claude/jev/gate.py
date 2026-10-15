@@ -22,7 +22,6 @@ import thresholds
 import local_judge
 import pathclass
 import providers
-import runrules
 import task_review
 import taskctx
 
@@ -244,6 +243,7 @@ def _run_active(loaded: Tuple[Optional[str], Any]) -> bool:
 def _unattended(d: Tuple[str, str], tool: str, cmd: str, root: str, cwd: str) -> Tuple[Optional[Tuple[str, str]], str]:
     """During a run nobody is asked: an ask the plan or the orchestrator already decided is allowed
     (runrules.covered), any other becomes a deny the executor can report as NEEDS DECISION."""
+    import runrules  # lazy: only an ask during a run needs it
     rule = runrules.covered(cmd, root, cwd) if tool == "Bash" else None
     if rule:
         return None, rule

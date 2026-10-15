@@ -21,7 +21,9 @@ from typing import List, NamedTuple, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import local_judge as lj
-from prescreen import _SED_CMD
+
+# Same pattern as prescreen._SED_CMD (a test keeps them equal); importing prescreen here costs ~5 ms per process.
+_SED_CMD = re.compile(r"(?:^|[/;{}0-9$\s])[gpIiMm0-9]*\s*[wWe](?=\s|$|[;}])")
 
 _DEPTH = 3
 _OUT_OPS = frozenset({">", ">>", ">|", "&>", "&>>", "<>", ">&"})
