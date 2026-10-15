@@ -190,7 +190,7 @@ def _unowned(repo: str, files: Dict[str, Any]) -> List[str]:
         dirs[:] = sorted(x for x in dirs if x != "__pycache__" and rel_d + "/" + x != COPY + "/state")
         for n in sorted(names):
             rel = rel_d + "/" + n
-            if rel not in files and rel not in UNOWNED_OK and not (rel.startswith(NOTES) and rel.endswith(".md")):
+            if rel not in files and rel not in UNOWNED_OK and not _is_note(rel):
                 out.append("unowned: " + rel)
     return out
 
@@ -238,16 +238,24 @@ def _live_config(repo: str, cfg: Dict[str, Any]) -> List[str]:
     return probs
 
 
+def _is_note(rel: str) -> bool:
+    """A memory note the repo owns: any .md under the notes folder, at any depth (what _unowned lets through)."""
+    return rel.startswith(NOTES) and rel.endswith(".md")
+
+
 def _scan_notes(repo: str) -> List[str]:
     probs = []
-    d = os.path.join(repo, NOTES)
-    for n in sorted(os.listdir(d)) if os.path.isdir(d) else []:
-        text = _read(os.path.join(d, n)) if n.endswith(".md") else None
-        if text is None:
-            continue
-        probs += scan_text(NOTES + n, text)
-        probs += ["%s%s:%d: secret-shaped text" % (NOTES, n, i) for i, line in enumerate(text.splitlines(), 1)
-                  if redact(line) != line]
+    for d, dirs, names in os.walk(os.path.join(repo, NOTES)):
+        dirs.sort()
+        rel_d = os.path.relpath(d, repo).replace(os.sep, "/")
+        for n in sorted(names):
+            rel = rel_d + "/" + n
+            text = _read(os.path.join(d, n)) if _is_note(rel) else None
+            if text is None:
+                continue
+            probs += scan_text(rel, text)
+            probs += ["%s:%d: secret-shaped text" % (rel, i) for i, line in enumerate(text.splitlines(), 1)
+                      if redact(line) != line]
     return probs
 
 

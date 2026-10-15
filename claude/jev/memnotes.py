@@ -99,6 +99,17 @@ def render(conn, ns: str, sid: str, since: float, rows: Dict[str, Dict[str, Any]
     return data.decode("utf-8", "ignore").rstrip("\n") + "\n"
 
 
+def cli_session_id(conn, ns: str) -> str:
+    """The session id when no hook event gave one (a manual `memnotes.py export` before the final commit): the id in
+    the environment, else the latest session recorded for this project, else one stable name, so the Stop hook's
+    export of the same session overwrites this note instead of adding a second."""
+    env = os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("JEV_SESSION_ID")
+    if env:
+        return env
+    r = conn.execute("SELECT id FROM sessions WHERE ns = ? ORDER BY started DESC LIMIT 1", (ns,)).fetchone()
+    return str(r["id"]) if r else "cli"
+
+
 def export(conn, event: Dict[str, Any], now: Optional[float] = None) -> Optional[str]:
     """Write this session's note. Its path, or None when there is no notes folder or nothing to keep."""
     d = notes_dir()
@@ -106,11 +117,12 @@ def export(conn, event: Dict[str, Any], now: Optional[float] = None) -> Optional
         return None
     now = time.time() if now is None else now
     cwd = str(event.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
-    sid = str(event.get("session_id") or "unknown")
+    ns = projns.project_ns(cwd)
+    sid = str(event.get("session_id") or cli_session_id(conn, ns))
     since = session_since(conn, sid)
     rows = recent_rows(tune_tasks.rows(tune.read("gate"), tune.read("dispatch"), tune.read("escalations"),
                                        tune.read("mcp")), since)
-    text = render(conn, projns.project_ns(cwd), sid, since, rows, now)
+    text = render(conn, ns, sid, since, rows, now)
     if not text:
         return None
     path = os.path.join(d, "%s-%s.md" % (time.strftime("%Y-%m-%d", time.localtime(now)), safe_id(sid)))

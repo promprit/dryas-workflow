@@ -82,12 +82,13 @@ class HelpersTest(unittest.TestCase):
             self.assertNotIn(token, body)
         self.assertIn("`/x-dryas-cloud check`", ct.claude_md_body(tpl, PX, COMPS, "9.9.9"))
 
-    def test_commit_the_notes_line_only_with_persist_memory(self):
+    def test_rules_line_runs_the_export_before_committing(self):
         tpl = (ROOT / "claude/CLAUDE.md.template").read_text(encoding="utf-8")
-        line = "Before your final commit, include .dryas/memory/notes/ in it."
+        line = ("Before your final commit, run `.dryas/bin/dryas-py .dryas/jev/memnotes.py export` and include "
+                ".dryas/memory/notes/ in the commit.")
         self.assertIn(line, ct.claude_md_body(tpl, NM, COMPS, "9.9.9", persist_memory=True))
-        self.assertNotIn(line, ct.claude_md_body(tpl, NM, COMPS, "9.9.9"))
-        self.assertNotIn(line, ct.claude_md_body(tpl, NM, COMPS, "9.9.9", persist_memory=False))
+        self.assertNotIn("memnotes.py", ct.claude_md_body(tpl, NM, COMPS, "9.9.9"))
+        self.assertNotIn("memnotes.py", ct.claude_md_body(tpl, NM, COMPS, "9.9.9", persist_memory=False))
 
     def test_third_party_paths(self):
         src = 'python "${CLAUDE_PLUGIN_ROOT}/.claude/skills/ui-ux-pro-max/scripts/search.py" and "${CLAUDE_SKILL_DIR}/x"'

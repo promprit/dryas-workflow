@@ -92,6 +92,36 @@ class MemNotesTest(unittest.TestCase):
         self.assertTrue(row["title"].startswith("Dryas session "))
         self.assertIn("Retry flaky calls", row["body"])
 
+    def cli(self, stdin="", **env_extra):
+        env = dict(os.environ, **env_extra)
+        return subprocess.run([sys.executable, os.path.join(JEV, "memnotes.py"), "export"], input=stdin,
+                              capture_output=True, text=True, env=env, timeout=30)
+
+    def test_cli_export_without_hook_stdin_writes_the_note_before_any_stop(self):
+        self.start("real-sid")
+        memstore.store(self.conn, self.ns, "Retry flaky calls", "Use the retry helper.", check_content=False)
+        p = self.cli("", CLAUDE_PROJECT_DIR=self.cwd)
+        self.assertEqual((p.returncode, p.stdout), (0, ""), p.stderr)
+        written = [n for n in os.listdir(self.notes) if n.endswith(".md")]
+        self.assertEqual(len(written), 1, written)
+        self.assertTrue(written[0].endswith("-real-sid.md"), written)  # the session's own note, so the Stop hook overwrites it
+        with open(os.path.join(self.notes, written[0]), encoding="utf-8") as f:
+            self.assertIn("Retry flaky calls", f.read())
+        self.assertEqual(self.export("real-sid"), os.path.join(self.notes, written[0]))
+        self.assertEqual(len(os.listdir(self.notes)), 1)
+
+    def test_cli_export_reads_the_session_id_from_env(self):
+        self.start("from-env")
+        memstore.store(self.conn, self.ns, "A lesson", "Body text.", check_content=False)
+        self.cli("", CLAUDE_PROJECT_DIR=self.cwd, CLAUDE_SESSION_ID="from-env")
+        self.assertEqual([n[-11:] for n in os.listdir(self.notes)], ["from-env.md"])
+
+    def test_cli_export_without_any_session_uses_a_stable_id(self):
+        memstore.store(self.conn, self.ns, "A lesson", "Body text.", check_content=False)
+        self.cli("", CLAUDE_PROJECT_DIR=self.cwd)
+        self.cli("", CLAUDE_PROJECT_DIR=self.cwd)
+        self.assertEqual(len(os.listdir(self.notes)), 1, os.listdir(self.notes))
+
     def test_main_without_notes_dir_does_nothing(self):
         env = dict(os.environ, DRYAS_NOTES_DIR=os.path.join(self.d, "absent"), DRYAS_DB=os.path.join(self.d, "o.db"))
         p = subprocess.run([sys.executable, os.path.join(JEV, "memnotes.py"), "export"], input='{"session_id": "s1"}',

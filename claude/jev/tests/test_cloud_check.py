@@ -220,6 +220,13 @@ class LiveConfigTest(unittest.TestCase):
             self.assertTrue(any(p.startswith(rel) for p in cc.check(self.repo, "9.9.9")), rel)
             self.setUp()
 
+    def test_nested_memory_notes_are_scanned(self):
+        os.makedirs(os.path.join(self.repo, ".dryas/memory/notes/2026/10"))
+        self.write(".dryas/memory/notes/2026/10/c.md", "see /Users/me/x\nkey sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789\n")
+        probs = cc.check(self.repo)
+        self.assertIn(".dryas/memory/notes/2026/10/c.md:1: absolute Mac path", probs)
+        self.assertTrue(any(p.startswith(".dryas/memory/notes/2026/10/c.md") and "secret" in p for p in probs), probs)
+
     def test_memory_notes_are_owned_but_scanned(self):
         os.makedirs(os.path.join(self.repo, ".dryas/memory/notes"))
         self.write(".dryas/memory/notes/a.md", "fine note\n")

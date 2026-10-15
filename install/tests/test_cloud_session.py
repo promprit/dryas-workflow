@@ -165,18 +165,45 @@ class CloudSessionTest(unittest.TestCase):
         self.assertEqual(self.decision(self.hook("PreToolUse", ev)), "deny")
 
     def test_real_dryas_home_is_untouched(self):
+        """A live Dryas session may write to ~/.dryas while this runs, so the check is that nothing there mentions
+        this test's own session id, and that no file the hooks could write for it (a state dir) appeared."""
         real = Path.home() / ".dryas"
-
-        def snap():
-            return sorted((str(p), p.lstat().st_mtime_ns) for p in real.rglob("*")) if real.exists() else []
-        before = snap()
+        sid = "untouched-" + self.base.name
         self.init()
-        self.hook("SessionStart", self.event(source="startup"))
-        self.hook("PreToolUse", self.event(tool_name="Bash", tool_input={"command": DISCARD}))
-        self.hook("SessionEnd", self.event())
-        self.assertEqual(snap(), before)
+        ev = lambda **kw: self.event(session_id=sid, **kw)  # noqa: E731
+        self.hook("SessionStart", ev(source="startup"))
+        self.hook("PreToolUse", ev(tool_name="Bash", tool_input={"command": DISCARD}))
+        self.hook("SessionEnd", ev())
+        for f in real.rglob("*") if real.exists() else []:
+            if f.is_file() and f.suffix in (".jsonl", ".json", ".md"):
+                try:
+                    text = f.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+                self.assertNotIn(sid, text, str(f))
         self.assertTrue((self.repo / ".dryas/state").is_dir())
+        self.assertIn(sid, (self.repo / ".dryas/state/jev/logs/gate.jsonl").read_text(encoding="utf-8"))  # it did log, in the repo
 
+    def test_single_turn_session_has_the_note_before_any_stop(self):
+        self.init("--persist-memory")
+        notes = self.repo / ".dryas/memory/notes"
+        md = (self.repo / "CLAUDE.md").read_text(encoding="utf-8")
+        cmd = re.search(r"run `([^`]*memnotes\.py export)`", md).group(1)
+        self.hook("SessionStart", self.event(source="startup"))
+        ns = projns.project_ns(str(self.repo))
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); import memdb, memstore; "
+                "memstore.store(memdb.connect(), sys.argv[2], 'Retry flaky calls', 'Use the retry helper.')")
+        subprocess.run([sys.executable, "-c", code, str(self.repo / ".dryas/jev"), ns], check=True, timeout=60,
+                       env=self.env(DRYAS_DATA_ROOT=str(self.repo / ".dryas/state")))
+        self.assertEqual(list(notes.glob("*.md")), [])  # no Stop or SessionEnd has run yet
+        p = subprocess.run(["sh", "-c", cmd], input="", capture_output=True, text=True, env=self.env(),
+                           cwd=str(self.repo), timeout=60)
+        self.assertEqual((p.returncode, p.stdout), (0, ""), p.stderr)
+        written = sorted(notes.glob("*.md"))
+        self.assertEqual(len(written), 1, written)
+        self.assertIn("Retry flaky calls", written[0].read_text(encoding="utf-8"))
+        self.hook("SessionEnd", self.event())  # the hook's later export overwrites the same note
+        self.assertEqual(sorted(notes.glob("*.md")), written)
 
 if __name__ == "__main__":
     unittest.main()

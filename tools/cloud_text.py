@@ -69,7 +69,8 @@ def set_name(text: str, name: str) -> str:
     return re.sub(r"(?m)^name:[^\n]*$", "name: " + name, text[:end], count=1) + text[end:]
 
 
-NOTES_RULE = "Before your final commit, include .dryas/memory/notes/ in it."
+NOTES_RULE = ("Before your final commit, run `.dryas/bin/dryas-py .dryas/jev/memnotes.py export` and include "
+              ".dryas/memory/notes/ in the commit.")
 
 
 def claude_md_body(template: str, names: Names, comps: Iterable[str], version: str, persist_memory: bool = False) -> str:
