@@ -1607,7 +1607,7 @@ if __name__ == "__main__":
                       if r.get("run") is True and r.get("decision") == "ask")
 ```
 
-     and add `"scope_asks": asks, "scope_violations": violations, "run_prompts": run_prompts,` to the returned dict next to `"scope_denials"`. In `build`, pass the gate records it already reads: `delivery(dispatch, scope, esc, review, merge, gate=<the gate list build already loads>)` (read `build` first and use its existing variable). In `render`, after the scope-lock line, add `"- Prompts during runs (target 0): %d (scope asks %d, violations %d)" % (d["run_prompts"], d["scope_asks"], d["scope_violations"]),`.
+     and add `"scope_asks": asks, "scope_violations": violations, "run_prompts": run_prompts,` to the returned dict next to `"scope_denials"`. In `build`, pass the gate records it already reads: `delivery(dispatch, scope, esc, review, merge, gate=<the gate list build already loads>)` (read `build` first and use its existing variable). In `render`, after the scope-lock line, add `"- Prompts during runs (target 0): %d (scope asks %d, violations %d; v1 baseline %.2f prompts per task)" % (d["run_prompts"], d["scope_asks"], d["scope_violations"], V1_PROMPTS_PER_TASK),` with the module constant `V1_PROMPTS_PER_TASK = 0.04  # Dryas 1.0 era, 2026-10-02..15 13:00: 45 prompts over 1202 tasks (Jev logs)`.
   2. Create `claude/jev/run_report.py`:
 
 ```python
@@ -1912,6 +1912,7 @@ Done:
 - `python3 tools/inventory.py --check` reports 0 problems
 - `python3 tools/release_check.py` reports no FAIL
 - `grep -rn '"2.3.0"' .claude-plugin claude/.claude-plugin codex/.codex-plugin claude/jev/jev_mcp.py codex/jev/jev_mcp.py opencode/dryas/jev/jev_mcp.py` prints nothing
+- `python3 tools/compare_v1.py` exits 0 (2.3.1 asks no more than Dryas 1.0, catches more, and is not slower)
 Failing test first: none (review)
 
 **Interfaces:**
@@ -1923,4 +1924,187 @@ Failing test first: none (review)
 - [ ] **Step 3: CHANGELOG.** Add a `## 2.3.1` entry above `## 2.3.0`, plain words first: "Approve the plan, walk away: `/orchestrate` no longer stops to ask you about routine file changes or risky commands during a run. Shell edits outside a task's files are blocked or sent back; risky commands are decided by the plan, the judge or the orchestrator, and only what cannot be undone outside the project waits for you in the end report. Before starting, `/orchestrate` checks that the session cannot stop to ask, and it ends with one report and one notification." Then a short technical list (shellwrites, scope audit, runrules, preflight, run report, /tune prompt counts, GOV-2 wording).
 - [ ] **Step 4: Spec rollout.** In `docs/specs/2026-10-15-scope-lock-shell-writes-design.md` section 11, change "Minor release." to "Bug-fix release 2.3.1." and add to section 6 that Bash scope records also log allowed writes (`kind: "allow"`, with the rule), which is what feeds the `inline_code` lesson.
 - [ ] **Step 5: Verify.** Run every Done command. Expected: all pass. If `install/tests/test_launch_pitch_docs.py` pins the newest CHANGELOG heading, read it and make it accept `## 2.3.1` above `## 2.3.0` without weakening what it checks.
-- [ ] **Step 6: Commit** the changed files as `chore(release): Dryas 2.3.1 — unattended orchestration fixes (task 12)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
+- [ ] **Step 6: Better than v1.** Run `python3 tools/compare_v1.py` (Task 13) and paste its summary into the CHANGELOG entry's technical list. It must exit 0. If it fails, the release does not ship: report the failing line.
+- [ ] **Step 7: Commit** the changed files as `chore(release): Dryas 2.3.1 — unattended orchestration fixes (task 12)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
+
+## Task 13: Better than v1 — the comparison gate
+
+Goal: New `tools/compare_v1.py` replays the Task 11 corpus through Dryas 1.0's hook chain and through this branch's, and fails unless this branch asks no more than 1.0 (and zero), denies at least every out-of-scope write 1.0 denied plus the shell writes 1.0 missed, and is not slower beyond run-to-run noise. Task 12 runs it before the release; it runs after Tasks 3, 6 and 11 and before Task 12.
+Scope:
+- tools/compare_v1.py
+- install/tests/test_compare_v1.py
+Done:
+- `python3 -m pytest -q install/tests/test_compare_v1.py` passes
+- `python3 tools/compare_v1.py` exits 0 on this Mac and prints the summary table
+Failing test first: install/tests/test_compare_v1.py :: CompareV1Test.test_verdict_rules
+
+**Interfaces:**
+- Consumes: Task 11's `claude/jev/tests/fixtures/scope_shell_corpus.jsonl` (`cmd`, `cwd`, `expect`, `why`); Dryas 1.0 at `--v1` (default `~/.claude/plugins/cache/dryas-workflow/dryas/1.0.0`, which holds `jev/chain.py`); this branch's `claude/jev/chain.py`.
+- Produces: CLI `compare_v1.py [--v1 DIR] [--runs N]` printing a table and a final `PASS` or `FAIL: <reasons>`, exit 0 or 1 (exit 2 when the v1 copy is missing); function `verdict(v1: Dict[str, Any], new: Dict[str, Any]) -> List[str]` (empty list = pass) over summaries `{"asks": int, "denied_expected": int, "denied_total_expected": int, "wrong_denies": int, "p50_ms": float, "range_ms": [float, float]}`.
+
+- [ ] **Step 1: Write the failing test.** Create `install/tests/test_compare_v1.py`:
+
+```python
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "tools"))
+import compare_v1
+
+
+def summary(asks=0, denied=20, wrong=0, p50=100.0, lo=90.0, hi=110.0):
+    return {"asks": asks, "denied_expected": denied, "denied_total_expected": 20, "wrong_denies": wrong,
+            "p50_ms": p50, "range_ms": [lo, hi]}
+
+
+class CompareV1Test(unittest.TestCase):
+    def test_verdict_rules(self):
+        v1 = summary(asks=0, denied=0)  # 1.0 never looked at shell commands
+        self.assertEqual(compare_v1.verdict(v1, summary()), [])
+        self.assertTrue(compare_v1.verdict(v1, summary(asks=1)))           # any prompt fails
+        self.assertTrue(compare_v1.verdict(v1, summary(denied=19)))        # must catch every out-of-scope target
+        self.assertTrue(compare_v1.verdict(v1, summary(wrong=1)))          # must not deny in-scope work
+        self.assertTrue(compare_v1.verdict(v1, summary(p50=150.0, lo=140.0, hi=160.0)))  # slower beyond noise
+        self.assertEqual(compare_v1.verdict(v1, summary(p50=105.0, lo=95.0, hi=115.0)), [])  # within noise
+
+    def test_catches_no_less_than_v1(self):
+        self.assertTrue(compare_v1.verdict(summary(denied=20), summary(denied=18)))
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+- [ ] **Step 2: Run it to see it fail.** Run: `python3 -m pytest -q install/tests/test_compare_v1.py`. Expected: FAIL with `ModuleNotFoundError: No module named 'compare_v1'`.
+- [ ] **Step 3: Implement.** Before writing it, read `claude/pstack/benchmark-checklist.md` in full (this produces a performance number). Create `tools/compare_v1.py`:
+
+```python
+#!/usr/bin/env python3
+"""Is this branch better than Dryas 1.0 for the user? Release gate for 2.3.x (Task 12 runs it).
+
+  python3 tools/compare_v1.py [--v1 DIR] [--runs N]   exit 0 PASS, 1 FAIL, 2 when DIR/jev/chain.py is missing
+
+Replays the regression corpus (claude/jev/tests/fixtures/scope_shell_corpus.jsonl: real executor shell commands)
+as executor PreToolUse events through both hook chains, in a sandbox (temp logs and thresholds, no judge keys, the
+local judge), against a fixture worktree with one active task (Scope src/**, tests/**). Sides alternate per run
+(v1, new, v1, new, ...) so warmup and drift hit both. Pass when this branch
+  - asks 0 times and no more than v1,
+  - denies every corpus line marked "deny" and at least as many as v1,
+  - denies no line marked "allow",
+  - has a median per-event time no higher than v1's beyond the larger of the two run-to-run ranges.
+"""
+import argparse
+import json
+import os
+import shutil
+import statistics
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from typing import Any, Dict, List
+
+REPO = Path(__file__).resolve().parents[1]
+CORPUS = REPO / "claude" / "jev" / "tests" / "fixtures" / "scope_shell_corpus.jsonl"
+PLAN = "## Task 1: corpus\nGoal: g\nScope:\n- src/**\n- tests/**\nDone:\n- d\n"
+
+
+def verdict(v1: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
+    bad = []
+    if new["asks"] > 0 or new["asks"] > v1["asks"]:
+        bad.append("asks %d times (v1 %d); target 0" % (new["asks"], v1["asks"]))
+    if new["denied_expected"] < new["denied_total_expected"] or new["denied_expected"] < v1["denied_expected"]:
+        bad.append("denied %d of %d out-of-scope writes (v1 %d)" % (new["denied_expected"],
+                                                                    new["denied_total_expected"], v1["denied_expected"]))
+    if new["wrong_denies"]:
+        bad.append("denied %d in-scope commands" % new["wrong_denies"])
+    noise = max(v1["range_ms"][1] - v1["range_ms"][0], new["range_ms"][1] - new["range_ms"][0])
+    if new["p50_ms"] > v1["p50_ms"] + noise:
+        bad.append("median %.1f ms vs v1 %.1f ms (noise %.1f ms)" % (new["p50_ms"], v1["p50_ms"], noise))
+    return bad
+
+
+def _sandbox(tmp: Path) -> Dict[str, str]:
+    env = {k: v for k, v in os.environ.items() if "KEY" not in k and not k.startswith(("JEV_", "DRYAS_"))}
+    env.update(JEV_LOG_DIR=str(tmp / "logs"), JEV_THRESHOLDS=str(tmp / "thresholds.json"), HOME=str(tmp / "home"))
+    (tmp / "home").mkdir(exist_ok=True)
+    return env
+
+
+def _one(chain: Path, event: Dict[str, Any], env: Dict[str, str]) -> (str, float):
+    t0 = time.perf_counter()
+    r = subprocess.run([sys.executable, "-X", "utf8", str(chain), "pretool"], input=json.dumps(event),
+                       capture_output=True, text=True, env=env, timeout=60)
+    ms = (time.perf_counter() - t0) * 1000
+    try:
+        return json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], ms
+    except (ValueError, KeyError, TypeError):
+        return "allow", ms
+
+
+def run(v1_dir: Path, runs: int) -> Dict[str, Dict[str, Any]]:
+    cases = [json.loads(l) for l in CORPUS.read_text(encoding="utf-8").splitlines() if l.strip()]
+    chains = {"v1": v1_dir / "jev" / "chain.py", "new": REPO / "claude" / "jev" / "chain.py"}
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        wt = tmp / "wt"
+        (wt / ".orchestrate").mkdir(parents=True)
+        (wt / ".orchestrate" / "PLAN.md").write_text(PLAN, encoding="utf-8")
+        (wt / ".orchestrate" / "active.json").write_text(json.dumps({"active": ["1"]}), encoding="utf-8")
+        env = _sandbox(tmp)
+        decisions: Dict[str, List[str]] = {"v1": [], "new": []}
+        times: Dict[str, List[float]] = {"v1": [], "new": []}
+        for r in range(runs):
+            for side in ("v1", "new") if r % 2 == 0 else ("new", "v1"):
+                per = []
+                for c in cases:
+                    ev = {"tool_name": "Bash", "tool_input": {"command": c["cmd"]}, "agent_id": "a1",
+                          "cwd": str(wt / c["cwd"]), "session_id": "compare-v1"}
+                    d, ms = _one(chains[side], ev, env)
+                    per.append(ms)
+                    if r == 0:
+                        decisions[side].append(d)
+                times[side].append(statistics.median(per))
+        out = {}
+        for side in ("v1", "new"):
+            ds = decisions[side]
+            out[side] = {
+                "asks": sum(d == "ask" for d in ds),
+                "denied_expected": sum(d == "deny" and c["expect"] == "deny" for d, c in zip(ds, cases)),
+                "denied_total_expected": sum(c["expect"] == "deny" for c in cases),
+                "wrong_denies": sum(d == "deny" and c["expect"] == "allow" for d, c in zip(ds, cases)),
+                "p50_ms": statistics.median(times[side]),
+                "range_ms": [min(times[side]), max(times[side])],
+            }
+        return out
+    finally:
+        shutil.rmtree(str(tmp), ignore_errors=True)
+
+
+def main() -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("--v1", default=os.path.expanduser("~/.claude/plugins/cache/dryas-workflow/dryas/1.0.0"))
+    p.add_argument("--runs", type=int, default=5)
+    a = p.parse_args()
+    v1_dir = Path(a.v1)
+    if not (v1_dir / "jev" / "chain.py").is_file():
+        sys.stderr.write("no Dryas 1.0 copy at %s (pass --v1)\n" % v1_dir)
+        return 2
+    s = run(v1_dir, max(a.runs, 5))
+    print("%-24s %10s %10s" % ("", "Dryas 1.0", "this"))
+    for k in ("asks", "denied_expected", "denied_total_expected", "wrong_denies", "p50_ms"):
+        print("%-24s %10s %10s" % (k, round(s["v1"][k], 1), round(s["new"][k], 1)))
+    print("%-24s %10s %10s" % ("range_ms", s["v1"]["range_ms"], s["new"]["range_ms"]))
+    bad = verdict(s["v1"], s["new"])
+    print("PASS" if not bad else "FAIL: " + "; ".join(bad))
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+- [ ] **Step 4: Run the tests.** Run the Done commands. Expected: the unit test passes; the real run prints the table and `PASS`. Answer the benchmark checklist's questions 4 (errors: every event returned a decision or none) and 5 (runs and range) in your report. If the real run fails, that is a finding about Tasks 2-3 or 6: report it in `UNRESOLVED:` with the table; do not loosen `verdict`.
+- [ ] **Step 5: Commit** the two Scope files as `test(release): compare against Dryas 1.0 before shipping (task 13)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
