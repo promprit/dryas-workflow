@@ -2350,6 +2350,10 @@ Scope:
 - claude/jev/scope_lock.py
 - claude/jev/local_judge.py
 - claude/jev/tests/test_import_cost.py
+- claude/jev/gate_outcome.py
+- claude/jev/thresholds.py
+- claude/jev/jevlog.py
+- claude/jev/tests/test_gate_run.py
 - tools/compare_v1.py
 - install/tests/test_compare_v1.py
 Done:
