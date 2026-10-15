@@ -21,7 +21,8 @@
     {"name": "mem-session-start", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-start"], "timeout": 2, "observe": true}
   ],
   "session-end": [
-    {"name": "mem-session-end", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-end"], "timeout": 2, "observe": true}
+    {"name": "mem-session-end", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-end"], "timeout": 2, "observe": true},
+    {"name": "mem-notes", "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memnotes.py", "export"], "requires_path": "$CD/memory/notes", "observe": true, "timeout": 2}
   ],
   "precompact": [
     {"name": "mem-session-end", "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "session-end", "auto"], "timeout": 2, "observe": true}
