@@ -67,6 +67,7 @@ Dryas 2.0 owns its core: no third-party plugin is required, and the extras stay 
 - [x] **B, Dryas memory.** `~/.dryas/dryas.db` with search, consolidation and `dryas memory import-ruflo`, served by the `jev` MCP server.
 - [x] **C, Dryas process skills.** `dryas:brainstorm`, `dryas:worktree`, `dryas:tdd`, `dryas:review-request`, `dryas:review-receive`, `dryas:verify`, `dryas:plan` and `dryas:debug`, each mapped to its upstream in `UPSTREAM.md`.
 - [x] **D, integration.** The memory stages and `gate-outcome` in the hook chain, background consolidation, the installer flags and the `dryas` command, the legacy cleanup, `/tune` judge and memory lines, the judge scorecard (`reference/judge-corpus/`), `/retro`, `GLOSSARY.md` and `.out-of-scope/`.
+- [x] **E, cloud sessions.** `dryas cloud init | check | update | remove` commits a pinned copy of the Dryas core into a repo so claude.ai/code cloud sessions run the workflow with the local judge and no key ([cloud-sessions.md](cloud-sessions.md)).
 
 Task-level judgement runs shadow-then-enforce: it is computed and logged next to today's behaviour, and enforced only once the logs show it is right. A2's finding: `review.task_skip` usually reports "no evidence", because build files are always judged and plain edits inside the working folder are already skipped. The value is in the per-task numbers, the scored start tier and the Done-when check. Rules in [governance.md](governance.md#task-level-judgement).
 

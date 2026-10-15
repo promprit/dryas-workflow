@@ -10,14 +10,13 @@ import release_check
 
 
 class ReleaseTest(unittest.TestCase):
-    def test_versions_are_2_0_0(self):
-        self.assertEqual(json.loads((ROOT / "claude/.claude-plugin/plugin.json").read_text())["version"], "2.0.0")
+    def test_versions_are_2_0_x(self):
+        self.assertRegex(json.loads((ROOT / "claude/.claude-plugin/plugin.json").read_text())["version"], r"^2\.0\.\d+$")
         self.assertEqual(release_check.version_problems(ROOT), [])  # all five agree
 
     def test_changelog_2_0_0(self):
         c = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-        top = c.split("\n## ")[1]
-        self.assertTrue(top.startswith("2.0.0 - "))
+        top = [s for s in c.split("\n## ") if s.startswith("2.0.0 - ")][0]
         for s in ("### Added", "### Changed", "### Kept (optional extras)", "### Upgrade"):
             self.assertIn(s, top)
         for n in ("dryas memory import-ruflo", "--judge", "--with-ruflo", "/retro"):

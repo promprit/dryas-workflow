@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## 2.0.1 - 2026-10-15
+
+### Fixed
+- The locked-store memory hook test times its run against the same hook unlocked (2 s headroom, 8 s hang check), so a slow CI runner no longer fails it (it flaked at 2.01 s on macOS, Python 3.9).
+
+### Changed
+- Docs: cloud sessions are listed in the README ("Works with" and an install section), in `docs/harnesses.md`, and as sub-project E in the roadmap.
+
 ## 2.0.0 - 2026-10-15
 
 Dryas 2.0 owns its core. The judge, the memory and the process skills ship in this repo with no third-party dependency, no Node and no key; Ruflo, Superpowers and the Jev model stay as optional extras. The change is additive: every 1.x tool, flag, hook, skill and record keeps working.
