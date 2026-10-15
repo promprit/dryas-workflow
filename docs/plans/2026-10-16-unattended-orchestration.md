@@ -10,7 +10,7 @@
 
 **Spec:** `docs/specs/2026-10-15-scope-lock-shell-writes-design.md`
 
-**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); 15 is independent; 16 after 9, 13, 14; **Task 12 (release) runs last**.
+**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); 15 is independent; 16 after 9, 13, 14; 17 after 3; **Task 12 (release) runs last**.
 
 ## Global Constraints
 
@@ -2314,3 +2314,24 @@ Failing test first: install/tests/test_template_budget.py :: BudgetTest.test_siz
 - [ ] **Step 7: compare_v1 without a corpus.** `tools/compare_v1.py` crashes with a traceback when `claude/jev/tests/fixtures/scope_shell_corpus.jsonl` is missing. In `main`, before `run(...)`, if `CORPUS` is not a file, write `no regression corpus at <path>` to stderr and return 2. Add `test_missing_corpus_exits_2` to `install/tests/test_compare_v1.py` (patch `compare_v1.CORPUS` to a missing path and `sys.argv` to `["compare_v1.py", "--v1", <a temp dir holding jev/chain.py>]`, assert `main()` returns 2).
 - [ ] **Step 8: Run the Done command** with the run still active. Expected: PASS.
 - [ ] **Step 9: Commit** with a pathspec of the changed Scope files as `fix: suite fix-ups and run lessons for 2.3.1 (task 16)`.
+
+## Task 17: Edit and Write into the session scratchpad
+
+Goal: During a run, Edit/Write/MultiEdit/NotebookEdit to a path inside this session's own Claude scratchpad is allowed (the same `_in_scratchpad` rule Bash uses), so executors can follow "put scratch files in your scratchpad" with the file tools instead of falling back to shell writes.
+Scope:
+- claude/jev/scope_lock.py
+- claude/jev/tests/test_scope_lock_scratchpad_files.py
+Done:
+- `python3 -m pytest -q claude/jev/tests/test_scope_lock_scratchpad_files.py claude/jev/tests/test_scope_lock.py claude/jev/tests/test_scope_lock_bookkeeping.py` passes
+Failing test first: claude/jev/tests/test_scope_lock_scratchpad_files.py :: ScratchpadFilesTest.test_write_into_own_scratchpad_allowed
+
+- [ ] **Step 1: Write the failing test.** Create `claude/jev/tests/test_scope_lock_scratchpad_files.py` with the same set-up as `test_scope_lock.py` (temp worktree, `.orchestrate/PLAN.md` with Task 1 Scope `src/feature/**`, active `["1"]`, `JEV_LOG_DIR` temp) and a temp `SCRATCH_BASE` patched with `mock.patch.object(scope_lock, "SCRATCH_BASE", base)`. Tests:
+  - `test_write_into_own_scratchpad_allowed`: a `Write` event with `agent_id`, `session_id` = SID and `file_path` = `<base>/-enc/<SID>/scratchpad/probe.py` → `None`.
+  - `test_other_session_or_lookalike_denied`: the same with `<base>/-enc/other-session-1234/scratchpad/x` and `<base>/-enc/<SID>/scratchpad2/x` → `"deny"`.
+  - `test_symlink_out_of_scratchpad_denied`: a symlink inside the scratchpad pointing to `<worktree>/src/other.ts` → `"deny"`.
+  - `test_off_claude_denied`: with `DRYAS_HARNESS=opencode` the scratchpad write → `"deny"`.
+  - `test_edit_and_multiedit_too`: `Edit` and `MultiEdit` into the scratchpad → `None`.
+- [ ] **Step 2: Run it to see it fail.** Expected: `test_write_into_own_scratchpad_allowed` gets `"deny"` (outside the worktree).
+- [ ] **Step 3: Implement.** In `scope_lock.run`, right after `path = os.path.realpath(os.path.join(cwd, str(target)))`, add `if _in_scratchpad(path, event): return None` (the realpath already resolves symlinks, so a link out of the scratchpad is checked at its target). Update the module docstring's Edit/Write sentence: "...outside the active tasks' Scope globs (this session's Claude scratchpad excepted)".
+- [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS.
+- [ ] **Step 5: Commit** with a pathspec as `fix(scope-lock): Edit and Write may use this session's scratchpad (task 17)`.
