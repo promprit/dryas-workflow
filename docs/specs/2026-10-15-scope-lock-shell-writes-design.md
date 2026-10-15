@@ -13,6 +13,7 @@ Success:
 - Scope enforcement is no weaker than today's ask: out-of-scope shell writes are denied before they run when the target is readable, and caught at task return when it is not.
 - Each run ends with numbers and stored lessons that the next plan reads (section 7).
 - Full test suite passes in all three editions; `tools/release_check.py` passes.
+- **Better than Dryas 1.0, measured.** `tools/compare_v1.py` replays the regression corpus through Dryas 1.0's hook chain and this release's: this release asks 0 times (and no more than 1.0), denies every out-of-scope write (1.0 denied none of the shell ones), denies no in-scope work, and is not slower beyond run-to-run noise. `/tune` shows prompts per task next to the 1.0 baseline (0.04).
 
 ## 2. Evidence (2026-10-13..15)
 
@@ -26,6 +27,20 @@ Success:
 | Readable-target writes | rest | `sed -i FILE`, `> FILE`, `cp`/`mv`, `mkdir`, `touch`, `rm`, `tee`; many into the session scratchpad |
 
 `git add`/`git commit` and formatters through `pnpm`/`npx` never ask today.
+
+**Dryas 1.0 against 2.x (Jev logs; 1.0 era 2026-10-02..15 13:00, 2.x era 2026-10-15 13:00..16 00:15, about 11 hours):**
+
+| Measure | 1.0 | 2.x |
+| --- | --- | --- |
+| Prompts per task | 0.04 | 2.43 |
+| Prompts per day | 3.2 | 156.5 |
+| Scope-lock asks | 0 | 306 |
+| Gate asks per task | 0.037 | 0.054 |
+| Gate judged latency p50 / p95 | 553 / 769 ms | 562 / 823 ms |
+| Climbs per task | 0.02 | 0.00 |
+| Review rounds per branch (median) | 2 | 1 |
+
+The shell-write ask arrived in 1.0.2 (2026-10-13); the first one in the logs is 2026-10-15 13:02. 1.0 never looked at shell commands, so it asked less and caught less. Quality held (fewer climbs and review rounds); latency is about the same. This release must keep 2.x's enforcement and get prompts back to at most 1.0's level, and to 0 during runs.
 
 ## 3. Decisions (approved in brainstorm)
 
@@ -154,7 +169,7 @@ The user may not read code. Everything this design shows the user is written so 
 
 ## 6. Logging
 
-Every `scope.jsonl` record gets `kind` (`ask`, `deny`, `violation`) and `rule` (the detector or B rule that fired); gate records get `rule` (`planned`, `judge`, `orchestrator`, `run_deny`) where D applied. Scope and gate records both get `run: true|false` (whether `task_active(cwd)` held), which is what makes run prompts countable. `tune.delivery` splits today's `scope_denials` (which counts asks too) into `scope_asks`, `scope_denies`, `scope_violations`, and adds `run_prompts` = scope and gate records with `run: true` and decision `ask` (the target is 0).
+Every `scope.jsonl` record gets `kind` (`allow`, `deny`, `violation`; Bash writes that are allowed are logged too, which feeds the `inline_code` lesson) and `rule` (the detector or B rule that fired); gate records get `rule` (`planned`, `judge`, `orchestrator`, `run_deny`) where D applied. Scope and gate records both get `run: true|false` (whether `task_active(cwd)` held), which is what makes run prompts countable. `tune.delivery` splits today's `scope_denials` (which counts asks too) into `scope_asks`, `scope_denies`, `scope_violations`, and adds `run_prompts` = scope and gate records with `run: true` and decision `ask` (the target is 0).
 
 ## 7. Getting better after every run
 
@@ -177,6 +192,7 @@ At the end of a run the orchestrator:
 - `preflight`: each mode; missing log.
 - **Regression corpus** `claude/jev/tests/fixtures/scope_shell_corpus.jsonl`: about 200 real executor commands from 2026-10-13..15, paths rewritten to a fixture worktree, code bodies and messages trimmed, run through `redact.py` and checked by hand (its own plan task). Each line has the expected B outcome; the test asserts 0 asks.
 - Three-edition parity for every changed or new module (existing parity checks extended).
+- **1.0 comparison gate**: `tools/compare_v1.py` (section 1); the release does not ship if it fails.
 
 ## 10. Out of scope
 
@@ -184,4 +200,4 @@ Automatic revert; sandboxing interpreter code; changing `risky()`; per-command p
 
 ## 11. Rollout
 
-Minor release. After merge, upgrade the plugin cache in both accounts (`claude plugin marketplace update dryas-workflow`, `claude plugin update dryas@dryas-workflow`, `install/install.sh --yes --claude-dir <dir>`) and restart sessions. Check the next run's report: prompts should be 0.
+Bug-fix release 2.3.1. After merge, upgrade the plugin cache in both accounts (`claude plugin marketplace update dryas-workflow`, `claude plugin update dryas@dryas-workflow`, `install/install.sh --yes --claude-dir <dir>`) and restart sessions. Check the next run's report: prompts should be 0.
