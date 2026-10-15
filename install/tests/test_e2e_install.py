@@ -38,7 +38,9 @@ class E2ETest(unittest.TestCase):
         self.env["CODEX_HOME"] = str(self.home / ".codex")
         self.env.update(HOME=str(self.home), USERPROFILE=str(self.home), PATH=str(fb) + os.pathsep + os.environ["PATH"],
                         JEV_LOG_DIR=str(self.tmp / "logs"), JEV_HANDOFF_DIR=str(self.tmp / "handoff"),
-                        JEV_COMPACT_DIR=str(self.tmp / "compact"))
+                        JEV_COMPACT_DIR=str(self.tmp / "compact"),
+                        # CI runs the Jev suite directly; a nested run in every install multiplied its timing flakes
+                        DRYAS_VERIFY_SKIP_TESTS="1")
 
     def tearDown(self):
         shutil.rmtree(str(self.tmp), ignore_errors=True)

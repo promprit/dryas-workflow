@@ -37,6 +37,31 @@ class ScopeSmokeTest(unittest.TestCase):
         self.assertTrue(di.scope_smoke(REPO_INSTALL.parent / "codex" / "jev" / "chain.py", {}, harness="codex"))
 
 
+class JevTestsStepTest(unittest.TestCase):
+    """verify's Jev test step: runs the suite by default; DRYAS_VERIFY_SKIP_TESTS=1 skips it (the e2e tests set it,
+    because CI runs that suite directly and a nested run multiplies every timing flake)."""
+    def setUp(self):
+        self.tdir = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(str(self.tdir), ignore_errors=True))
+        self.calls = []
+        real_run = di.run
+        di.run = lambda argv, **kw: self.calls.append(argv) or 0
+        self.addCleanup(setattr, di, "run", real_run)
+        self.addCleanup(os.environ.pop, "DRYAS_VERIFY_SKIP_TESTS", None)
+
+    def test_runs_by_default(self):
+        os.environ.pop("DRYAS_VERIFY_SKIP_TESTS", None)
+        self.assertEqual(di.jev_tests(self.tdir)[0], "PASS")
+        self.assertTrue(any("pytest" in a for argv in self.calls for a in argv))
+
+    def test_env_skips_the_suite(self):
+        os.environ["DRYAS_VERIFY_SKIP_TESTS"] = "1"
+        status, name, detail = di.jev_tests(self.tdir)
+        self.assertEqual((status, name), ("SKIP", "Jev tests"))
+        self.assertIn("DRYAS_VERIFY_SKIP_TESTS", detail)
+        self.assertEqual(self.calls, [])
+
+
 class InstallTest(unittest.TestCase):
     def setUp(self):
         self.repo = fixture_repo()
