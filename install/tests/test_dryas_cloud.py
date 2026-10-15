@@ -5,11 +5,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import cloud_fixtures as fx
+sys.path.insert(0, str(fx.ROOT / "tools"))
 
 SETTINGS = '{\n    "permissions": {"allow": ["Bash(make test)"]},\n    "env": {"FOO": "1"}\n}\n'
 MCP = '{"mcpServers": {"docs": {"command": "docs-server"}}}\n'
@@ -330,6 +332,151 @@ class CloudCliGapTest(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertIn("kept hand-edited .dryas/memory/notes/.gitkeep", out)
         self.assertEqual(keep.read_text(encoding="utf-8"), "mine\n")
+
+
+class ReconcileTest(unittest.TestCase):
+    """Interrogate fixes: keep what a run cannot rebuild, shrinkable options, remembered confirmations, atomic
+    writes with the manifest last, and no write outside the repo."""
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(self.base), True)
+        self.repo = fx.git_repo(self.base / "repo", FILES)
+        self.cfg = self.base / "no-config"
+
+    def cli(self, *args):
+        return fx.run_cli(list(args) + ["--repo", str(self.repo), "--claude-dir", str(self.cfg)])
+
+    def ok(self, *args):
+        rc, out = self.cli(*args)
+        self.assertEqual(rc, 0, out)
+        fx.commit_all(self.repo)
+        return out
+
+    def man(self):
+        return json.loads((self.repo / ".dryas/manifest.json").read_text(encoding="utf-8"))
+
+    def test_update_keeps_a_skill_it_could_not_rebuild(self):
+        # defect: update on a machine without the design plugins deletes the committed design skills
+        self.cfg = fx.design_config(self.base)
+        self.ok("init", "--yes", "--with-design")
+        skill = self.repo / ".claude/skills/impeccable/SKILL.md"
+        data = skill.read_bytes()
+        self.cfg = self.base / "no-config"
+        for extra in ((), ("--force",)):
+            out = self.ok("update", "--yes", *extra)
+            self.assertIn("kept .claude/skills/impeccable/SKILL.md, could not rebuild: not installed", out)
+            self.assertEqual(skill.read_bytes(), data)
+            self.assertIn(".claude/skills/impeccable/SKILL.md", self.man()["files"])
+        rc, out = self.cli("check")
+        self.assertEqual(rc, 0, out)
+
+    def test_dropping_an_option_is_how_update_removes(self):
+        # defect: options only grow, so a design, own or memory copy can never be removed short of remove
+        self.cfg = fx.design_config(self.base)
+        fx.own_skill(self.cfg, "notes", "---\nname: notes\ndescription: d\n---\nWrite notes.\n")
+        self.ok("init", "--yes", "--with-design", "--with-own", "notes", "--persist-memory")
+        self.assertTrue((self.repo / ".claude/skills/notes/SKILL.md").is_file())
+        self.ok("update", "--yes", "--no-design", "--without-own", "notes", "--no-persist-memory")
+        for rel in (".claude/skills/impeccable", ".claude/skills/notes", ".dryas/memory/notes/.gitkeep",
+                    ".dryas/licenses/impeccable-LICENSE"):
+            self.assertFalse((self.repo / rel).exists(), rel)
+        opts = self.man()["options"]
+        self.assertEqual((opts["design"], opts["own"], opts["persist_memory"]), (False, [], False))
+        self.assertEqual(self.cli("check")[0], 0)
+
+    def test_confirmed_own_skill_is_remembered_until_its_hits_change(self):
+        # defect: every update drops a confirmed own skill unless --confirm-own is passed again
+        self.cfg = self.base / "cfg"
+        src = fx.own_skill(self.cfg, "deploy", "---\nname: deploy\n---\napi_key: example-value-123\n")
+        self.ok("init", "--yes", "--with-own", "deploy", "--confirm-own", "deploy")
+        copy = self.repo / ".claude/skills/deploy/SKILL.md"
+        self.assertTrue(copy.is_file())
+        self.assertIn("deploy", self.man()["options"]["confirmed"])
+        rc, out = self.cli("update", "--yes")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Nothing to change.", out)
+        src.write_text("---\nname: deploy\n---\napi_key: another-value-456\n", encoding="utf-8")
+        out = self.ok("update", "--yes")
+        self.assertIn("kept .claude/skills/deploy/SKILL.md, could not rebuild: secret-shaped text", out)
+        self.assertIn("example-value-123", copy.read_text(encoding="utf-8"))
+        self.ok("update", "--yes", "--confirm-own", "deploy")
+        self.assertIn("another-value-456", copy.read_text(encoding="utf-8"))
+
+    def test_writes_go_through_replace_with_the_manifest_last(self):
+        import dryas_cloud as dc
+        seen = []
+        real_replace, real_unlink = os.replace, os.unlink
+        root = str(self.repo.resolve()) + os.sep
+
+        def note(kind, p):
+            p = os.path.realpath(str(p))
+            if p.startswith(root) and not p.endswith(".tmp"):
+                seen.append((kind, p[len(root):].replace(os.sep, "/")))
+
+        def replace(src, dst):
+            note("w", dst)
+            real_replace(src, dst)
+
+        def unlink(p, *a, **k):
+            note("d", p)
+            real_unlink(p, *a, **k)
+
+        with unittest.mock.patch.object(dc.os, "replace", replace), unittest.mock.patch.object(dc.os, "unlink", unlink):
+            self.ok("init", "--yes")
+            self.assertEqual(seen[-1], ("w", ".dryas/manifest.json"))
+            self.assertIn(("w", ".dryas/jev/gate.py"), seen)
+            seen.clear()
+            self.ok("remove", "--yes")
+            self.assertEqual(seen[-1], ("d", ".dryas/manifest.json"))
+        self.assertEqual([r for r in fx.snapshot(self.repo) if r.endswith(".tmp")], [])
+
+    def test_a_failed_write_reports_and_leaves_no_manifest(self):
+        import dryas_cloud as dc
+        real = os.replace
+
+        def replace(src, dst):
+            if Path(dst).name == "gate.py":
+                raise OSError(28, "No space left on device")
+            real(src, dst)
+
+        with unittest.mock.patch.object(dc.os, "replace", replace):
+            rc, out = self.cli("init", "--yes")
+        self.assertEqual(rc, 1, out)
+        self.assertRegex(out, r"dryas cloud: error: .*No space left on device.* \(nothing more changed\)")
+        self.assertFalse((self.repo / ".dryas/manifest.json").exists())
+        self.assertEqual([r for r in fx.snapshot(self.repo) if r.endswith(".tmp")], [])
+
+    def test_preflight_rejects_a_target_outside_the_repo(self):
+        # defect: a symlinked .claude, .dryas, settings.json or skill folder makes the run write outside the repo
+        outside = self.base / "outside"
+        outside.mkdir()
+        (outside / "settings.json").write_text(SETTINGS, encoding="utf-8")
+        cases = ((".claude/settings.json", outside / "settings.json"), (".dryas", outside),
+                 (".claude", outside))
+        for rel, target in cases:
+            link = self.repo / rel
+            saved = None
+            if link.is_dir() and not link.is_symlink():
+                saved = self.base / "saved"
+                shutil.move(str(link), str(saved))
+            elif link.exists():
+                link.unlink()
+            link.symlink_to(target)
+            fx.commit_all(self.repo)
+            before = fx.snapshot(outside)
+            for extra in ((), ("--force",)):
+                rc, out = self.cli("init", "--yes", *extra)
+                self.assertEqual(rc, 1, (rel, out))
+                self.assertIn("outside the repo", out)
+                self.assertEqual(fx.snapshot(outside), before, rel)
+                self.assertFalse((self.repo / ".dryas/manifest.json").exists())
+            link.unlink()
+            if saved is not None:
+                shutil.move(str(saved), str(link))
+            elif rel in FILES:
+                link.write_text(FILES[rel], encoding="utf-8")
+            fx.commit_all(self.repo)
 
 
 if __name__ == "__main__":

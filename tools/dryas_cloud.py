@@ -3,19 +3,24 @@
 
   dryas_cloud.py init   [--repo PATH] [--yes] [--force] [--prefix P] [--with-design] [--with-own NAME]...
                         [--confirm-own NAME]... [--persist-memory] [--claude-dir DIR]
-  dryas_cloud.py update [the same options; options left out keep what the manifest records]
+  dryas_cloud.py update [the same options, and --no-design, --without-own NAME..., --no-persist-memory;
+                        options left out keep what the manifest records]
   dryas_cloud.py check  [--repo PATH] [--claude-dir DIR]
   dryas_cloud.py remove [--repo PATH] [--yes] [--force]
 
 Also reached as `install.sh --repo PATH` / `install.ps1 -Repo PATH` (init), `dryas cloud ...` and /dryas-cloud.
 init, update and remove always print the dry run (every file added, changed or removed, with sizes) and write only
 with --yes. Nothing is committed: a run ends with the `git add` line and a suggested message. Preflight: the root of
-a git work tree, Python 3.9+, and no uncommitted changes in the paths the run writes (--force skips that check)."""
+a git work tree, Python 3.9+, every path inside the repo (no symlink out), and no uncommitted changes in the paths the
+run writes (--force skips that check). Update keeps what it could not rebuild this run (a skipped skill); only
+dropping an option removes that option's files. Each file is replaced atomically, the manifest last."""
 import argparse
 import json
 import os
 import re
+import secrets
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -43,10 +48,15 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--yes", action="store_true", help="write; without it the run is a dry run")
     ap.add_argument("--force", action="store_true", help="write over uncommitted changes and hand edits")
     ap.add_argument("--prefix", default=None, help="rename the Dryas copies, for example dryas-")
-    ap.add_argument("--with-design", action="store_true", default=None)
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--with-design", dest="design", action="store_true", default=None)
+    g.add_argument("--no-design", dest="design", action="store_false", default=None)
     ap.add_argument("--with-own", action="append", default=None, metavar="NAME")
+    ap.add_argument("--without-own", action="append", default=None, metavar="NAME")
     ap.add_argument("--confirm-own", action="append", default=None, metavar="NAME")
-    ap.add_argument("--persist-memory", action="store_true", default=None)
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--persist-memory", dest="persist_memory", action="store_true", default=None)
+    g.add_argument("--no-persist-memory", dest="persist_memory", action="store_false", default=None)
     ap.add_argument("--claude-dir", default=None)
     a = ap.parse_args(argv)
     if a.prefix is not None and not _PREFIX.match(a.prefix):
@@ -58,15 +68,36 @@ def claude_dir(a: argparse.Namespace) -> Path:
     return Path(a.claude_dir or os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude"))
 
 
-def options(a: argparse.Namespace, old: Any = None) -> Dict[str, Any]:
+def hits_sha(src: Path) -> str:
+    """sha256 of an own skill's redaction hits (place and text), so a confirmation lasts until they change."""
+    parts = []
+    for hit in cp._secret_lines(src):
+        rel, n = hit.rsplit(":", 1)
+        lines = (src / rel).read_text(encoding="utf-8").splitlines()
+        parts.append("%s\0%s" % (hit, lines[int(n) - 1]))
+    return cc.sha256("\n".join(parts).encode("utf-8"))
+
+
+def options(a: argparse.Namespace, cdir: Path, old: Any = None) -> Dict[str, Any]:
     old = old if isinstance(old, dict) else {}
+    drop = set(a.without_own or [])
     own = [str(n) for n in old.get("own") or []]
     for n in a.with_own or []:
         if n not in own:
             own.append(n)
+    own = [n for n in own if n not in drop]
+    was = old.get("confirmed") if isinstance(old.get("confirmed"), dict) else {}
+    confirmed = {}
+    for n in own:
+        src = cdir / "skills" / n
+        if (n in (a.confirm_own or []) or n in was) and src.is_dir():
+            h = hits_sha(src)
+            if n in (a.confirm_own or []) or was[n] == h:
+                confirmed[n] = h
+    pick = (lambda new, key: bool(old.get(key)) if new is None else new)
     return dict(prefix=a.prefix if a.prefix is not None else str(old.get("prefix") or ""),
-                design=bool(a.with_design or old.get("design")), own=own, confirm_own=list(a.confirm_own or []),
-                persist_memory=bool(a.persist_memory or old.get("persist_memory")))
+                design=pick(a.design, "design"), own=own, confirm_own=sorted(confirmed), confirmed=confirmed,
+                persist_memory=pick(a.persist_memory, "persist_memory"))
 
 
 def _git(repo: Path, *args: str) -> Tuple[int, str]:
@@ -94,6 +125,7 @@ def roots(rels: Iterable[str]) -> List[str]:
 
 
 def preflight(repo: Path, rels: Iterable[str], force: bool) -> List[str]:
+    """Problems that stop a run: wrong place, a path that leaves the repo, uncommitted changes (unless force)."""
     if sys.version_info < (3, 9):
         return ["dryas cloud needs Python 3.9 or newer"]
     rc, out = _git(repo, "rev-parse", "--show-toplevel")
@@ -104,11 +136,14 @@ def preflight(repo: Path, rels: Iterable[str], force: bool) -> List[str]:
         return ["%s is not the repo root; run it on %s (cloud sessions read .claude/ and CLAUDE.md there)"
                 % (repo, top)]
     rels = list(rels)
+    out_of = sorted(r for r in rels if top not in (repo / r).resolve().parents)
+    if out_of:
+        return ["%s would be written outside the repo (a symlink leads out); nothing changed"
+                % ", ".join(roots(out_of))]
     if force or not rels:
         return []
     rc, out = _git(repo, "status", "--porcelain", "--", *roots(rels))
-    # __pycache__ is generated (a skill's scripts make one under .claude/skills/, outside the ignored .dryas/)
-    dirty = [line[3:] for line in out.splitlines() if line.strip() and "__pycache__" not in line[3:].split("/")]
+    dirty = [line[3:] for line in out.splitlines() if line.strip()]
     if dirty:
         return ["uncommitted changes in %s; commit or stash them, or re-run with --force" % ", ".join(dirty)]
     return []
@@ -171,7 +206,8 @@ def manifest_bytes(plan: Dict[str, Any], records: Dict[str, Any], opts: Dict[str
     files.update(kept)  # a kept hand edit keeps its old record, so check goes on reporting the drift
     shas = {r: str((f or {}).get("sha256")) for r, f in files.items()}
     m = dict(format=1, dryas=dict(version=plan["version"], commit=plan["commit"], files_hash=cc.files_hash(shas)),
-             options={k: opts[k] for k in ("prefix", "design", "own", "persist_memory")}, files=files, config=records)
+             options={k: opts[k] for k in ("prefix", "design", "own", "confirmed", "persist_memory")}, files=files,
+             config=records)
     return (json.dumps(m, indent=1, sort_keys=True) + "\n").encode("utf-8")
 
 
@@ -201,18 +237,26 @@ def show(repo: Path, changes: Changes, trash: List[Path]) -> None:
 
 
 def write(repo: Path, changes: Changes, execs: List[str]) -> None:
+    """Delete, or write each file to a temp file in its folder and os.replace it in, so a crash never leaves half a
+    file."""
     for rel in sorted(changes):
         p, data = repo / rel, changes[rel]
         if data is None:
             if p.is_file():
-                p.unlink()
+                os.unlink(str(p))
             continue
         p.parent.mkdir(parents=True, exist_ok=True)
-        with open(p, "wb") as f:
-            f.write(data)
-    if os.name != "nt":
-        for rel in execs:
-            os.chmod(str(repo / rel), 0o755)
+        tmp = p.parent / (".%s.%s.tmp" % (p.name, secrets.token_hex(4)))
+        try:
+            fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            if os.name != "nt" and (rel in execs or p.is_file()):
+                os.chmod(str(tmp), 0o755 if rel in execs else stat.S_IMODE(p.stat().st_mode))
+            os.replace(str(tmp), str(p))
+        finally:
+            if tmp.exists():
+                os.unlink(str(tmp))
 
 
 def prune(repo: Path, rels: Iterable[str]) -> None:
@@ -245,9 +289,11 @@ def run(a: argparse.Namespace, repo: Path, changes: Changes, plan: Optional[Dict
         return 0
     files = (plan or {}).get("files", {})
     execs = sorted(r for r, e in files.items() if e.get("exec") and changes.get(r) is not None)
-    write(repo, changes, execs)
+    write(repo, {r: v for r, v in changes.items() if r != cc.MANIFEST}, execs)
     for d in trash:
         shutil.rmtree(str(d), ignore_errors=True)
+    if cc.MANIFEST in changes:  # last: an interrupted run leaves the old manifest (or none on init)
+        write(repo, {cc.MANIFEST: changes[cc.MANIFEST]}, [])
     prune(repo, [r for r, v in changes.items() if v is None] + [d.relative_to(repo).as_posix() for d in trash])
     print("Nothing committed. To commit:")
     print("  git add -A -- %s" % " ".join(roots(changes)))
@@ -266,23 +312,80 @@ def _manifest(repo: Path) -> Dict[str, Any]:
         raise cfg.CloudError("%s is unreadable (%s); nothing changed" % (cc.MANIFEST, e))
 
 
-def _plan(a: argparse.Namespace, opts: Dict[str, Any]) -> Dict[str, Any]:
+def _component(rec: Any) -> List[str]:
+    """The plan's skip names a manifest record belongs to: an own skill, a design plugin or one of its skills."""
+    src = str((rec or {}).get("source") or "")
+    if src.startswith("own:"):
+        return [src[4:]]
+    if src.startswith("plugin:"):
+        pid, _, rest = src[7:].partition("/")
+        return [pid, pid + "/" + rest.rsplit("/", 1)[-1]]
+    return []
+
+
+def _why_skipped(rec: Any, skipped: Dict[str, str]) -> Optional[str]:
+    return next((skipped[k] for k in _component(rec) if k in skipped), None)
+
+
+def reconcile(repo: Path, old_files: Dict[str, Any], plan_files: Dict[str, Any], skipped: Iterable[Tuple[str, str]],
+              force: bool) -> Tuple[Changes, Dict[str, Tuple[Any, str]], List[str]]:
+    """(changes, kept {rel: (manifest record, note)}, clashes) for init (old {}), update and remove (plan {}).
+    A file of a component the plan skipped this run is kept even with force: only dropping its option removes it."""
+    why = dict(skipped)
+    changes: Changes = {}
+    kept: Dict[str, Tuple[Any, str]] = {}
+    clashes: List[str] = []
+    for rel, e in sorted(plan_files.items()):
+        cur = cc.file_sha(str(repo / rel))
+        if rel in old_files:
+            if cur is not None and cur != (old_files[rel] or {}).get("sha256") and not force:
+                kept[rel] = (old_files[rel], "kept hand-edited %s (drift; --force replaces it)" % rel)
+            else:
+                changes[rel] = e["data"]
+        elif cur is not None and cur != cc.sha256(e["data"]):
+            clashes.append(rel)
+        else:
+            changes[rel] = e["data"]
+    for rel, rec in sorted(old_files.items()):
+        cur = cc.file_sha(str(repo / rel))
+        if rel in plan_files or cur is None:
+            continue
+        reason = _why_skipped(rec, why)
+        if reason is not None:
+            kept[rel] = (rec, "kept %s, could not rebuild: %s" % (rel, reason))
+        elif cur == (rec or {}).get("sha256") or force:
+            changes[rel] = None
+        else:
+            kept[rel] = (rec, "kept hand-edited %s (--force removes it)" % rel)
+    return changes, kept, clashes
+
+
+def _plan(a: argparse.Namespace, repo: Path, opts: Dict[str, Any], old: Optional[Dict[str, Any]] = None
+          ) -> Dict[str, Any]:
+    """The copy plan. Files of an old component skipped this run count for NOTICE and VERSION (update keeps them)."""
     plan = cp.build(ROOT, opts, claude_dir(a))
+    why = dict(plan["skipped"])
+    carry = [r for r, rec in (old or {}).items() if r not in plan["files"] and _why_skipped(rec, why) is not None
+             and (repo / r).is_file()]
+    for r in carry:
+        plan["files"][r] = dict(data=(repo / r).read_bytes(), notice=str((old or {})[r].get("notice") or ""))
     cp.finish(plan)
+    for r in carry:
+        del plan["files"][r]
     return plan
 
 
 def init(a: argparse.Namespace, repo: Path) -> int:
     if (repo / cc.MANIFEST).exists():
         raise cfg.CloudError("this repo already has a Dryas copy (%s); use update or remove" % cc.MANIFEST)
-    opts = options(a)
-    plan = _plan(a, opts)
+    opts = options(a, claude_dir(a))
+    plan = _plan(a, repo, opts)
     skill_dirs = sorted({"/".join(r.split("/")[:3]) for r in plan["files"] if r.startswith(".claude/skills/")})
     clashes = [r for r in plan["files"] if (repo / r).exists()] + [d for d in skill_dirs if (repo / d).exists()]
     if clashes:
         raise cfg.CloudError(clash_message(clashes))
     texts, records, notes = config_new(repo, plan, {})
-    changes: Changes = {r: e["data"] for r, e in plan["files"].items()}
+    changes = reconcile(repo, {}, plan["files"], plan["skipped"], a.force)[0]
     changes.update(_bytes(texts))
     changes[cc.MANIFEST] = manifest_bytes(plan, records, opts, {})
     notes = (["skipped %s: %s" % s for s in plan["skipped"]] + ["not copied: %s (%s)" % n for n in cp.NOT_COPIED]
@@ -292,53 +395,22 @@ def init(a: argparse.Namespace, repo: Path) -> int:
 
 def update(a: argparse.Namespace, repo: Path) -> int:
     man = _manifest(repo)
-    opts = options(a, man.get("options"))
-    plan = _plan(a, opts)
-    old = man["files"]
-    changes: Changes = {}
-    kept: Dict[str, Any] = {}
-    clashes: List[str] = []
-    for rel, e in sorted(plan["files"].items()):
-        cur = cc.file_sha(str(repo / rel))
-        if rel in old:
-            if cur is not None and cur != (old[rel] or {}).get("sha256") and not a.force:
-                kept[rel] = old[rel]
-            else:
-                changes[rel] = e["data"]
-        elif cur is not None and cur != cc.sha256(e["data"]):
-            clashes.append(rel)
-        else:
-            changes[rel] = e["data"]
+    opts = options(a, claude_dir(a), man.get("options"))
+    plan = _plan(a, repo, opts, man["files"])
+    changes, kept, clashes = reconcile(repo, man["files"], plan["files"], plan["skipped"], a.force)
     if clashes:
         raise cfg.CloudError(clash_message(clashes))
-    for rel, e in sorted(old.items()):
-        cur = cc.file_sha(str(repo / rel))
-        if rel in plan["files"] or cur is None:
-            continue
-        if cur == (e or {}).get("sha256") or a.force:
-            changes[rel] = None
-        else:
-            kept[rel] = e
     texts, records, cnotes = config_new(repo, plan, man.get("config") or {})
     changes.update(_bytes(texts))
-    changes[cc.MANIFEST] = manifest_bytes(plan, records, opts, kept)
-    notes = ["kept hand-edited %s (drift; --force replaces it)" % r for r in sorted(kept)]
+    changes[cc.MANIFEST] = manifest_bytes(plan, records, opts, {r: k[0] for r, k in kept.items()})
+    notes = [kept[r][1] for r in sorted(kept)]
     notes += ["skipped %s: %s" % s for s in plan["skipped"]] + cnotes
     return run(a, repo, changes, plan, notes, "chore: update the Dryas cloud copy to %s" % plan["version"])
 
 
 def remove(a: argparse.Namespace, repo: Path) -> int:
     man = _manifest(repo)
-    changes: Changes = {}
-    kept: List[str] = []
-    for rel, e in sorted(man["files"].items()):
-        cur = cc.file_sha(str(repo / rel))
-        if cur is None:
-            continue
-        if cur == (e or {}).get("sha256") or a.force:
-            changes[rel] = None
-        else:
-            kept.append(rel)
+    changes, kept, _ = reconcile(repo, man["files"], {}, (), a.force)
     changes.update(_bytes(config_undo(repo, man.get("config") or {})))
     changes[cc.MANIFEST] = None
     state = repo / ".dryas" / "state"
@@ -347,7 +419,7 @@ def remove(a: argparse.Namespace, repo: Path) -> int:
     for b in sorted(bases):
         if (repo / b).is_dir():
             trash += [p for p in sorted((repo / b).rglob("__pycache__")) if p.is_dir() and state not in p.parents]
-    notes = ["kept hand-edited %s (--force removes it)" % r for r in kept]
+    notes = [kept[r][1] for r in sorted(kept)]
     if any((repo / ".dryas" / "memory" / "notes").glob("*.md")):
         notes.append("kept .dryas/memory/notes/*.md (memory notes are the repo's own work)")
     return run(a, repo, changes, None, notes, "chore: remove the Dryas cloud copy", trash)
@@ -360,7 +432,7 @@ def check(a: argparse.Namespace, repo: Path) -> int:
     except (OSError, ValueError):
         man = None
     if man is not None:
-        plan = cp.build(ROOT, options(a, man.get("options")), claude_dir(a))
+        plan = cp.build(ROOT, options(a, claude_dir(a), man.get("options")), claude_dir(a))
         old = man["files"]
         stale = sorted(r for r, e in plan["files"].items()
                        if e["group"] == "dryas" and (old.get(r) or {}).get("sha256") != cc.sha256(e["data"]))
@@ -390,6 +462,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return {"init": init, "update": update, "remove": remove}[a.cmd](a, repo)
     except cfg.CloudError as e:
         print("dryas cloud: %s" % e, file=sys.stderr)
+        return 1
+    except OSError as e:
+        print("dryas cloud: error: %s (nothing more changed)" % e, file=sys.stderr)
         return 1
 
 
