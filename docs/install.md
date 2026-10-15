@@ -250,9 +250,9 @@ OpenCode 1.18 or newer is required; setup checks `opencode --version` before it 
 <dir>/agent/dryas-executor-*.md    model: from the tier map
 ```
 
-Setup never edits `opencode.json`. The plugin adds the `jev` MCP server and the permission settings when OpenCode loads it. Setup refuses to overwrite a file it did not write and names it. Without `--tier-*` flags every executor tier uses the same model; give each tier its own model to get the ladder.
+Setup never edits `opencode.json`. The plugin adds the `jev` MCP server when OpenCode loads it. Dryas never changes OpenCode's permission settings; a gate `ask` blocks the call and you allow it once with `dryas allow <code>` (see [harnesses.md](harnesses.md#opencode)). Setup refuses to overwrite a file it did not write and names it. Without `--tier-*` flags every executor tier uses the same model; give each tier its own model to get the ladder.
 
-OpenCode runs a copy, so re-run setup after `git pull`. A file you edited is kept as `<name>.dryas-old` on a re-run. Remove Dryas with `install/install.sh --uninstall --harness opencode`: it removes the files whose hashes still match `install.json` and keeps and names the ones you edited. Check the install with `python3 tools/release_check.py --opencode-dir DIR`.
+OpenCode runs a copy, so re-run setup after `git pull`. A file you edited is kept as `<name>.dryas-old` on a re-run; an earlier `.dryas-old` copy is not overwritten (the next one is `.dryas-old.<n>`). Setup keeps other installs' component choices, and an interrupted setup can be re-run. Remove Dryas with `install/install.sh --uninstall --harness opencode`: it removes the files whose hashes still match `install.json` and keeps and names the ones you edited, and keeps `accounts.json` when it cannot read it. Check the install with `python3 tools/release_check.py --opencode-dir DIR`.
 
 ## The API key
 

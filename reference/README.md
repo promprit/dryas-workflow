@@ -47,7 +47,7 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | Rule | CC | CX | OC | How |
 | --- | --- | --- | --- | --- |
 | WF-1 | met | met | met | `/orchestrate` skill; `$dryas:orchestrate` in Codex. OpenCode: `/orchestrate` command and `dryas-orchestrate` skill |
-| WF-2 | met | met | met (headless `opencode run` rejects asks) | Brainstorm-first rule in the always-loaded rules; `dryas:brainstorm`. OpenCode: the rules and `dryas-brainstorm` ask the user for approval |
+| WF-2 | met | met | met (headless `opencode run` cannot approve) | Brainstorm-first rule in the always-loaded rules; `dryas:brainstorm`. OpenCode: the rules and `dryas-brainstorm` ask the user for approval; a gate `ask` blocks until the user replies `dryas allow <code>` |
 | WF-3 | met | met | met | `dryas:brainstorm` writes the design doc before orchestration. OpenCode: `dryas-brainstorm` skill |
 | WF-4 | met | met | met | Rules: single-file fix runs plainly; review still applies. OpenCode: the rules, injected by the plugin |
 | WF-5 | met | met | met | `claude/CLAUDE.md.template`, injected by the plugin's SessionStart hook; `codex/AGENTS.md.template`, injected by the Codex plugin's SessionStart hook. OpenCode: `dryas.ts` injects `opencode/dryas/AGENTS.md.template` through the system-prompt hook |
@@ -60,10 +60,10 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | GOV-1 | met | met | met | `Scope:` in each plan section. OpenCode: `Scope:` in each plan section |
 | GOV-2 | partial | partial | partial | Hook denies Edit/Write (and Codex `apply_patch`); shell-command edits are a known limit. OpenCode: `dryas.ts` throws in `tool.execute.before` for edit, write and patch tools; shell-command edits are a known limit |
 | GOV-3 | met | met | met | Rule in always-loaded rules. OpenCode: rule in the injected rules |
-| GOV-4 | met | met | met (headless `opencode run` rejects asks) | Rule in always-loaded rules; installer dry-runs and backs up. OpenCode: rule in the injected rules; installer dry-runs, and setup never edits `opencode.json` |
+| GOV-4 | met | met | met (headless `opencode run` cannot approve) | Rule in always-loaded rules; installer dry-runs and backs up. OpenCode: rule in the injected rules; installer dry-runs, and setup never edits `opencode.json`; an `ask` needs the user's `dryas allow <code>` |
 | GOV-5 | met | met | met | `/commit` never pushes. OpenCode: `/commit` never pushes |
 | GOV-6 | met | met | met | The judge (local or Jev) answers only; thresholds in `~/.dryas/jev/thresholds.json`. OpenCode: the same judge and thresholds |
-| GOV-7 | met | met | met (headless `opencode run` rejects asks) | `gate.py` never allows, with either judge; fails to no decision. OpenCode: `dryas.ts` turns a gate `ask` into an OpenCode permission prompt and never allows; a failure gives no decision. A user's own `"ask"` rule for `edit` or `bash` stops Dryas answering that key |
+| GOV-7 | met | met | met (headless `opencode run` cannot approve) | `gate.py` never allows, with either judge; fails to no decision. OpenCode: `dryas.ts` blocks a gate `ask` with a reason and a 4-hex code and never allows by itself; only the user's `dryas allow <code>` in a root session allows that call once. It never changes OpenCode's permission settings; a failure gives no decision |
 | GOV-8 | met | met | met | Jev MCP `log_override` (`mcp__plugin_dryas_jev__log_override` in Claude Code). OpenCode: `jev_log_override` on the `jev` MCP server |
 | GOV-9 | met | met | met | `/tune` proposes; human approves each change. OpenCode: `/tune` proposes; human approves |
 | GOV-10 | met | met | met | Only the optional OpenRouter key (needed for `--judge jev` only), from `OPENROUTER_API_KEY` or the plugin option (Claude Code secure storage), never written by Dryas; `redact.py`. OpenCode: same key handling and `redact.py` |

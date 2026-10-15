@@ -8,7 +8,7 @@ People who use [OpenCode](https://opencode.ai) can run Dryas at full capacity: t
 
 Success means:
 
-- `install/install.sh --harness opencode` gives an OpenCode user the rules, the process skills, the commands, the `jev` MCP server (judge, memory, logging), the scope lock, the Jev gate with a real user prompt on `ask`, the executor agents with the fast → standard → strong → frontier ladder, the memory stages, compaction keep/restore, context warnings and `/handoff`.
+- `install/install.sh --harness opencode` gives an OpenCode user the rules, the process skills, the commands, the `jev` MCP server (judge, memory, logging), the scope lock, the Jev gate, where an `ask` blocks the call and the user allows it once with `dryas allow <code>`, the executor agents with the fast → standard → strong → frontier ladder, the memory stages, compaction keep/restore, context warnings and `/handoff`.
 - The conformance table in `reference/README.md` has an **OC** column; every `partial` names a capability OpenCode lacks (section 8), none names a choice we made.
 - A CI job runs a real OpenCode (pinned 1.18.x) end to end against a mock model, with no API key.
 - No Python port, no Node install for the user, the user's `opencode.json` is not edited by default.
@@ -22,7 +22,7 @@ Delivered in two steps from this one spec, one plan each (section 9).
 | Who it is for | OpenCode users; the maintainer does not dogfood it |
 | Target | Dryas Full; gaps only where OpenCode cannot carry a feature |
 | Approach | A thin TS plugin that calls the existing Python chain per event (B, a Python daemon, and C, a TS port, were rejected: more moving parts, or two implementations of the core) |
-| Ask | The plugin sets `edit`/`bash` to `"ask"` and answers OpenCode's permission request itself for allow; only the judge's `ask` reaches the user |
+| Ask | The plugin never reads or changes OpenCode's permission settings. A chain `ask` (judge or scope lock) blocks the call with the reason and a 4-hex code; the user allows that exact call once by typing `dryas allow <code>` in a root session. Codes in subagent prompts never approve |
 | Tier models | `--tier-fast/standard/strong/frontier <provider/model>`; unset tiers default to the user's configured `model`, with a warning that the ladder is flat |
 | Duplicate skills | Skills install as `dryas-<name>`; setup warns when Dryas skills are also visible from `~/.claude/skills` |
 | Version floor | `>=1.18`; CI pins 1.18.x, a weekly job runs the latest release |
@@ -39,7 +39,7 @@ Run against a mock OpenAI-compatible model, isolated XDG dirs, throwaway code.
 | Skills | `.opencode/skill/<name>/SKILL.md`, native `skill` tool | Verified. OpenCode also loads `~/.claude/skills` and `~/.agents/skills` on its own |
 | Commands | `command/*.md`; `command.execute.before` and `command.executed` fire | Verified |
 | Block a tool call | throw in `tool.execute.before`; the message reaches the model | Verified |
-| Ask the user | the `permission.ask` hook never fires in 1.18; the `permission.asked` event does, and the plugin can reply through `client.postSessionIdPermissionsPermissionId` | Verified under `opencode serve`; headless `opencode run` auto-rejects an unanswered request first |
+| Ask the user | no native prompt from a plugin: the `permission.ask` hook never fires in 1.18, and the v2 create-permission API gives no prompt (see below). The shim blocks and takes `dryas allow <code>` from the user's next message | Verified |
 | Agent identity | a subagent runs in a child session (`parentID`); `chat.params` and `message.updated` carry the agent name per session before its tools run | Verified |
 | Per-agent model | `model:` in the agent file | Verified |
 | PostToolUse | `tool.execute.after`; blocked and rejected calls get no after event | Verified |
@@ -57,6 +57,8 @@ Probed while planning (same setup, second run):
 | MCP server from the plugin | an `mcp.jev` entry added in the `config` hook connects (`opencode mcp list`: connected); its tools are named `jev_<tool>` (`jev_memory_search`, `jev_jev_judge`). Verified, so setup never edits `opencode.json` |
 | Token counts | `message.updated` carries `tokens.input`, `tokens.cache.read/write` from the stream's usage. Verified; `chat.params` `model.limit.context` gives the window |
 | Claude-style command frontmatter | unknown keys (`allowed-tools`, `argument-hint`) are ignored. Verified |
+
+**Why asks block (spike and interrogate).** OpenCode 1.18's v2 create-permission API evaluated a plugin request to allow and emitted no `permission.asked` event, so a plugin cannot raise a native prompt. The first design rewrote `edit` and `bash` to `"ask"` and answered the requests. Two interrogate reviewers found that this let Plan mode edit files and turned the user's inherited `deny` rules into auto-allows, so the design was dropped. OpenCode applies the last matching permission pattern, so an example with a catch-all writes it first, such as `{"*": "allow", "echo *": "ask"}`.
 
 ## 4. Layout
 
@@ -91,9 +93,9 @@ Each hook builds a Claude-shaped hook event and pipes it to `${DRYAS_PY} -X utf8
 
 | OpenCode hook | Chain call | Mapping | Step |
 |---|---|---|---|
-| `config` | none | gate on: `permission.edit` and `permission.bash` become `"ask"` unless the user set `"deny"`; adds the `jev` MCP server | 1 |
-| `tool.execute.before` | `pretool` | deny: throw `Error(reason)`; allow and ask: record by `callID` | 1 |
-| event `permission.asked` | none | by `callID`: recorded allow → reply `"once"`; recorded ask, or no record → leave to the user | 1 |
+| `config` | none | adds the `jev` MCP server; does not touch `permission` | 1 |
+| `tool.execute.before` | `pretool` | deny: throw `Error(reason)`; ask: throw `Error(reason + code)` and remember the call under its 4-hex code; allow: pass | 1 |
+| `chat.message` (root session) | none | text `dryas allow <code>` for a remembered ask: allow that exact call once; subagent sessions never count | 1 |
 | `chat.message` (user) | `prompt` | `additionalContext` added as a text part; block → the prompt's text parts replaced (section 3) | 1 |
 | `experimental.chat.system.transform` | `rules_inject.py --harness opencode` | output cached per process; on the first request of a session started by `/handoff`, also `handoff_restore.py` output | 1 (handoff: 2) |
 | `tool.execute.after` | `post` | as PostToolUse | 2 |
@@ -136,7 +138,7 @@ Setup writes a copy (re-run after `git pull`, as with Codex):
 - Mock-event tests (`install/tests/test_opencode_*.py`): the chain with `--harness opencode` on Claude-shaped events from shim fixtures. Scope lock with and without `agent_id`, `apply_patch` split, ask/allow/deny; step 2 adds context watch from `usage` and each observe stage.
 - Sync drift: `--check` covers `opencode/`; harness-name and skill-drift tests run on three targets.
 - Install: setup into a temp `--opencode-dir`, marker refusal, hash-guarded uninstall, version floor, `--purge` accounting.
-- End to end, real binary, no key: `install/tests/fixtures/mock_llm.py` (OpenAI-compatible, scripted tool calls) and a pytest driving `opencode serve` over HTTP with isolated XDG dirs. Step 1: an allowed write lands; an out-of-scope write is blocked and the reason reaches the model; an executor subagent is scope-locked; a judge `ask` stays pending until the test answers; `memory_search` works through MCP. Step 2: compaction context reaches the model; `post`, `stop` and `subagent-stop` reach the chain. Skipped when no `opencode` binary is found.
+- End to end, real binary, no key: `install/tests/fixtures/mock_llm.py` (OpenAI-compatible, scripted tool calls) and a pytest driving `opencode serve` over HTTP with isolated XDG dirs. Step 1: an allowed write lands; an out-of-scope write is blocked and the reason reaches the model; an executor subagent is scope-locked; a judge `ask` blocks until the test sends `dryas allow <code>`; `memory_search` works through MCP. Step 2: compaction context reaches the model; `post`, `stop` and `subagent-stop` reach the chain. Skipped when no `opencode` binary is found.
 
 **CI:** `ci.yml` gets an `opencode` job (ubuntu-latest, OpenCode 1.18.x) running the suite above. `latest-compat.yml` gets a weekly `latest-opencode` job. Mock-event and install tests also run in the existing three-OS matrix (they need no binary).
 
@@ -145,7 +147,7 @@ Setup writes a copy (re-run after `git pull`, as with Codex):
 ## 8. Known gaps (recorded as `partial`)
 
 - **SessionEnd:** OpenCode has no event when the TUI exits. `session.deleted` and plugin `dispose` cover the rest; `mem-session-end` also runs at `precompact` and `mem-notes` at `stop`, so a missed end loses at most the last turn's notes.
-- **Ask in headless runs:** `opencode run` rejects an unanswered permission request, so a judge `ask` is a deny there (Claude Code's `-p` behaves the same way).
+- **Ask in headless runs:** `opencode run` has no follow-up message, so nobody can send `dryas allow <code>` and an `ask` stays a block there (Claude Code's `-p` behaves the same way).
 - **Experimental hooks:** `experimental.chat.system.transform` and `experimental.session.compacting` may change; the weekly latest job catches it. If `system.transform` disappears, rules fall back to `AGENTS.md.template` installed as an `instructions` entry.
 
 ## 9. Delivery

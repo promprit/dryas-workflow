@@ -552,7 +552,7 @@ class OpenCodeSkillsTest(unittest.TestCase):
 
     def test_hand_skills_are_marked_and_named(self):
         for h in so.HAND:
-            text = (REPO / "opencode/skill/dryas-%s/SKILL.md" % h).read_text(encoding="utf-8")
+            text = (REPO / ("opencode/skill/dryas-%s/SKILL.md" % h)).read_text(encoding="utf-8")
             self.assertTrue(text.startswith("---\nname: dryas-%s\ndescription: " % h), h)
             self.assertIn(so.MARK, text)
             self.assertNotIn("mcp__", text)
@@ -2009,7 +2009,7 @@ class ReleaseCheckOpenCodeTest(unittest.TestCase):
             (od / "plugin/dryas.ts").write_text("x", encoding="utf-8")
             (od / "agent").mkdir()
             for t in ("fast", "standard", "strong", "frontier"):
-                (od / "agent/dryas-executor-%s.md" % t).write_text("model: p/same\n", encoding="utf-8")
+                (od / ("agent/dryas-executor-%s.md" % t)).write_text("model: p/same\n", encoding="utf-8")
             files = {"plugin/dryas.ts": hashlib.sha256(b"edited-later").hexdigest()}
             (od / "dryas/install.json").write_text(json.dumps({"files": files, "tiers": {}}), encoding="utf-8")
             rep, buf = rc.Report(), io.StringIO()
@@ -2204,3 +2204,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run the tests.** Run: `python -m pytest -q install/tests/test_opencode_docs.py install/tests/test_framework_docs.py && python -m pytest -q claude/jev/tests install/tests && python tools/sync_codex_plugin.py --check && python tools/inventory.py --check`. Expected: PASS; both checks exit 0.
 
 - [ ] **Step 5: Commit.** `git add reference/README.md reference/dryas.yaml docs/harnesses.md docs/install.md docs/roadmap.md README.md CHANGELOG.md install/tests/test_opencode_docs.py && git commit -m "docs(opencode): OpenCode edition docs and OC conformance column"`
+
+## Interrogate follow-up
+
+Two reviewers found problems with the ask design (Plan mode could edit, inherited denies became allows) plus setup and uninstall gaps. Tasks 12-15 of the run fix them: the shim blocks an ask and takes `dryas allow <code>`, setup keeps other installs' component choices, and the docs match. The test code above also had `Path / "x%s" % h` precedence bugs; they are parenthesised now.

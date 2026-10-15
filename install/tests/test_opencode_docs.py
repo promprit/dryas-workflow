@@ -22,6 +22,14 @@ class OpenCodeDocsTest(unittest.TestCase):
         self.assertIn("--harness opencode", (REPO / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("parked 2026-10-15", (REPO / "docs/roadmap.md").read_text(encoding="utf-8"))
 
+    def test_docs_describe_approval_code(self):
+        harn = (REPO / "docs/harnesses.md").read_text(encoding="utf-8")
+        self.assertIn("dryas allow", harn)
+        for rel in ("docs/harnesses.md", "docs/install.md", "reference/README.md"):
+            text = (REPO / rel).read_text(encoding="utf-8")
+            for phrase in ("answers OpenCode's permission", "becomes an OpenCode permission prompt", "stops Dryas answering"):
+                self.assertNotIn(phrase, text, rel)
+
 
 if __name__ == "__main__":
     unittest.main()

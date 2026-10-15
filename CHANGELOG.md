@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 - The OpenCode edition (core): `opencode/plugin/dryas.ts`, skills, commands and executor agents, with the `jev` MCP server. Memory hook stages, context warnings, compaction keep/restore and `/handoff` come in plan 2.
 - `install/install.sh --harness opencode|all` (and the same in `install.ps1`), `--opencode-dir` and `--tier-fast|standard|strong|frontier`.
+- OpenCode: a gate or scope-lock `ask` blocks the call with a 4-hex code, and the user allows it once with `dryas allow <code>`; Dryas never changes OpenCode's permission settings.
 - `tools/sync_opencode.py`, which generates the OpenCode files from the Claude Code sources.
 - An OpenCode check in `tools/release_check.py` (`--opencode-dir`) and OpenCode CI jobs.
 - An OC column in the conformance table (`reference/README.md`).
