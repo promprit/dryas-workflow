@@ -3,11 +3,13 @@
 
 Pure path check, no model call. Active only when a worktree has .orchestrate/active.json
 with a non-empty "active" list. While active it fails closed (unreadable PLAN.md -> deny,
-malformed hook input -> exit 2). Bash is never denied: a write-like command gets "ask",
-because shell writes are not covered by the file scope.
+malformed hook input -> exit 2). Bash: during a run an executor's shell write is denied when a target it
+names is outside the scope (scratch files in this session's Claude scratchpad excepted); other writes are allowed
+and audited at task return (scope_audit.py). Nothing here asks the user.
 """
 import json
 import os
+import re
 import sys
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +18,7 @@ import jevlog
 import planfile
 
 TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"}
+SCRATCH_BASE = ("/private/tmp/claude-%d" % os.getuid()) if hasattr(os, "getuid") else ""
 
 
 def find_root(start: str) -> Optional[str]:
@@ -99,49 +102,69 @@ def _log_deny(root: str, path: str) -> None:
     """Record a deny for GOV-M4. Never raises, never changes the decision."""
     try:
         rel = os.path.relpath(path, root).replace(os.sep, "/")
-        jevlog.append("scope", {"task": _active_ids(root), "path": rel, "decision": "deny"})
+        jevlog.append("scope", {"task": _active_ids(root), "path": rel, "decision": "deny",
+                                "kind": "deny", "rule": "file", "run": True})
     except Exception:
         pass
 
 
-def _shell_writes(cmd: str) -> bool:
-    """prescreen is imported here, not at module load: only Bash needs its regexes, and most events are file edits.
-    A broken or missing prescreen counts every command as a write while a task is active."""
+def _in_scratchpad(real: str, event: Dict[str, Any]) -> bool:
+    """True when `real` (a realpath) lies in this session's Claude Code scratchpad:
+    <SCRATCH_BASE>/<one dir>/<session_id>/scratchpad/... Off Claude, without a session id or base: False."""
+    sid = event.get("session_id")
+    if os.environ.get("DRYAS_HARNESS", "claude") != "claude" or not SCRATCH_BASE or not isinstance(sid, str) \
+            or not re.fullmatch(r"[0-9A-Za-z_-]{8,64}", sid):
+        return False
+    base = os.path.realpath(SCRATCH_BASE)
+    if not real.startswith(base + os.sep):
+        return False
+    parts = os.path.relpath(real, base).split(os.sep)
+    return len(parts) >= 4 and parts[1] == sid and parts[2] == "scratchpad"
+
+
+def _log_bash(ids: List[str], decision: str, rule: str) -> None:
     try:
-        import prescreen
-        return prescreen.writes(cmd)
+        jevlog.append("scope", {"task": ids, "tool": "Bash", "decision": decision, "kind": decision, "rule": rule,
+                                "run": True})
     except Exception:
-        return True
+        pass
 
 
-def _bash(ti: Dict[str, Any], cwd: str, has_agent_id: bool = False) -> Optional[Dict[str, Any]]:
-    """Ask for an executor's write-like shell command while a task is active; deny it when the command names
-    .orchestrate (the orchestrator's bookkeeping, see check). The orchestrator (no agent_id) is never asked: it edits
-    any file with Edit/Write anyway, and destructive commands still go to the Jev gate. Codex carries no worker
-    identity, so there every write-like command still asks."""
-    main_session = not has_agent_id and os.environ.get("DRYAS_HARNESS") != "codex"
-    if main_session or not task_active(cwd):
+def _bash(event: Dict[str, Any], ti: Dict[str, Any], cwd: str) -> Optional[Dict[str, Any]]:
+    """During a run, never ask: deny an executor's shell write when a target it names is outside the union Scope
+    (and outside this session's scratchpad), or when the command names .orchestrate; allow the rest, which
+    scope_audit.py checks at task return. The main session is not checked on Claude and OpenCode (it edits any
+    file with Edit/Write anyway); Codex has no worker identity, so there every session is checked."""
+    has_agent_id = "agent_id" in event
+    if (not has_agent_id and os.environ.get("DRYAS_HARNESS") != "codex") or not task_active(cwd):
         return None
     cmd = str(ti.get("command", ""))
-    if not _shell_writes(cmd):
-        return None
     root = find_root(cwd)
-    ids = _active_ids(os.path.realpath(root)) if root else []
-    if has_agent_id and ".orchestrate" in cmd.lower():
-        try:
-            jevlog.append("scope", {"task": ids, "tool": "Bash", "decision": "deny"})
-        except Exception:
-            pass
-        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                       "permissionDecisionReason": "scope lock: executors never write .orchestrate/ "
-                                                                   "(orchestrator bookkeeping)"}}
-    try:
-        jevlog.append("scope", {"task": ids, "tool": "Bash", "decision": "ask"})
-    except Exception:
-        pass
-    reason = ("scope lock: shell command looks like it writes files; shell writes are not covered by the file scope "
-              "of active task(s) %s - confirm it stays in scope" % ",".join(ids))
-    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask",
+    real_root = os.path.realpath(root) if root else ""
+    ids = _active_ids(real_root) if root else []
+    import shellwrites  # only Bash needs the parser; most events are file edits
+    a = shellwrites.analyse(cmd, cwd)
+    if not a.writes:
+        return None  # reads pass, .orchestrate/ included
+    bare = re.sub(r"['\"\\]", "", cmd).lower()  # quotes and backslashes cannot hide the name
+    if has_agent_id and any(k in bare for k in ("orchestr", "active.json", "approved.json")):
+        _log_bash(ids, "deny", "orchestrate")
+        return _deny("scope lock: executors never write .orchestrate/ (orchestrator bookkeeping)")
+    for p in a.paths:
+        real = os.path.realpath(p)
+        if _in_scratchpad(real, event):
+            continue
+        reason = check(real_root, real, has_agent_id) if root else "scope lock: %s is outside any worktree" % p
+        if reason:
+            _log_bash(ids, "deny", a.rule)
+            return _deny(reason + ". Use Edit/Write inside your Scope, put scratch files in your scratchpad, or "
+                                  "report `SCOPE: need <path> because <reason>`")
+    _log_bash(ids, "allow", a.rule)
+    return None
+
+
+def _deny(reason: str) -> Dict[str, Any]:
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                    "permissionDecisionReason": reason}}
 
 
@@ -154,7 +177,7 @@ def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         ti = {}
     cwd = event.get("cwd") or os.getcwd()
     if tool == "Bash":
-        return _bash(ti, str(cwd), "agent_id" in event)
+        return _bash(event, ti, str(cwd))
     target = ti.get("file_path") or ti.get("notebook_path")
     if not target:
         if task_active(str(cwd)):  # fail closed: a file tool with no path cannot be checked against the scope
