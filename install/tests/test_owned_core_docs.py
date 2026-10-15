@@ -42,8 +42,8 @@ class DocsTest(unittest.TestCase):
 
 
 class RepositionTest(unittest.TestCase):
-    def test_readme_scorecard_matches(self):
-        r = (ROOT / "README.md").read_text(encoding="utf-8")
+    def test_scorecard_page_matches(self):
+        r = (ROOT / "docs/judge-scorecard.md").read_text(encoding="utf-8")
         block = r.split("<!-- scorecard:start -->")[1].split("<!-- scorecard:end -->")[0]
         card = (ROOT / "reference/judge-corpus/SCORECARD.md").read_text(encoding="utf-8")
         table = card[card.index("| Measure"):]

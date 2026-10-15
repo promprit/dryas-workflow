@@ -15,8 +15,8 @@ class PublicDocsTest(unittest.TestCase):
         for s in ("~/.dryas/docs/dryas-workflow.md", "claude/CLAUDE.md.template", "example layout"):
             self.assertIn(s, t, s)
 
-    def test_readme_use_it_yourself(self):
-        t = read("README.md")
+    def test_adoption_guide_use_it_yourself(self):
+        t = read("docs/adoption-guide.md")
         self.assertIn("## Use it for yourself", t)
         for s in ("Fork", "claude/CLAUDE.md.template", "docs/workflow.md", "install/install.sh"):
             self.assertIn(s, t, s)
