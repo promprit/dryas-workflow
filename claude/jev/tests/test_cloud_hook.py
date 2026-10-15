@@ -12,7 +12,7 @@ PROBE = ("import json, os, sys\n"
          "print(json.dumps(dict(argv=sys.argv[1:], **{k: os.environ.get(k) for k in keys})))\n")
 
 
-class CloudHookTest(unittest.TestCase):
+class HookBase(unittest.TestCase):
     def setUp(self):
         self.base = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.base, True)
@@ -35,6 +35,8 @@ class CloudHookTest(unittest.TestCase):
                            capture_output=True, text=True, env=e, timeout=60)
         return p.returncode, p.stdout
 
+
+class CloudHookTest(HookBase):
     def test_env_points_at_the_copy(self):
         self.put("probe.py", PROBE)
         rc, out = self.run_hook("probe.py", "pretool", "x", CLAUDE_CODE_REMOTE="true", DRYAS_DATA_ROOT="elsewhere")
@@ -182,6 +184,52 @@ class CloudHookTest(unittest.TestCase):
         self.put("probe.py", "import sys\nsys.exit('bad thing')\n")
         self.assertEqual(self.run_full("probe.py")[2].strip(), "bad thing")
         self.assertEqual(self.run_full("probe.py", "pretool")[:2], (1, ""))
+
+
+class QuietTest(HookBase):
+    """The copy stays quiet where the plugin really is active (interrogate A6, B5a)."""
+    def touch(self, path, text=""):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def registry(self, base, text):
+        self.touch(os.path.join(base, "plugins", "installed_plugins.json"), text)
+
+    def test_custom_data_root_install_is_detected(self):
+        root = os.path.join(self.base, "data")
+        self.touch(os.path.join(root, "chain.local.json"))
+        self.put("probe.py", PROBE)
+        self.assertEqual(self.run_hook("probe.py", DRYAS_DATA_ROOT=root), (0, ""))
+        self.assertFalse(os.path.exists(os.path.join(self.copy, "state")))
+
+    def test_jev_chain_local_is_honoured(self):
+        f = os.path.join(self.base, "elsewhere", "chain.json")
+        self.touch(f)
+        self.put("probe.py", PROBE)
+        self.assertEqual(self.run_hook("probe.py", JEV_CHAIN_LOCAL=f), (0, ""))
+
+    def test_plugin_registry_marks_it_active(self):
+        self.registry(os.path.join(self.home, ".claude"), '{"plugins": {"dryas@dryas-workflow": [{}]}}')
+        self.put("probe.py", PROBE)
+        self.assertEqual(self.run_hook("probe.py"), (0, ""))
+
+    def test_config_dir_registry_marks_it_active(self):
+        cfg = os.path.join(self.base, "cfg")
+        self.registry(cfg, '{"plugins": {"dryas@x": []}}')
+        self.put("probe.py", PROBE)
+        self.assertEqual(self.run_hook("probe.py", CLAUDE_CONFIG_DIR=cfg), (0, ""))
+
+    def test_registry_without_dryas_stays_on(self):
+        self.registry(os.path.join(self.home, ".claude"), '{"plugins": {"other@x": []}}')
+        self.put("probe.py", PROBE)
+        self.assertNotEqual(self.run_hook("probe.py")[1], "")
+
+    def test_force_on_beats_every_quiet_signal(self):
+        self.registry(os.path.join(self.home, ".claude"), '{"plugins": {"dryas@x": []}}')
+        self.put("probe.py", PROBE)
+        self.assertNotEqual(self.run_hook("probe.py", DRYAS_CLOUD_HOOKS="1")[1], "")
+        self.assertNotEqual(self.run_hook("probe.py", CLAUDE_CODE_REMOTE="true")[1], "")
 
 
 if __name__ == "__main__":

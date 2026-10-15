@@ -8,7 +8,7 @@ CLAUDE_PLUGIN_ROOT at the copy and DRYAS_DATA_ROOT at <copy>/state, sets DRYAS_N
 notes (<copy>/memory/notes), turns off bytecode files, then runs jev/<script.py> in this process with its arguments.
 
 Outside a cloud session (CLAUDE_CODE_REMOTE is not true), on a machine where Dryas is installed for the user
-(~/.dryas/chain.local.json exists), the plugin's own hooks already run, so this entry does nothing.
+(its chain.local.json exists, or the plugin registry lists dryas@), the plugin's own hooks already run, so this entry does nothing.
 DRYAS_CLOUD_HOOKS=1 forces it on, DRYAS_CLOUD_HOOKS=0 off.
 
 It is the only place a hook gets these variables: the copy puts no env into .claude/settings.json, where it would
@@ -40,7 +40,29 @@ def wanted() -> bool:
         return force == "1"
     if remote():
         return True
-    return not os.path.isfile(os.path.join(os.path.expanduser("~"), ".dryas", "chain.local.json"))
+    return not _plugin_active()
+
+
+def _plugin_active() -> bool:
+    """Dryas is set up for the user: its chain.local.json exists (JEV_CHAIN_LOCAL, else $DRYAS_DATA_ROOT, else ~/.dryas;
+    read before main() points DRYAS_DATA_ROOT at the copy) or a Claude plugin registry lists dryas@..."""
+    home = os.path.expanduser("~")
+    local = os.environ.get("JEV_CHAIN_LOCAL") or os.path.join(
+        os.environ.get("DRYAS_DATA_ROOT") or os.path.join(home, ".dryas"), "chain.local.json")
+    if os.path.isfile(local):
+        return True
+    dirs = [os.path.join(home, ".claude")]
+    if os.environ.get("CLAUDE_CONFIG_DIR"):
+        dirs.append(os.environ["CLAUDE_CONFIG_DIR"])
+    for d in dirs:
+        try:
+            with open(os.path.join(d, "plugins", "installed_plugins.json"), encoding="utf-8") as f:
+                plugins = json.load(f).get("plugins", {})
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(plugins, dict) and any(str(k).startswith("dryas@") for k in plugins):
+            return True
+    return False
 
 
 def _script(name: str) -> str:
