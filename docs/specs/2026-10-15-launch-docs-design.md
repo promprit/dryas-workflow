@@ -161,3 +161,10 @@ Done means, with evidence (`dryas:verify`):
 ## 10. Out of scope
 
 Code removal of Ruflo and Superpowers (2.2), renaming `docs/superpowers/`, launch posts (the X templates in brand assets), a Show HN or Reddit write-up, a product page on dryasstudio.com, and a terminal GIF of `/orchestrate` (needs a `vhs` install).
+
+## 11. Changes during the build (approved)
+
+- Proof numbers use the closed window 7 to 14 October 2026: 1,036 tasks merged, 1,556 executor dispatches, 150 out-of-scope edits blocked (15 October was still accruing when recounted).
+- Test count wording is "over 2,000 tests" (pytest collects 2,042), not a rounded figure.
+- After a design critique: the hero is a 1600x400 band (lockup plus the real scope-lock deny line) so the README H1 is the only headline; the scope-lock card is 1400x480 and the ladder 1400x440; labels are at least 24px; ladder failure marks use ink, not the accent; the install block is split per OS; the ladder image sits under Escalate.
+- The README command table also lists `/dryas:brainstorm` and `/wplan`, and the install section names `/dryas-cloud`.

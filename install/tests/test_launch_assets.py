@@ -1,7 +1,11 @@
 import re
 import struct
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_launch_proof_assets import real_deny_line  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 ASSETS = REPO / "docs" / "assets"
@@ -9,7 +13,7 @@ SRC = ASSETS / "src"
 MAX_BYTES = 307200
 # name: (css width, css height, themed)
 IMAGES = {"hero": (1600, 400, True), "loop": (1600, 420, True), "ladder": (1400, 440, True),
-          "social-preview": (1280, 640, False)}
+          "social-preview": (1280, 640, False), "scope-lock": (1400, 480, True)}
 
 
 def png_size(p):
@@ -63,15 +67,14 @@ class LaunchAssetsTest(unittest.TestCase):
     def test_hero_copy(self):
         t = (SRC / "hero.html").read_text(encoding="utf-8")
         self.assertIn("DRYAS", t)
-        self.assertIn("scope lock: src/billing/invoice.ts is outside the scope of active task(s) 2", t)
+        self.assertIn(real_deny_line(), t)
         self.assertNotIn("Rules your AI agents can't ignore.", t)  # the README H1 carries the headline
         self.assertNotIn("STUDIO", t)
 
     def test_label_sizes_readable(self):
-        import re as _re
         for name, floor in (("loop", 26), ("ladder", 24)):
             t = (SRC / ("%s.html" % name)).read_text(encoding="utf-8")
-            sizes = [float(s) for s in _re.findall(r"font-size:\s*([0-9.]+)px", t)]
+            sizes = [float(s) for s in re.findall(r"font-size:\s*([0-9.]+)px", t)]
             self.assertTrue(sizes, name)
             self.assertGreaterEqual(min(sizes), floor, name)
 

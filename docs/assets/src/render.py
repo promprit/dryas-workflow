@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Render one image source to PNG at 2x with headless Chrome.
 Usage: python3 docs/assets/src/render.py <name> <css-width> <css-height> [themed|single]
-Set CHROME to use another Chrome or Chromium binary."""
+Set CHROME to use another Chrome or Chromium binary.
+Tested on macOS with Google Chrome; set CHROME elsewhere."""
 import os
+import pathlib
 import subprocess
 import sys
 
@@ -14,7 +16,7 @@ CHROME = os.environ.get("CHROME", "/Applications/Google Chrome.app/Contents/MacO
 def shot(name, w, h, query, dest):
     subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=2",
                     "--window-size=%s,%s" % (w, h), "--virtual-time-budget=10000", "--screenshot=" + dest,
-                    "file://" + os.path.join(HERE, name + ".html") + query],
+                    pathlib.Path(os.path.join(HERE, name + ".html")).as_uri() + query],
                    check=True, capture_output=True, timeout=120)
     print(dest)
 

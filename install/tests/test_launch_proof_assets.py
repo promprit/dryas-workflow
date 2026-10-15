@@ -1,5 +1,4 @@
 import json
-import struct
 import sys
 import tempfile
 import unittest
@@ -28,14 +27,6 @@ class ProofAssetsTest(unittest.TestCase):
         line = real_deny_line()
         self.assertEqual(line, "scope lock: src/billing/invoice.ts is outside the scope of active task(s) 2")
         self.assertIn(line, (ASSETS / "src" / "scope-lock.html").read_text(encoding="utf-8"))
-
-    def test_card_pngs(self):
-        for t in ("light", "dark"):
-            p = ASSETS / ("scope-lock-%s.png" % t)
-            b = p.read_bytes()
-            self.assertEqual(b[:8], b"\x89PNG\r\n\x1a\n")
-            self.assertEqual(struct.unpack(">II", b[16:24]), (2800, 960))
-            self.assertLessEqual(len(b), MAX_BYTES, p)
 
     def test_flowobserve_jpeg(self):
         p = ASSETS / "flowobserve.jpg"

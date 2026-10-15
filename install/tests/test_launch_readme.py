@@ -77,7 +77,7 @@ class LaunchReadmeTest(unittest.TestCase):
 
     def test_proof_numbers(self):
         t = readme().split("## Proof: we ship with it", 1)[1].split("\n## ", 1)[0]
-        for s in ("1,036", "1,556", "150", "7 to 14 October 2026", "Not a benchmark", "docs/assets/flowobserve.jpg", "docs/judge-scorecard.md"):
+        for s in ("1,036 tasks merged", "1,556 executor dispatches", "150 out-of-scope edits blocked", "7 to 14 October 2026", "Not a benchmark", "docs/assets/flowobserve.jpg", "docs/judge-scorecard.md"):
             self.assertIn(s, t, s)
 
 

@@ -179,8 +179,6 @@ Optional, installed separately: [FlowObserve](https://github.com/promprit/flowob
 | `--no-flowobserve` | Turn the FlowObserve stage off (not with `--flowobserve`) |
 | `--openrouter-key KEY` | Implies `--judge jev`. Claude Code only: also store the key as the plugin option (explicit only; see [the key](#the-openrouter-key)). Codex ignores it |
 
-> Deprecated: removed in 2.2. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`. (Applies to the Ruflo and Superpowers rows above.)
-
 `--yes` skips every confirmation: the third-party installs, the settings merge (the diff is still printed), the uninstall and purge confirmation, the removal of the third-party plugins on uninstall and, for Codex, the hook trust question (see [Hook trust](#hook-trust)). Without it the installer asks before each of these.
 
 ## Windows (native)
