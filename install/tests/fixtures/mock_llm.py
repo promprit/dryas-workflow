@@ -32,6 +32,8 @@ def plan(messages, tools):
     users = [m for m in messages if m.get("role") == "user"]
     text = json.dumps(users[-1].get("content")) if users else ""
     names = {t.get("function", {}).get("name") for t in tools or []}
+    if "NO_RETRY" in text:
+        return ("text", "ok")
     for key, tool, args in SCRIPT:
         if key in text and tool in names:
             return ("tool", tool, args)

@@ -8,6 +8,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "dryas")
 const PRETOOL_MS = 20000
 const PROMPT_MS = 15000
 const RULES_MS = 5000
+let partSeq = 0
 const APPROVE = /\bdryas allow ([0-9a-f]{4})\b/gi
 
 function installRecord(): Record<string, any> {
@@ -31,7 +32,7 @@ function runScript(script: string, args: string[], input: unknown, timeoutMs: nu
         resolve(v)
       }
     }
-    const child = spawn(PY, ["-X", "utf8", join(ROOT, "jev", script), ...args], { stdio: ["pipe", "pipe", "ignore"] })
+    const child = spawn(PY, ["-B", "-X", "utf8", join(ROOT, "jev", script), ...args], { stdio: ["pipe", "pipe", "ignore"] })
     const timer = setTimeout(() => {
       child.kill()
       finish(null)
@@ -62,15 +63,6 @@ function toolEvent(tool: string, args: any): { tool_name: string; tool_input: Re
       return { tool_name: "Write", tool_input: { file_path: a.filePath, content: String(a.content ?? "") } }
     case "edit":
       return { tool_name: "Edit", tool_input: { file_path: a.filePath, old_string: String(a.oldString ?? ""), new_string: String(a.newString ?? "") } }
-    case "multiedit":
-      return {
-        tool_name: "MultiEdit",
-        tool_input: {
-          file_path: a.filePath,
-          edits: (Array.isArray(a.edits) ? a.edits : []).map((e: any) => ({ old_string: String(e?.oldString ?? ""), new_string: String(e?.newString ?? "") })),
-        },
-      }
-    case "patch":
     case "apply_patch":
       return { tool_name: "apply_patch", tool_input: { command: String(a.patchText ?? a.patch ?? "") } }
   }
@@ -81,6 +73,7 @@ function approvalCode(tool: string, args: unknown): string {
   return createHash("sha1").update(tool + "\n" + JSON.stringify(args)).digest("hex").slice(0, 4)
 }
 
+// Mirrors scope_lock.find_root / task_active.
 function taskActive(dir: string): boolean {
   for (let d = resolve(dir); ; d = dirname(d)) {
     if (existsSync(join(d, ".orchestrate", "active.json"))) return true
@@ -103,9 +96,9 @@ export const DryasPlugin = async (ctx: any) => {
   const resolveSession = async (id: string): Promise<Session> => {
     const s = session(id)
     if (!s.known) {
-      s.known = true
       try {
         s.parentID = (await ctx.client.session.get({ path: { id } }))?.data?.parentID
+        s.known = true
       } catch {}
     }
     return s
@@ -126,7 +119,7 @@ export const DryasPlugin = async (ctx: any) => {
       if (cfg.mcp.jev) return
       cfg.mcp.jev = {
         type: "local",
-        command: [PY, "-X", "utf8", join(ROOT, "jev", "jev_mcp.py")],
+        command: [PY, "-B", "-X", "utf8", join(ROOT, "jev", "jev_mcp.py")],
         enabled: true,
         environment: Object.fromEntries(
           ["OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "DRYAS_DATA_ROOT"].filter((k) => process.env[k]).map((k) => [k, process.env[k] as string]),
@@ -152,9 +145,11 @@ export const DryasPlugin = async (ctx: any) => {
     "tool.execute.before": async (input: any, output: any) => {
       const te = toolEvent(input.tool, output.args)
       if (!te) return
-      await resolveSession(input.sessionID)
       const wd = output.args?.workdir
       const cwd = input.tool === "bash" && typeof wd === "string" && wd ? resolve(ctx.directory, wd) : ctx.directory
+      if (!(await resolveSession(input.sessionID)).known && taskActive(cwd)) {
+        throw new Error("Dryas could not tell whether this session is a subagent while a task is active; retry")
+      }
       const ev = { ...base(input.sessionID, cwd), hook_event_name: "PreToolUse", ...te }
       const raw = await runScript("chain.py", ["pretool", "--harness", "opencode"], ev, PRETOOL_MS)
       const out = parse(raw)
@@ -176,7 +171,11 @@ export const DryasPlugin = async (ctx: any) => {
     "chat.message": async (input: any, output: any) => {
       const parts: any[] = output?.parts ?? []
       const prompt = parts.filter((p) => p?.type === "text" && !p.synthetic).map((p) => p.text).join("\n")
-      if (!(await resolveSession(input.sessionID)).parentID) for (const m of prompt.matchAll(APPROVE)) approved.add(m[1].toLowerCase())
+      if (!(await resolveSession(input.sessionID)).parentID) {
+        const codes = [...prompt.matchAll(APPROVE)]
+        if (codes.length) for (const m of codes) approved.add(m[1].toLowerCase())
+        else approved.clear()
+      }
       const ev = { ...base(input.sessionID), hook_event_name: "UserPromptSubmit", prompt }
       const out = parse(await runScript("chain.py", ["prompt", "--harness", "opencode"], ev, PROMPT_MS))
       if (out?.decision === "block") {
@@ -185,7 +184,7 @@ export const DryasPlugin = async (ctx: any) => {
         return
       }
       const add = out?.hookSpecificOutput?.additionalContext
-      if (add) parts.push({ id: `prt_dryas${Date.now()}`, sessionID: input.sessionID, messageID: output.message?.id, type: "text", text: String(add), synthetic: true })
+      if (add) parts.push({ id: `prt_dryas${Date.now()}_${++partSeq}`, sessionID: input.sessionID, messageID: output.message?.id, type: "text", text: String(add), synthetic: true })
     },
 
     "experimental.chat.system.transform": async (_input: any, output: any) => {

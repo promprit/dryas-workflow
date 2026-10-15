@@ -70,6 +70,14 @@ class ShimTest(unittest.TestCase):
         self.assertEqual([t[:2] for t in self.s.tools(sid) if t[0] == "bash"], [("bash", "error"), ("bash", "completed")])
         self.assertIsNone(self.s.asked(sid, timeout=1))
 
+    def test_unused_approval_expires_at_next_user_message(self):
+        sid = self.s.prompt("RESET")
+        code = re.search(r"dryas allow ([0-9a-f]{4})\b", self.s.tools(sid)[0][2]).group(1)
+        say(self.s, sid, "dryas allow %s NO_RETRY" % code)
+        say(self.s, sid, "hello")
+        say(self.s, sid, "RESET")
+        self.assertEqual([t[:2] for t in self.s.tools(sid) if t[0] == "bash"], [("bash", "error"), ("bash", "error")])
+
     def test_code_in_subagent_prompt_does_not_approve(self):
         sid = self.s.prompt("DELEGATE_APPROVE")
         kids = self.s.children(sid)
