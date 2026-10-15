@@ -8,7 +8,7 @@ ASSETS = REPO / "docs" / "assets"
 SRC = ASSETS / "src"
 MAX_BYTES = 307200
 # name: (css width, css height, themed)
-IMAGES = {"hero": (1600, 640, True), "loop": (1600, 420, True), "ladder": (1400, 520, True),
+IMAGES = {"hero": (1600, 400, True), "loop": (1600, 420, True), "ladder": (1400, 440, True),
           "social-preview": (1280, 640, False)}
 
 
@@ -62,9 +62,18 @@ class LaunchAssetsTest(unittest.TestCase):
 
     def test_hero_copy(self):
         t = (SRC / "hero.html").read_text(encoding="utf-8")
-        for s in ("DRYAS", "Rules your AI agents can't ignore.", "Stop asking your agent to behave. Make it."):
-            self.assertIn(s, t)
+        self.assertIn("DRYAS", t)
+        self.assertIn("scope lock: src/billing/invoice.ts is outside the scope of active task(s) 2", t)
+        self.assertNotIn("Rules your AI agents can't ignore.", t)  # the README H1 carries the headline
         self.assertNotIn("STUDIO", t)
+
+    def test_label_sizes_readable(self):
+        import re as _re
+        for name, floor in (("loop", 26), ("ladder", 24)):
+            t = (SRC / ("%s.html" % name)).read_text(encoding="utf-8")
+            sizes = [float(s) for s in _re.findall(r"font-size:\s*([0-9.]+)px", t)]
+            self.assertTrue(sizes, name)
+            self.assertGreaterEqual(min(sizes), floor, name)
 
 
 if __name__ == "__main__":

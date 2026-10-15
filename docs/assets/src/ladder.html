@@ -2,28 +2,26 @@
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="_brand.css">
 <script>if (new URLSearchParams(location.search).get("theme") === "dark") document.documentElement.dataset.theme = "dark";</script>
 <style>
-body { width: 1400px; height: 520px; }
+body { width: 1400px; height: 440px; }
 svg { position: absolute; left: 0; top: 0; }
-text { font-family: Archivo, Helvetica, sans-serif; font-weight: 500; letter-spacing: 0.06em; fill: var(--ink); }
+text { font-family: Archivo, Helvetica, sans-serif; font-weight: 500; letter-spacing: 0.06em; fill: var(--ink); font-size: 24px; }
 text.t { fill: var(--ink-2); }
-text.m { font-family: "JetBrains Mono", monospace; font-weight: 400; letter-spacing: 0; fill: var(--ink-2); }
-text.s { font-family: "JetBrains Mono", monospace; font-weight: 500; letter-spacing: 0; fill: var(--ink); }
+text.m { font-family: "JetBrains Mono", monospace; font-weight: 400; letter-spacing: 0; fill: var(--ink-2); font-size: 24px; }
+text.s { font-family: "JetBrains Mono", monospace; font-weight: 500; letter-spacing: 0; fill: var(--ink); font-size: 24px; }
 </style></head>
 <body>
-<svg viewBox="0 0 1400 520" width="1400" height="520">
-<text class="t" x="64" y="72" font-size="18">THE MODEL LADDER</text>
-<path class="ink" d="M140 440H400V360H660V280H920V200H1180"/>
-<g font-size="22">
-<text x="160" y="396">FAST</text><text x="420" y="316">STANDARD</text><text x="680" y="236">STRONG</text><text x="940" y="156">FRONTIER</text>
-</g>
-<text class="m" x="160" y="422" font-size="15">e.g. Haiku</text>
-<text class="m" x="420" y="342" font-size="15">e.g. Sonnet</text>
-<text class="m" x="680" y="262" font-size="15">e.g. Opus</text>
-<text class="m" x="940" y="182" font-size="15">e.g. Fable</text>
-<path class="accent" d="M393 394 407 408M407 394 393 408"/>
-<path class="accent" d="M653 314 667 328M667 314 653 328"/>
-<path class="accent" d="M913 234 927 248M927 234 913 248"/>
-<text class="m" x="400" y="480" font-size="14" text-anchor="middle">failed → logged reason → next tier</text>
-<text class="s" x="940" y="234" font-size="18">Stops at the first success.</text>
+<svg viewBox="0 0 1400 440" width="1400" height="440">
+<text class="t" x="60" y="56">THE MODEL LADDER</text>
+<path class="ink" d="M60 380H330V300H600V220H870V140H1140"/>
+<text x="80" y="334">FAST</text><text x="350" y="254">STANDARD</text><text x="620" y="174">STRONG</text><text x="890" y="94">FRONTIER</text>
+<text class="m" x="80" y="366">e.g. Haiku</text>
+<text class="m" x="350" y="286">e.g. Sonnet</text>
+<text class="m" x="620" y="206">e.g. Opus</text>
+<text class="m" x="890" y="126">e.g. Fable</text>
+<path class="ink" d="M312 348 326 362M326 348 312 362"/>
+<path class="ink" d="M582 268 596 282M596 268 582 282"/>
+<path class="ink" d="M852 188 866 202M866 188 852 202"/>
+<text class="m" x="352" y="352">failed → logged reason → next tier</text>
+<text class="s" x="890" y="190">Stops at the first success.</text>
 </svg>
 </body></html>

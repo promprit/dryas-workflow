@@ -34,7 +34,7 @@ class ProofAssetsTest(unittest.TestCase):
             p = ASSETS / ("scope-lock-%s.png" % t)
             b = p.read_bytes()
             self.assertEqual(b[:8], b"\x89PNG\r\n\x1a\n")
-            self.assertEqual(struct.unpack(">II", b[16:24]), (2800, 1120))
+            self.assertEqual(struct.unpack(">II", b[16:24]), (2800, 960))
             self.assertLessEqual(len(b), MAX_BYTES, p)
 
     def test_flowobserve_jpeg(self):
