@@ -46,7 +46,8 @@ class EntryTest(unittest.TestCase):
         self.assertIn("tools/dryas_cloud.py", sh)
         self.assertIn("memory)", sh)  # D's case stays
         cmd = (ROOT / "claude/bin/dryas.cmd").read_text(encoding="utf-8")
-        self.assertIn('if /I "%~1"=="cloud" goto cloud', cmd)
+        self.assertIn('if /I "%~1"=="cloud" set "DRYAS_SUB=cloud"', cmd)
+        self.assertIn('if "%DRYAS_SUB%"=="cloud" goto cloud', cmd)
         self.assertIn("tools\\dryas_cloud.py", cmd)
 
     @unittest.skipIf(os.name == "nt", "POSIX wrapper")
@@ -135,15 +136,15 @@ class EntryTest(unittest.TestCase):
         lines = [ln.strip() for ln in t.splitlines()]
         self.assertIn("shift /1", lines)  # D's fix stays
         self.assertNotIn("shift", lines)
-        self.assertEqual([ln for ln in lines if ln.startswith("shift")], ["shift /1"])
+        self.assertEqual([ln for ln in lines if ln.startswith("shift")], ["shift /1", "shift /1"])  # leading word, then the collect loop; never a bare shift
         i_plain, i_cloud = lines.index(":plain"), lines.index(":cloud")
         self.assertLess(i_plain, i_cloud)
         between = [ln for ln in lines[i_plain + 1:i_cloud] if ln]
         self.assertEqual(between[-1], "exit /b %ERRORLEVEL%")  # :plain never falls into :cloud
         self.assertTrue(between[0].startswith("python -X utf8"))
-        self.assertLess(t.index("goto cloud"), t.index(":memory"))
+        self.assertLess(t.index("goto cloud"), t.index(":envpy"))  # dispatch precedes both launcher blocks
         block = "\n".join(lines[i_cloud:])
-        self.assertEqual(block.count("%2 %3 %4 %5 %6 %7 %8 %9"), 4)  # all four launchers pass %2..%9
+        self.assertEqual(block.count("%DRYAS_ARGS%"), 4)  # all four launchers pass the collected arguments
         self.assertNotIn("%1", block)
         self.assertEqual(block.count("exit /b %ERRORLEVEL%"), 4)
         for label in (":cloudenv", ":cloudpy", ":cloudpy3"):
@@ -206,6 +207,44 @@ class EntryTest(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("Dry run: nothing written.", p.stdout)
         self.assertEqual(fx.snapshot(spaced), before)
+
+
+class CmdShapeTest(unittest.TestCase):
+    """dryas.cmd must forward every argument, not just %1..%9 (interrogate A3/B8)."""
+
+    def setUp(self):
+        self.text = (ROOT / "claude/bin/dryas.cmd").read_bytes().decode("utf-8")
+
+    def test_no_positional_cap(self):
+        t = self.text
+        self.assertNotRegex(t, r"%\d %\d")  # no %2 %3 ... lists
+        self.assertNotIn("%9", t)
+        self.assertIn("%DRYAS_ARGS%", t)
+        self.assertIn(":collect", t)
+        self.assertIn("goto collect", t)
+        self.assertEqual(t.count("%DRYAS_ARGS%"), 9)  # collector once, eight launchers (memory + cloud x4)
+
+    def test_crlf_and_lookup_order_kept(self):
+        raw = (ROOT / "claude/bin/dryas.cmd").read_bytes()
+        self.assertEqual(raw.count(b"\n"), raw.count(b"\r\n"))
+        order = [self.text.index(n) for n in ("DRYAS_PY", "where py ", "where python3", "\npython -X")]
+        self.assertEqual(order, sorted(order))
+
+    @unittest.skipUnless(os.name == "nt", "Windows wrapper")
+    def test_cmd_twelve_arguments_with_spaced_path_and_trailing_yes(self):
+        base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(base), True)
+        spaced = fx.git_repo(base / "a b" / "repo x")
+        env = dict(os.environ, DRYAS_PYTHON=sys.executable, DRYAS_PY=sys.executable,
+                   CLAUDE_CONFIG_DIR=str(base / "cfg"))
+        args = ["init", "--repo", str(spaced), "--prefix", "my-", "--with-design", "--persist-memory", "--force",
+                "--claude-dir", str(base / "cd"), "--with-design", "--force", "--yes"]  # 12 arguments, --yes last
+        self.assertEqual(len(args), 12)
+        p = subprocess.run(["cmd", "/c", str(ROOT / "claude/bin/dryas.cmd"), "cloud"] + args,
+                           capture_output=True, text=True, env=env, timeout=300)
+        self.assertNotIn("unrecognized", p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
 
 if __name__ == "__main__":
