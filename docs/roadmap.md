@@ -89,3 +89,13 @@ A cheap way for the orchestrator to see a large repo's structure without reading
 - [ ] A structural map, not embeddings: file tree, top-level symbols (stdlib `ast` for Python, `ctags` when installed) and doc headings. Built on demand, cached by commit SHA so each worktree gets its own branch's map, injected at Brainstorm and Plan under a token cap. Stdlib only, per [CONTRIBUTING.md](../CONTRIBUTING.md).
 - [ ] Measure planning turns and tokens with and without it, from the dispatch records. Only if the map is not enough on large repos, add semantic search as a pluggable component (off by default; Ruflo is now an optional extra).
 - [ ] Say in [memory-model.md](memory-model.md) that a source index is not memory: derived, rebuildable, never authoritative, never in the memory layer (MEM-4 bars file contents there), and a missing index never blocks the loop (MEM-5).
+
+## Later: an OpenCode edition (parked 2026-10-15)
+
+Parked until after 2.0. Estimate: 3–5 days of build to reach the Codex edition's level (partial conformance), after a half-day spike. Most of Dryas carries over unchanged: OpenCode reads `AGENTS.md` (the Codex template plus a harness block), skills and commands are markdown (one more render target in `tools/sync_codex_plugin.py`), the `jev` MCP server runs as a local stdio server (memory, judge and logging as-is), and per-agent models give the tier table.
+
+- [ ] Spike (half a day): confirm OpenCode's plugin events before and after a tool call, whether a plugin can ask the user or only block (if only block, the local judge's `ask` becomes a deny with a reason on OpenCode), and whether the acting agent's identity reaches the plugin (the scope lock needs it; Codex does not provide it).
+- [ ] Hook shim (1–2 days): a small plugin, run by OpenCode itself (no Node for the user), that maps tool events to the hook JSON `claude/jev/chain.py` reads, like `codex_event.py` does for Codex.
+- [ ] Installer target (about 1 day): `--harness opencode` writes OpenCode's config (MCP server, plugin, agents, commands), with uninstall and a `tools/release_check.py` check.
+- [ ] Executor and orchestration (half a day to a day): map `dryas:executor` and the fast → standard → strong → frontier ladder onto OpenCode agents and subagents.
+- [ ] Tests, docs and conformance (about 1 day): mock-event tests like the Codex ones, an OpenCode column in [harnesses.md](harnesses.md) and the conformance table, a CI job.
