@@ -3,6 +3,7 @@
 
 Claude Code: the dryas plugin per --claude-dir (repeatable, one per account). Codex: the dryas plugin per
 --codex-dir (repeatable, one per CODEX_HOME): listed and enabled, hooks trusted, hook command lines run, scope lock.
+OpenCode: the edition per --opencode-dir (repeatable): version, files, jev MCP, rules hook, scope lock, tiers.
 Never writes to the Claude or Codex folders or to ~/.dryas (the codex CLI may keep its own logs in CODEX_HOME): hooks
 run with their logs, state, data root and chain.local.json in a temp dir and without an OpenRouter key. Only the Jev
 route check calls OpenRouter (when a key is set).
@@ -29,8 +30,10 @@ RECORD = ".dryas-plugin.json"
 KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY")
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "install"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_appserver as ca  # noqa: E402  (stdlib only; tools never import tests)
 import platform_util as pu  # noqa: E402
+import release_check_opencode as rco  # noqa: E402
 PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 MANUAL = """Manual checks (needs the app open):
   1. In Claude Code, send any prompt; the reply context shows a "Jev route:" line (when an OpenRouter key is set).
@@ -43,7 +46,8 @@ MANUAL = """Manual checks (needs the app open):
   5. In each account's Claude Code, run /plugin and check dryas is enabled; if hooks did not fire, check for allowManagedHooksOnly in managed settings (docs/install.md).
   6. Run /tune and /handoff once in each account; both must run without a permission prompt.
   7. Codex: type $dryas:orchestrate in the TUI and note the syntax that works (record it in docs/install.md if it
-     differs). On Windows also: steps 3 and 7, and codex mcp list shows jev."""
+     differs). On Windows also: steps 3 and 7, and codex mcp list shows jev.
+  8. OpenCode (each config dir): run /orchestrate on a tiny task in a scratch repo; ask it to edit a file outside the Scope: it must be denied. Ask for a destructive command (git reset --hard): OpenCode must ask you first."""
 
 
 class Report:
@@ -479,15 +483,18 @@ def main(argv=None):
                     "(default: ~/.claude)")
     ap.add_argument("--codex-dir", action="append", help="a Codex home (CODEX_HOME); repeat for each "
                     "(default: $CODEX_HOME or ~/.codex)")
+    ap.add_argument("--opencode-dir", action="append", help="an OpenCode config dir; repeat for each "
+                    "(default: $XDG_CONFIG_HOME/opencode or ~/.config/opencode)")
     a = ap.parse_args(argv)
     cds = [Path(d) for d in (a.claude_dir or [str(Path.home() / ".claude")])]
     cdxs = [Path(d) for d in (a.codex_dir or [os.environ.get("CODEX_HOME") or str(Path.home() / ".codex")])]
+    ods = [Path(d) for d in (a.opencode_dir or [str(rco.ocs.opencode_dir(None))])]
     env = dict(os.environ)
     rep = Report()
     print("Environment")
     rep.say("PASS", "OS", "%s %s" % (platform.system(), platform.release()))
     rep.say("PASS", "Python", "%s at %s" % (platform.python_version(), sys.executable))
-    for t in ("git", "claude", "codex", "node"):
+    for t in ("git", "claude", "codex", "opencode", "node"):
         p = shutil.which(t)
         rep.say("PASS" if p else "SKIP", t, p or "not on PATH")
     rep.say("PASS" if api_key(env) else "SKIP", "OpenRouter key", "set" if api_key(env) else "not set in this shell")
@@ -497,7 +504,7 @@ def main(argv=None):
     tmp = tempfile.mkdtemp(prefix="dryas-release-check-")
     try:
         no_node(rep, REPO, tmp)
-        return _checks(rep, cds, cdxs, env, bash, tmp)
+        return _checks(rep, cds, cdxs, env, bash, tmp, ods)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -521,7 +528,7 @@ def claude_config(rep, cd, env):
         rep.say("PASS", "stub config")
 
 
-def _checks(rep, cds, cdxs, env, bash, tmp):
+def _checks(rep, cds, cdxs, env, bash, tmp, ods=()):
     hook_env = sandbox(env, tmp)
     claude = shutil.which("claude")
     for cd in cds:
@@ -548,6 +555,8 @@ def _checks(rep, cds, cdxs, env, bash, tmp):
         ruflo(rep, cd, root, penv, dict(hook_env, CLAUDE_PLUGIN_ROOT=fwd(root)))
     for cdx in cdxs:
         codex_plugin(rep, cdx, shutil.which("codex"), bash, hook_env)
+    for od in ods:
+        rco.check(rep, od, shutil.which("opencode"), hook_env)
     print()
     print(MANUAL)
     return 1 if rep.fails else 0
