@@ -148,7 +148,7 @@ class EntryTest(unittest.TestCase):
         self.assertEqual(block.count("exit /b %ERRORLEVEL%"), 4)
         for label in (":cloudenv", ":cloudpy", ":cloudpy3"):
             self.assertIn(label, lines)
-        order = [block.index(n) for n in ("DRYAS_PY", "py -3", "python3", "\npython -X")]
+        order = [block.index(n) for n in ("DRYAS_PY", "where py ", "where python3", "\npython -X")]
         self.assertEqual(order, sorted(order))
         self.assertIn("exit /b 2", block)
         usage = [ln for ln in lines if ln.startswith("echo usage:")][0]
