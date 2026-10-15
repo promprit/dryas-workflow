@@ -55,7 +55,7 @@ class PluginShapeTest(unittest.TestCase):
 
     def test_hook_events(self):
         h = load(PLUGIN / "hooks" / "hooks.json")["hooks"]
-        self.assertEqual(sorted(h), ["PostToolUse", "PostToolUseFailure", "PreCompact", "PreToolUse", "SessionEnd", "SessionStart", "SubagentStop", "UserPromptSubmit"])
+        self.assertEqual(sorted(h), ["PostToolUse", "PostToolUseFailure", "PreCompact", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "SubagentStop", "UserPromptSubmit"])
         ss = {g.get("matcher"): [x["command"] for x in g["hooks"]] for g in h["SessionStart"]}
         self.assertTrue(any("rules_inject.py" in c for c in ss["startup|resume|clear|compact"]))
         self.assertTrue(any("compact_restore.py" in c for c in ss["compact"]))
