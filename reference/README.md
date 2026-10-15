@@ -34,6 +34,7 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | Harness | MCP binding | Plugin `claude/.mcp.json` (the `jev` MCP server, with the memory tools); Codex: plugin `codex/.mcp.json`, plus setup's `config.toml` block for the `python3` fallback and, with the Ruflo extra, Ruflo |
 | Harness | Skills binding | Plugin `claude/skills/` and `claude/commands/`; Codex: plugin `codex/skills/` (`$dryas:<name>`) |
 | Harness | State | `~/.dryas` (`$DRYAS_DATA_ROOT`), shared by every Claude config dir and Codex |
+| Harness | Cloud sessions | `dryas cloud` (`tools/dryas_cloud.py`) copies the core into a repo (`.dryas/`, `.claude/`); [cloud-bindings.json](cloud-bindings.json) lists each component as copied, opt-in or excluded, with the reason |
 
 ## No-loss inventory
 

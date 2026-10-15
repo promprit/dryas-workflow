@@ -18,6 +18,7 @@ One word per meaning; skills, templates and docs point here instead of re-explai
 - **baseline**: the window `/tune` compares a switch against.
 - **inventory**: the 1.x no-loss snapshot checked by `tools/inventory.py`.
 - **extra**: an optional third-party component (Ruflo, Superpowers, the design plugins).
+- **repo copy**: the pinned Dryas core that `dryas cloud` writes into a repo (`.dryas/`, `.claude/`) so claude.ai/code cloud sessions run the workflow without the plugin.
 - **local judge**: deterministic rules, no network.
 - **Dryas memory**: the SQLite store at `~/.dryas/dryas.db`.
 - **observe stage**: a hook stage whose output is ignored.

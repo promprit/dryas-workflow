@@ -7,7 +7,9 @@
 
 An entry is "<kind>:<name>". Collectors read only the repo; Jev logs come from an empty temp dir.
 reference/inventory-map.json maps a removed entry to the entry that replaces it, or to "extra:<component>"
-when it lives on in an optional component listed in install/components.json."""
+when it lives on in an optional component listed in install/components.json.
+reference/cloud-bindings.json (owned core E) must list every core component as copy:, opt-in: or exclude: with a reason;
+--check enforces it."""
 import argparse
 import ast
 import importlib.util
@@ -24,6 +26,10 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = "reference/inventory-1.x.json"
 MAP = "reference/inventory-map.json"
+CLOUD = "reference/cloud-bindings.json"
+CLOUD_KINDS = ("command:claude:", "skill:claude:", "agent:claude:", "mcp_server:claude:", "plugin_hook:claude:",
+               "chain_stage:", "component:")
+CLOUD_VALUES = ("copy:", "opt-in:", "exclude:")
 EDITIONS = ("claude", "codex")
 TOOL_TOKENS = ("memory_search", "memory_store", "swarm_init")
 SKIP_DIRS = ("jev", "pstack", "tests", "__pycache__")  # codex/jev and codex/pstack are generated copies
@@ -355,6 +361,21 @@ def check(snapshot: Iterable[str], current: Iterable[str], mapping: Dict[str, st
     return problems
 
 
+def cloud_check(current: Iterable[str], table: Any) -> List[str]:
+    """The cloud binding table (owned core E): every core component a repo copy could carry is copied, opt-in or
+    excluded, each with where it goes or why not, and the table names nothing the inventory lacks."""
+    entries = table.get("entries") if isinstance(table, dict) else None
+    if not isinstance(entries, dict):
+        return ['cloud table: %s has no "entries" object' % CLOUD]
+    cur = {e for e in current if e.startswith(CLOUD_KINDS)}
+    problems = ["cloud table: %s is neither copied nor excluded" % e for e in sorted(cur - set(entries))]
+    problems += ["cloud table: %s is not in the inventory" % e for e in sorted(set(entries) - cur)]
+    for k, v in sorted(entries.items()):
+        if not (isinstance(v, str) and v.startswith(CLOUD_VALUES) and v.split(":", 1)[1].strip()):
+            problems.append("cloud table: %s needs copy:, opt-in: or exclude: and a reason" % k)
+    return problems
+
+
 def _version(repo: Path) -> str:
     return str(_json(repo / "claude/.claude-plugin/plugin.json").get("version", ""))
 
@@ -391,6 +412,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         mp = repo / MAP
         mapping = _json(mp) if mp.exists() else {}
         problems = check(base, cur, mapping, _json(repo / "install/components.json").keys())
+        if (repo / CLOUD).exists():
+            problems += cloud_check(cur, _json(repo / CLOUD))
     except InventoryError as e:
         print("inventory: %s" % e, file=sys.stderr)
         return 2

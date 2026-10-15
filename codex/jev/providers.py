@@ -3,7 +3,9 @@
 `provider` decides: "jev" (the remote model through jev_client) or "local" (local_judge, no network).
 `shadow` answers too; its answer is logged next to the decision and never acted on. "auto": jev decides
 when a key is set or a judge function is injected (tests), else local; the shadow is local when jev
-decides, else none. Settings: thresholds `judge.provider`, `judge.shadow` (change with /tune apply)."""
+decides, else none. Settings: thresholds `judge.provider`, `judge.shadow` (change with /tune apply).
+In a claude.ai/code cloud session (CLAUDE_CODE_REMOTE=true) "auto" is local even with a key, unless the environment
+opted into Jev with DRYAS_JUDGE=jev (owned core E)."""
 import os
 import sys
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -16,11 +18,17 @@ def _has_key() -> bool:
     return bool(api_key())
 
 
+def _cloud_without_jev() -> bool:
+    """A cloud session that did not opt into Jev: no OpenRouter call, whatever key the environment holds."""
+    remote = os.environ.get("CLAUDE_CODE_REMOTE", "").strip().lower() == "true"
+    return remote and os.environ.get("DRYAS_JUDGE", "").strip().lower() != "jev"
+
+
 def resolve(th: Dict[str, Any], injected: bool) -> Tuple[str, str]:
     cfg = th.get("judge") if isinstance(th.get("judge"), dict) else {}
     provider, shadow = cfg.get("provider", "auto"), cfg.get("shadow", "auto")
     if provider not in ("local", "jev"):
-        provider = "jev" if injected or _has_key() else "local"
+        provider = "jev" if injected or (not _cloud_without_jev() and _has_key()) else "local"
     if shadow not in ("local", "jev", "none"):
         shadow = "local" if provider == "jev" else "none"
     return provider, ("none" if shadow == provider else shadow)
