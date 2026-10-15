@@ -29,7 +29,7 @@ Success:
 
 ## 3. Decisions (approved in brainstorm)
 
-1. Executor shell writes never ask. Readable targets are checked before the run (B); everything is checked at task return (C).
+1. Executor shell writes never ask, on all three harnesses. Readable targets are checked before the run (B); everything is checked at task return (C).
 2. Writes into the current session's own scratchpad are allowed; `/tmp` and build directories in general are not exempt.
 3. Out-of-scope changes are sent back to the executor to revert; nothing is reverted automatically.
 4. During a run, the human is the last resort for risky actions: plan, then judge, then orchestrator, then the user only for what cannot be undone outside the worktree (D).
@@ -65,7 +65,7 @@ For a write-like command during a run, in this order (the main session on Claude
 | A readable target is outside the union Scope and not in the session scratchpad | deny: "scope lock: `<path>` is outside the scope of task(s) N; use Edit/Write inside your Scope or report `SCOPE: need <path> because <reason>`" |
 | Otherwise (all readable targets allowed, or some part unknown) | allow, no output; C checks the result |
 
-Same table on all three harnesses. On Codex the main session is not exempt (no worker identity), so the orchestrator's readable out-of-scope targets are denied there too; its `.orchestrate` writes stay allowed through `check()`.
+Same table on all three harnesses. On Codex the main session is not exempt (no worker identity), so the orchestrator's readable out-of-scope targets are denied there too; its `.orchestrate` writes stay allowed through `check()`. This replaces brainstorm decision 4 of round 1 ("Codex keeps asking for unresolvable writes"): with the audit at task return (C), Codex also allows unknown writes and relies on C, so Codex runs prompt-free too.
 
 Session scratchpad (Claude only): after `realpath`, the path lies under `/private/tmp/claude-<own uid>/<one component>/<event session_id>/scratchpad` (the `session_id` from the hook input; subagents carry their parent's). OpenCode and Codex exempt nothing.
 
@@ -75,9 +75,10 @@ Readable targets are compared with `check()`, which already handles worktree esc
 
 Replaces the ask for what B cannot read. Deterministic, no model call, run by the orchestrator in orchestrate §6 for every executor report before `jev_judge`:
 
-`dryas-py jev/scope_audit.py .orchestrate/PLAN.md <N> <base-sha> [<commit-sha>...]`
+`dryas-py jev/scope_audit.py .orchestrate/PLAN.md <N> [<commit-sha>...]`
 
-- Files changed by the task's commits (`git diff --name-only <base>..<sha>` for each reported commit; `<base>` is HEAD when the task was dispatched, recorded by the orchestrator) must match task N's Scope.
+- Files changed by each reported commit, taken one commit at a time (`git diff-tree --no-commit-id --name-only -r <sha>`, so other executors' commits in the shared worktree are never counted), must match task N's Scope. A sha that does not exist or is not reachable from HEAD fails the audit.
+- **Shas**: the executor's report ends with `COMMITS: <sha> [<sha>...]` (or `COMMITS: none`); executor rule 5 adds this (section 5). If the executor was allowed to commit but reports no shas, the audit falls back to the commits since the task's base whose subject carries the task tag the dispatch prompt prescribes (`(task N)`), and fails if none is found while the task changed files. The base is HEAD at dispatch, which the orchestrator stores per task in `active.json` (`"base": {"N": "<sha>"}`); SKILL §5 records it, and §5.6's existing `git diff --numstat <base>..HEAD` reads it from there.
 - Uncommitted changes and untracked files (`git status --porcelain -z --untracked-files=all`) must match the union Scope of all active tasks (another running executor's work is not this task's fault).
 - `.orchestrate/` is never a valid executor change.
 - Output: JSON `{"ok": bool, "outside": [paths]}`; exit 0 either way, so it never blocks the orchestrator's shell.
@@ -92,20 +93,33 @@ Known limit (stated in GOV-2): inline code that writes outside the worktree, oth
 
 1. **Planned**: it matches the plan's `Risky actions` (below) → allow.
 2. **Judge**: the Jev gate (Jev model, or the local judge) judges it as today → allow when it is safe enough.
-3. **Orchestrator** (strong tier, as the model policy already says: "below threshold or escalate, the strong tier decides"): where the gate would ask today, `gate.decide` instead denies with reason "Jev gate: looks destructive (<reason>). Report `NEEDS DECISION: <exact command> because <reason>` to the orchestrator, or find a safer way." The orchestrator decides with the plan, the task and the command in front of it. If it approves, it adds the exact command to `.orchestrate/approved.json` (`{"commands": [{"cmd": ..., "task": N, "reason": ...}]}`, written only by the main thread, like `PLAN.md`), logs it with `log_override`, and re-dispatches; the gate allows that exact command for the rest of the run. Its own risky commands go through the same file, so it is never prompted either.
+3. **Orchestrator** (strong tier, as the model policy already says: "below threshold or escalate, the strong tier decides"): where the gate would ask today (from `decide` or from `_local_decision`; the local judge is the default provider), `gate.run` turns the final "ask" into a deny after the decision is computed and before `gate_outcome.note_ask`. The deny reads with reason "Jev gate: looks destructive (<reason>). Report `NEEDS DECISION: <exact command> because <reason>` to the orchestrator, or find a safer way." The orchestrator decides with the plan, the task and the command in front of it. If it approves, it adds the exact command to `.orchestrate/approved.json` (`{"commands": [{"cmd": ..., "task": N, "reason": ...}]}`, written only by the main thread, like `PLAN.md`), logs it with `log_override`, and re-dispatches; the gate allows that exact command for the rest of the run. Its own risky commands go through the same file, so it is never prompted either.
 4. **Human**: only what the orchestrator judges it must not decide alone: an action that cannot be undone and reaches outside the worktree (for example deleting data outside the repo, pushing, touching production, spending money), or one that contradicts the approved design. That task is reported as not done, with a `NEEDS USER` item in the end report; the run carries on with other tasks.
 
+Rung 4 is not left to the orchestrator's judgement alone: a deterministic `HUMAN_ONLY` list in `gate.py` (for example `git push`, deploy and cloud CLIs such as `vercel`, `fly`, `terraform apply`, `gh release`, and any delete or write whose readable target is outside the worktree and the scratchpad) can never be allowed by `approved.json`. Only the plan's `Risky actions`, which the user approved, can allow those, and only by an exact entry (no prefix).
+
 Every rung is logged (`rule`: `planned`, `judge`, `orchestrator`, `user`), so `/tune` shows how often each rung decides and the orchestrator's approvals can be calibrated like any other Jev decision.
-- **Planned risky actions.** The plan header gets an optional section `Risky actions:` listing exact commands or command prefixes ending in `*` (for example `rm -rf dist`, `pnpm db:reset*`). `/wplan` proposes it from the tasks; the user approves it with the plan. During a run the gate allows a command that matches an entry exactly or by prefix, as a whole simple command (a match inside `a && b` covers only that part; every other part is judged as usual). Matches are logged with `"rule": "planned"`.
-- `planfile.py` parses the section; a malformed section is ignored (nothing pre-approved), never fatal.
+
+
+**Planned risky actions.** The plan (`docs/plans/...`) gets an optional section before the first task:
+
+```
+## Risky actions
+- `rm -rf dist` — deletes the build folder; it is rebuilt automatically, nothing of yours is lost.
+- `pnpm db:reset*` — wipes the local test database and refills it with sample data; real data is not touched.
+```
+
+One bullet per action: the command in backticks (exact, or a prefix ending in `*`), then ` — ` and the plain sentence (section G). `/wplan` proposes the list from the tasks; the user approves it with the plan. Orchestrate §2, which builds `.orchestrate/PLAN.md` from the plan, copies this section verbatim to the top of `.orchestrate/PLAN.md` (the only plan the gate finds); SKILL §2's definition of `.orchestrate/PLAN.md` is extended to allow it. New `planfile.risky(text)` returns the commands; `planfile.sections` ignores the section. A malformed bullet is skipped (nothing pre-approved), never fatal.
+
+During a run the gate allows a simple command that matches an entry exactly or by prefix (a match inside `a && b` covers only that part; every other part is judged as usual), or exactly matches an entry in `.orchestrate/approved.json`. Matches are logged with `"rule": "planned"` or `"rule": "orchestrator"`.
 - Outside a run the gate behaves as today.
 
 ### E. Preflight (`/orchestrate` §1, new `preflight.py`)
 
 Before writing `active.json` for the first time, the orchestrator runs `dryas-py jev/preflight.py`:
 
-- Reads the session's Claude Code `permission_mode` from the latest hook event the chain logged for this `session_id` (the chain records it in `calls.jsonl`; verify at plan time that Claude Code passes `permission_mode` in hook input).
-- `ok` when the mode is `auto`, `acceptEdits` with every plan command covered by `permissions.allow`, or `bypassPermissions`; otherwise it lists what would prompt.
+- Claude Code passes `permission_mode` in every hook input. New: `chain.main` adds it to the `calls.jsonl` record it already writes (`{"tool": ..., "permission_mode": ...}`). The preflight reads the latest record for this `session_id`.
+- `ok` when the mode is `auto` or `bypassPermissions`. Any other mode (`default`, `acceptEdits`, `plan`) is not ok, because executor shell commands cannot be known in advance and so cannot be checked against an allowlist.
 - Not `ok`: the orchestrator does not start; it tells the user what to change (for example "start the session in auto mode") while they are still there. It never edits settings.
 - OpenCode and Codex: the check reads their permission config where available; where it cannot tell, it reports "unknown" and the run starts with a one-line warning.
 
@@ -127,11 +141,20 @@ The user may not read code. Everything this design shows the user is written so 
 
 ## 5. Executor rules
 
-`claude/agents/executor.md` (synced to Codex and OpenCode) adds: "Edit files with Edit/Write. Shell edits that touch files outside your Scope are denied or sent back at task return. Never run a destructive command the plan's Risky actions do not list; report `NEEDS USER: <action> because <reason>` instead."
+`claude/agents/executor.md` (synced to Codex and OpenCode) adds: "Edit files with Edit/Write. Shell edits that touch files outside your Scope are denied or sent back at task return. If a risky command is denied, find a safer way or report `NEEDS DECISION: <exact command> because <reason>`." Rule 5 (commit) adds: "end your report with `COMMITS: <sha>...` or `COMMITS: none`; put `(task N)` in each commit subject."
+
+## Orchestrate skill and command changes
+
+- §1: run the preflight (E) before the first `active.json`.
+- §2: copy `## Risky actions` into `.orchestrate/PLAN.md` (D).
+- §5: record `base` per task in `active.json` (C); dispatch prompts name the `(task N)` subject tag.
+- §6: run `scope_audit.py` for each report before `jev_judge`; handle `NEEDS DECISION` (D rung 3) and `NEEDS USER` (rung 4).
+- End: the report, lessons and notification (F, section 7).
+- `claude/commands/orchestrate.md` `allowed-tools` adds the `dryas-py` calls for `scope_audit.py` and `preflight.py`, and `Write(.orchestrate/approved.json)` is covered by the existing Write permission; Codex and OpenCode command files get the same.
 
 ## 6. Logging
 
-Every `scope.jsonl` record gets `kind` (`ask`, `deny`, `violation`) and `rule` (the detector or B rule that fired); gate records get `"rule": "planned"` or `"run_deny"` where D applied. `tune.delivery` splits today's `scope_denials` (which counts asks too) into `scope_asks`, `scope_denies`, `scope_violations`, and adds `run_prompts` (asks of any stage while a run was active).
+Every `scope.jsonl` record gets `kind` (`ask`, `deny`, `violation`) and `rule` (the detector or B rule that fired); gate records get `rule` (`planned`, `judge`, `orchestrator`, `run_deny`) where D applied. Scope and gate records both get `run: true|false` (whether `task_active(cwd)` held), which is what makes run prompts countable. `tune.delivery` splits today's `scope_denials` (which counts asks too) into `scope_asks`, `scope_denies`, `scope_violations`, and adds `run_prompts` = scope and gate records with `run: true` and decision `ask` (the target is 0).
 
 ## 7. Getting better after every run
 
