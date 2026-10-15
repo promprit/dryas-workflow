@@ -120,11 +120,12 @@ class GateOutcomeInprocTest(unittest.TestCase):
             chain.observe(ev, json.dumps(ev), chain.load_stages("post"))
         return run
 
-    def test_chain_json_stage_is_inproc_and_claude_only(self):
+    def test_chain_json_stage_is_inproc_on_claude_and_opencode_not_codex(self):
         with open(os.path.join(HERE, "chain.json"), encoding="utf-8") as f:
             st = [s for s in json.load(f)["post"] if s["name"] == "gate-outcome"][0]
         self.assertEqual(st.get("inproc"), "gate_outcome")
-        self.assertNotIn("harness", st)
+        self.assertEqual(st["harness"], ["claude", "opencode"])
+        self.assertNotIn("codex", st["harness"])
 
     def test_bash_call_without_prior_ask_writes_nothing_and_spawns_nothing(self):
         run = self.post("t1")
