@@ -10,7 +10,7 @@
 
 **Spec:** `docs/specs/2026-10-15-scope-lock-shell-writes-design.md`
 
-**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); 15 is independent; **Task 12 (release) runs last**.
+**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); 15 is independent; 16 after 9, 13, 14; **Task 12 (release) runs last**.
 
 ## Global Constraints
 
@@ -2286,3 +2286,31 @@ def upgrade_if_stale(cd: Path, env: Dict[str, str], repo: Path, entry: Optional[
   In the dry-run branch of `setup` (`if dry:`), print the two update commands too when the installed version is stale (read `plugin_entry(cd)` there; print, do not run).
 - [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS. Existing `test_plugin_setup.py` cases whose fake list reports an old version now see two extra logged calls: if one asserts the exact call list, add the two update calls to its expectation (they are the fix), do not remove the version from the fake.
 - [ ] **Step 5: Commit** `install/plugin_setup.py install/tests/test_plugin_setup_upgrade.py` (and `install/tests/test_plugin_setup.py` only if Step 4 changed it; then add it to this task's Scope in your report) as `fix(install): setup upgrades a stale plugin copy; verify checks the version (task 15)`, with a pathspec commit.
+
+## Task 16: Fix-ups found by the full suite and the run
+
+Goal: The full suite's real failures are fixed and the run's process lessons are in the orchestrate and executor rules: tests no longer depend on the cwd's run state, the injected rules fit their budget, the pstack-off fixture follows the new executor rules, compare_v1 exits 2 without a corpus, and commits are pathspec-only.
+Scope:
+- install/tests/test_cloud_session.py
+- claude/jev/tests/test_interrogate_tune_fixes.py
+- install/tests/fixtures/pre_pstack/executor.md
+- claude/CLAUDE.md.template
+- docs/workflow.md
+- claude/skills/plan/SKILL.md
+- claude/skills/orchestrate/SKILL.md
+- claude/agents/executor.md
+- tools/compare_v1.py
+- install/tests/test_compare_v1.py
+Done:
+- `python3 -m pytest -q install/tests/test_cloud_session.py claude/jev/tests/test_interrogate_tune_fixes.py install/tests/test_pstack_loop.py install/tests/test_template_budget.py install/tests/test_claude_md_template.py install/tests/test_release_rules.py install/tests/test_unattended_docs.py install/tests/test_compare_v1.py install/tests/test_process_skills.py` passes, run from the worktree while `.orchestrate/active.json` lists an active task
+Failing test first: install/tests/test_template_budget.py :: BudgetTest.test_sizes_within_budget
+
+- [ ] **Step 1: Cloud session test.** `install/tests/test_cloud_session.py::test_scope_lock_and_gate_match_the_mac` runs a discard command while a task is active and expects `"ask"`. Under GOV-12 a run never asks: change the expectation to `["deny", None, "deny"]` (cloud and plugin must still agree) and add a comment naming GOV-12.
+- [ ] **Step 2: cwd-independent gate tests.** `claude/jev/tests/test_interrogate_tune_fixes.py` calls `gate.run` with no `cwd`, so the gate reads the process cwd; inside a worktree with an active run the ask becomes a deny and `asks_pending.json` is never written. Give each `gate.run` event in that file a `"cwd"` of the test's temp dir (read the file's setUp for it) so the test means the same thing everywhere. Do not change what it asserts.
+- [ ] **Step 3: Template budget.** `claude/CLAUDE.md.template` is 3606 bytes; `install/tests/test_template_budget.py` allows 3526. Shorten the two lines Task 14 added (do not raise the budget, do not touch older lines) to, for example: `- Nobody is prompted during /orchestrate: hooks decide or the orchestrator does; what needs the user waits for the end report.` and `- Never ship a release worse than the last (prompts per task, speed, cost vs the previous release; tools/compare_v1.py).` Keep the phrases `Nobody is prompted during /orchestrate` and `worse than the last`, which `test_release_rules.py` pins. Apply the same wording in `docs/workflow.md` only if that file's test pins it; otherwise leave docs/workflow.md as it is.
+- [ ] **Step 4: pstack-off fixture.** `install/tests/test_pstack_loop.py::test_off_is_byte_identical` renders `claude/agents/executor.md` with pstack off and compares it to `install/tests/fixtures/pre_pstack/executor.md`. Task 9 changed executor rules outside the pstack block. Update the fixture so it equals the current file rendered with pstack off (render it with the function the test uses, `render.gate_blocks(text, [])`, and write the result with Write). Only text outside the pstack-picks block may differ from the old fixture; check that with a diff before writing.
+- [ ] **Step 5: Process lessons in the rules.** In `claude/skills/orchestrate/SKILL.md` §5.3, add after the commit sentence: "Executors share the worktree's index: they commit with a pathspec (`git add <paths> && git commit -m \"...\" -- <paths>`), never a bare `git commit` and never `--amend`." In §6, before the scope_audit sentence, add: "Commit your own edits (plan, scope changes) before auditing; the audit counts any uncommitted change." In `claude/agents/executor.md` rule 5 add: "Commit with a pathspec (`git commit -m \"...\" -- <your paths>`); never a bare `git commit`, never `--amend`." Then re-render the Step 4 fixture if this changed text outside the pstack block (it does: do Step 5 before writing the fixture).
+- [ ] **Step 6: Plan skill count.** `claude/skills/plan/SKILL.md` says "The review is done when the four checks find nothing left to fix"; Self-review now has five items: change "four" to "five".
+- [ ] **Step 7: compare_v1 without a corpus.** `tools/compare_v1.py` crashes with a traceback when `claude/jev/tests/fixtures/scope_shell_corpus.jsonl` is missing. In `main`, before `run(...)`, if `CORPUS` is not a file, write `no regression corpus at <path>` to stderr and return 2. Add `test_missing_corpus_exits_2` to `install/tests/test_compare_v1.py` (patch `compare_v1.CORPUS` to a missing path and `sys.argv` to `["compare_v1.py", "--v1", <a temp dir holding jev/chain.py>]`, assert `main()` returns 2).
+- [ ] **Step 8: Run the Done command** with the run still active. Expected: PASS.
+- [ ] **Step 9: Commit** with a pathspec of the changed Scope files as `fix: suite fix-ups and run lessons for 2.3.1 (task 16)`.
