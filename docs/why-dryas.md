@@ -2,7 +2,7 @@
 
 The Dryas Workflow Framework (Dryas for short) is a target operating model for AI-assisted software delivery. It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to spend more on a stronger model, and what must be true before work merges.
 
-The tools in this repo (Claude Code, Superpowers, Ruflo, Jev, the design skills) are one way to run it. They are replaceable. The model is the asset.
+What this repo ships (Claude Code, Codex, the Dryas core, and optional extras such as the Jev model, Ruflo, Superpowers and the design skills) is one way to run it. They are replaceable. The model is the asset.
 
 ## The problems it solves
 
@@ -21,13 +21,13 @@ Teams that hand real delivery work to AI agents hit the same failures, whatever 
 
 ## Why not just install the skills?
 
-Every tool Dryas uses can be installed on its own: Superpowers, Ruflo, a model router, design skills. Installed side by side, though, they are a pile of parts rather than a method. Each assumes it runs the show, none knows the others exist, and their rules are prompts the agent may follow or skip. Dryas is the part that makes them one system.
+Process skills, a memory server, a model router and design skills can each be installed on their own. Installed side by side, though, they are a pile of parts rather than a method. Each assumes it runs the show, none knows the others exist, and their rules are prompts the agent may follow or skip. Dryas owns the core of those jobs and makes them one system; Superpowers, Ruflo and the Jev model stay available as optional extras.
 
 | Skills installed side by side | Dryas |
 | --- | --- |
 | **Rules are requests.** A skill tells the agent to stay in scope or run the tests; nothing stops it when it does not. | **Rules are enforced.** Hooks deny edits outside a task's Scope, gate risky commands and gate the commit. The prompt is backed by a check. |
-| **Tools compete for the same job.** Superpowers' plan executors, Ruflo's agents and your own subagents each want to run the plan; two memory systems each want to remember it. | **One owner per job.** Superpowers owns process, Ruflo owns memory and coordination, Jev only answers narrow questions, `/orchestrate` runs the plan. Overlapping skills are denied in settings, so there is one path. |
-| **Hooks run in install order.** Whichever plugin was installed last decides what fires first, and a noisy hook can mask a blocking one. | **One hook chain, in a fixed order.** Scope lock, then Jev, then Ruflo, then an observe-only stage last. The order is a file in the repo, tested like code. |
+| **Tools compete for the same job.** Third-party plan executors, agent swarms and your own subagents each want to run the plan; two memory systems each want to remember it. | **One owner per job.** The Dryas skills own process, Dryas memory owns memory, the judge (local, or Jev) owns judgement, the scope lock owns scope, `/orchestrate` runs the plan. When an extra such as Superpowers is added, the skills it overlaps are denied in settings, so there is one path. |
+| **Hooks run in install order.** Whichever plugin was installed last decides what fires first, and a noisy hook can mask a blocking one. | **One hook chain, in a fixed order.** Scope lock, then gate, then memory, then observer. The order is a file in the repo, tested like code. |
 | **No cost policy.** Each tool picks its own model, so work runs on whatever is default: often too strong, sometimes too weak. | **A model ladder.** The cheapest model that can do the task goes first; a stronger one is used only after a failure, and every step up is logged with its reason. |
 | **No feedback.** Nobody can say whether the guardrails are too tight or too loose. | **A learning loop.** Escalations and overrides of the judge are logged; `/tune` reads them weekly and proposes threshold changes. |
 | **Each tool's defaults ship as they are.** Third-party hooks may fetch and run unpinned packages on every session. | **Third-party parts are hardened on install.** Helpers that would spawn unpinned `npx` from a hook are patched out, and plugins that do it are left disabled. |

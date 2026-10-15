@@ -2,6 +2,7 @@
 description: Conventional commit, gated by a Jev "safe to commit?" check
 argument-hint: [message hint]
 allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git add:*), Bash(git commit:*), Bash(grep:*), Read(~/.dryas/jev/thresholds.json), mcp__plugin_dryas_jev__jev_judge, mcp__plugin_dryas_jev__log_override
+disable-model-invocation: true
 ---
 1. Run `git status --short` and `git diff --cached --stat` (stage named files only if nothing is staged; never `git add -A`, never stage .env* or other secrets).
 2. Secret scan. First run `git diff --cached --name-only` and STOP if any staged path matches (case-insensitive) `(^|/)\.env($|\.)`, `\.pem$`, `\.key$`, `\.p12$`, `id_rsa`, `id_ed25519`, `credentials`, `\.keychain`, `secrets?\.(json|ya?ml|toml)$`. Then grep the staged diff (`git diff --cached -U0`) for `sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.` and STOP on any hit (report file + line, never print the secret). Only then set `secret_scan: "clean"` in Jev's state.

@@ -14,10 +14,10 @@ class ClaudeMdTemplateTest(unittest.TestCase):
         self.off = render.gate_blocks(self.text, [])
 
     def test_rules_present(self):
-        for s in ("~/.dryas/docs/dryas-workflow.md", "superpowers:brainstorming", "ui-ux-pro-max", "impeccable",
+        for s in ("~/.dryas/docs/dryas-workflow.md", "dryas:brainstorm", "ui-ux-pro-max", "impeccable",
                   "/orchestrate", "git worktree", "One agent per worktree", "/wreview",
-                  "superpowers:verification-before-completion", "Ask before any install", ".orchestrate/",
-                  "scope lock -> Jev -> Ruflo", "/handoff", "Edit the repo"):
+                  "dryas:verify", "Ask before any install", ".orchestrate/",
+                  "scope lock -> gate -> memory -> observer", "/handoff", "Edit the repo"):
             self.assertIn(s, self.off, s)
 
     def test_pstack_rules_gated(self):

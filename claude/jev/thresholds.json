@@ -19,6 +19,7 @@
       "python3 -m pytest",
       "swift test",
       "cd"
-    ]
+    ],
+    "allowlist_min_approvals": 3
   }
 }

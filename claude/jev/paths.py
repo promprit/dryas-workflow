@@ -1,14 +1,42 @@
 # claude/jev/paths.py
 """The one place that knows where Dryas keeps state. Shared by every Claude config dir (account):
-$DRYAS_DATA_ROOT (default ~/.dryas). JEV_* env overrides win. Never raises."""
+$DRYAS_DATA_ROOT (default ~/.dryas; <copy>/state in a repo copy made by dryas cloud). JEV_* env overrides win. Never raises."""
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+_PROJECT = re.compile(r"\$(?:\{CLAUDE_PROJECT_DIR(?::-[^}]*)?\}|CLAUDE_PROJECT_DIR(?![A-Za-z0-9_]))")
+
+
+def _env_path(var: str) -> str:
+    """An env path. A repo copy's .mcp.json gives the jev server "${CLAUDE_PROJECT_DIR:-.}/.dryas/state"; if a client
+    passes it unexpanded, $CLAUDE_PROJECT_DIR, ${CLAUDE_PROJECT_DIR} and ${CLAUDE_PROJECT_DIR:-...} are expanded here,
+    and "" (unset) is returned when CLAUDE_PROJECT_DIR is not set, so data_root() falls back to the copy's own
+    state folder. Any other "$" (a Windows profile name) is kept as it is."""
+    v = os.environ.get(var) or ""
+    if _PROJECT.search(v):
+        proj = os.environ.get("CLAUDE_PROJECT_DIR") or ""
+        return _PROJECT.sub(lambda m: proj, v) if proj else ""
+    return v
+
+
+def copy_root() -> str:
+    """The .dryas folder when this code runs from a repo copy made by `dryas cloud` (owned core E), else ""."""
+    root = os.path.dirname(HERE)
+    if os.path.basename(root) == ".dryas" and os.path.isfile(os.path.join(root, "manifest.json")):
+        return root
+    return ""
+
+
 def data_root() -> str:
-    return os.environ.get("DRYAS_DATA_ROOT") or os.path.join(os.path.expanduser("~"), ".dryas")
+    env = _env_path("DRYAS_DATA_ROOT")
+    if env:
+        return env
+    copy = copy_root()
+    return os.path.join(copy, "state") if copy else os.path.join(os.path.expanduser("~"), ".dryas")
 
 
 def jev_dir() -> str:
@@ -56,7 +84,7 @@ def projects_dir() -> str:
 
 
 def plugin_root() -> str:
-    return os.environ.get("CLAUDE_PLUGIN_ROOT") or os.path.dirname(HERE)
+    return _env_path("CLAUDE_PLUGIN_ROOT") or os.path.dirname(HERE)
 
 
 def python() -> str:

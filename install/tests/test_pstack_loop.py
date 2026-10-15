@@ -121,7 +121,7 @@ class PstackLoopTest(unittest.TestCase):
     def test_orchestrate_on_content(self):
         on = render.gate_blocks(read("claude/skills/orchestrate/SKILL.md"), ["pstack-picks"])
         for s in ('"needs_interrogate"', "interrogate.min_confidence", "${CLAUDE_PLUGIN_ROOT}/skills/interrogate/SKILL.md",
-                  "${CLAUDE_PLUGIN_ROOT}/pstack/cleanup.md", "superpowers:systematic-debugging", "same model",
+                  "${CLAUDE_PLUGIN_ROOT}/pstack/cleanup.md", "dryas:debug", "same model",
                   "after every build task has left `.orchestrate/active.json`", "none (review)", "none (cleanup)",
                   "${CLAUDE_PLUGIN_ROOT}/pstack/benchmark-checklist.md", "Never put the top rung on the panel"):
             self.assertIn(s, on, s)

@@ -21,9 +21,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      # Hosted runners ship Node; install/tests/test_e2e_no_node.py strips it from PATH itself and is the proof.
+      - run: python -m pip install pytest
+      - run: python -m pytest -q -rs claude/jev/tests install/tests
+  ruflo-extra:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - run: python -m pip install pytest
-      - run: python -m pytest -q -rs claude/jev/tests install/tests claude/ruflo/tests
+      - run: python -m pytest -q -rs claude/ruflo/tests
       - run: node claude/ruflo/tests/test_ns.cjs

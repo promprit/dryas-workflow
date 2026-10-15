@@ -57,13 +57,45 @@ Only once the spec is stable.
 - [ ] Pi, OpenCode, Roo and Cursor editions (later), by anyone, against the spec
 - [ ] Packaged plugins per harness, generated from the manifest (Claude Code and Codex done: plugin dryas@dryas-workflow)
 
-## Phase 4: Jev judges the task, not every edit
+## Phase 4: the owned core
 
-Today the Jev gate judges every `Write` and `Edit`, each as a remote call with no context beyond the one diff. The next change moves the judgement to the task:
+Dryas 2.0 owns its core: no third-party plugin is required, and the extras stay optional. Providers are slots (`judge: local | jev`, `memory: dryas | ruflo | none`, `process: dryas | superpowers`), chosen at install ([install.md](install.md#flags)). Delivered as sub-projects, each merged in turn:
 
-- [ ] When the orchestrator dispatches a task, ask Jev once: given this plan step, file scope and done check, which files need per-edit review? Store the answer in `active.json` next to the scope.
-- [ ] Scope lock reads that set on each edit: files in it go to the gate, the rest are allowed locally. One Jev call per task instead of one per edit.
-- [ ] Keep the fallbacks. Edits outside any task still use the path filter and the gate. Classes that are always judged (`.git/`, dotfiles, CI config, secrets-adjacent files) stay judged whatever Jev said. Cheap local content signals (`subprocess`, `eval`, deletes, env and network access) still trigger a per-edit call inside a trusted scope, so an executor that drifts from its task is caught.
-- [ ] Log one dispatch record per task with Jev's verdict, for `/tune` and [metrics.md](metrics.md).
-- [ ] Score the starting tier from signals you can see and log, computed locally at dispatch: size (files and lines in the task scope), risk (paths touching auth, money, data, migrations), tests (the task has a done check a test can verify) and history (this task type escalated before, from the escalation log). The score sets the first rung of the ladder only; escalation still happens after a failure. Jev is asked only inside a doubt band around each line, and doubt rounds up. Write the signals, score and starting tier into the dispatch record so `/tune` can report the escalation rate per score bucket and move the bands; the weights are thresholds, not constants.
-- [ ] Spec first, under `docs/specs/`, since it changes the orchestrate skill, the `active.json` format, scope lock, the gate and the dispatch log.
+- [x] **0, inventory.** `tools/inventory.py --check` and `reference/inventory-map.json`: nothing a 1.x install has disappears without a mapped replacement.
+- [x] **A1, judge providers.** The `local` judge (deterministic rules, no key) next to Jev, with the shadow comparison and fallback logged.
+- [x] **A2, task-level judge.** The review set, the score, the scored start tier and the Done-when check, all in shadow and off by default.
+- [x] **B, Dryas memory.** `~/.dryas/dryas.db` with search, consolidation and `dryas memory import-ruflo`, served by the `jev` MCP server.
+- [x] **C, Dryas process skills.** `dryas:brainstorm`, `dryas:worktree`, `dryas:tdd`, `dryas:review-request`, `dryas:review-receive`, `dryas:verify`, `dryas:plan` and `dryas:debug`, each mapped to its upstream in `UPSTREAM.md`.
+- [x] **D, integration.** The memory stages and `gate-outcome` in the hook chain, background consolidation, the installer flags and the `dryas` command, the legacy cleanup, `/tune` judge and memory lines, the judge scorecard (`reference/judge-corpus/`), `/retro`, `GLOSSARY.md` and `.out-of-scope/`.
+
+Task-level judgement runs shadow-then-enforce: it is computed and logged next to today's behaviour, and enforced only once the logs show it is right. A2's finding: `review.task_skip` usually reports "no evidence", because build files are always judged and plain edits inside the working folder are already skipped. The value is in the per-task numbers, the scored start tier and the Done-when check. Rules in [governance.md](governance.md#task-level-judgement).
+
+- [ ] **Enforce, on evidence.** Turn on `review.task_skip` and `dispatch.scored_tier` only when `/tune` proposes them, each a threshold in `thresholds.json`, reported and reversible.
+- [ ] **Flip judges.** Move an install from `--judge jev` to `--judge local` when `/tune` shows the local judge agreeing, and grow the corpus from the disagreements it lists.
+
+Design rules:
+
+- Fail safe on format: a missing, unreadable or older `active.json` review set means every edit is judged. No verdict never means skip.
+- Classes that are always judged (`.git/`, dotfiles, CI config, build manifests, key files; the gate's `SENSITIVE_*` lists) stay judged whatever the judge said.
+- Cheap local content signals (`subprocess`, `eval`, deletes, env and network access) still trigger a per-edit call inside a trusted scope, so an executor that drifts from its task is caught.
+- The score sets the first rung of the ladder only; escalation still happens after a failure. Doubt rounds up. Weights are thresholds, not constants.
+
+Done when: Jev calls per task down by at least half and gate wait per task down, escalation rate and review-found defects no worse than the baseline, and no enforced false-skip on a file that is always judged.
+
+## Later: a repo map for Brainstorm and Plan
+
+A cheap way for the orchestrator to see a large repo's structure without reading it. Separate from Phase 4: size and risk come from the plan's scope globs and path classes, not from the codebase.
+
+- [ ] A structural map, not embeddings: file tree, top-level symbols (stdlib `ast` for Python, `ctags` when installed) and doc headings. Built on demand, cached by commit SHA so each worktree gets its own branch's map, injected at Brainstorm and Plan under a token cap. Stdlib only, per [CONTRIBUTING.md](../CONTRIBUTING.md).
+- [ ] Measure planning turns and tokens with and without it, from the dispatch records. Only if the map is not enough on large repos, add semantic search as a pluggable component (off by default; Ruflo is now an optional extra).
+- [ ] Say in [memory-model.md](memory-model.md) that a source index is not memory: derived, rebuildable, never authoritative, never in the memory layer (MEM-4 bars file contents there), and a missing index never blocks the loop (MEM-5).
+
+## Later: an OpenCode edition (parked 2026-10-15)
+
+Parked until after 2.0. Estimate: 3–5 days of build to reach the Codex edition's level (partial conformance), after a half-day spike. Most of Dryas carries over unchanged: OpenCode reads `AGENTS.md` (the Codex template plus a harness block), skills and commands are markdown (one more render target in `tools/sync_codex_plugin.py`), the `jev` MCP server runs as a local stdio server (memory, judge and logging as-is), and per-agent models give the tier table.
+
+- [ ] Spike (half a day): confirm OpenCode's plugin events before and after a tool call, whether a plugin can ask the user or only block (if only block, the local judge's `ask` becomes a deny with a reason on OpenCode), and whether the acting agent's identity reaches the plugin (the scope lock needs it; Codex does not provide it).
+- [ ] Hook shim (1–2 days): a small plugin, run by OpenCode itself (no Node for the user), that maps tool events to the hook JSON `claude/jev/chain.py` reads, like `codex_event.py` does for Codex.
+- [ ] Installer target (about 1 day): `--harness opencode` writes OpenCode's config (MCP server, plugin, agents, commands), with uninstall and a `tools/release_check.py` check.
+- [ ] Executor and orchestration (half a day to a day): map `dryas:executor` and the fast → standard → strong → frontier ladder onto OpenCode agents and subagents.
+- [ ] Tests, docs and conformance (about 1 day): mock-event tests like the Codex ones, an OpenCode column in [harnesses.md](harnesses.md) and the conformance table, a CI job.

@@ -17,8 +17,8 @@ class RunCmdTest(unittest.TestCase):
         pu.which, pu.space_free = self.orig
 
     def test_components(self):
-        self.assertEqual(run_cmd.components(run_cmd.parse(["--no-ruflo"])), ["core", "jev", "superpowers", "design", "pstack-picks"])
-        self.assertEqual(run_cmd.components(run_cmd.parse([])), ["core", "jev", "ruflo", "superpowers", "design", "pstack-picks"])
+        self.assertEqual(run_cmd.components(run_cmd.parse(["--no-ruflo"])), ["core", "jev", "memory", "design", "pstack-picks"])
+        self.assertEqual(run_cmd.components(run_cmd.parse([])), ["core", "jev", "memory", "design", "pstack-picks"])
 
     def test_preflight_missing_lists_tools(self):
         pu.which = lambda n: ""
@@ -190,13 +190,18 @@ class MainTest(unittest.TestCase):
         st = MainStubs(self)
         st.copy = True
         cd = st.tmp / "acct"
+        from unittest import mock
+        p = mock.patch.dict(os.environ, {"JEV_THRESHOLDS": str(st.tmp / "thresholds.json")})
+        p.start()
+        self.addCleanup(p.stop)
         self.assertEqual(self.main("--claude-dir", str(cd), "--no-ruflo", "--flowobserve", "--yes"), 0)
         self.assertEqual(st.steps(), ["migrate", "ps.setup", "ps.verify"])
         a, k = st.call("migrate")
         self.assertEqual([Path(x) for x in a], [cd.resolve(), st.tmp / "data"])
         a, k = st.call("ps.setup")
         self.assertEqual(a[1], cd.resolve())
-        self.assertEqual(k, {"yes": True, "key": "", "flowobserve": True, "dry": False})
+        self.assertEqual(k, {"yes": True, "key": "", "flowobserve": True, "dry": False,
+                             "providers": {"judge": "auto", "memory": "dryas", "process": "dryas"}})
 
     def test_key_flag_and_default_dir(self):
         st = MainStubs(self)
@@ -454,7 +459,7 @@ class ThirdpartyWarnTest(unittest.TestCase):
     def test_warns_when_not_installed(self):
         self.assertIn("superpowers@claude-plugins-official is not installed", self.out(None))
 
-    def test_skips_superpowers_commands_and_passes_env(self):
+    def test_runs_superpowers_command_and_passes_env(self):
         import io
         from contextlib import redirect_stdout
         (self.home / ".claude" / "plugins" / "installed_plugins.json").write_text(json.dumps({"plugins": {}}))
@@ -463,9 +468,24 @@ class ThirdpartyWarnTest(unittest.TestCase):
         with redirect_stdout(buf):
             self.assertEqual(run_cmd.thirdparty(["superpowers", "design"], True, self.home / ".claude", env), 0)
         self.assertTrue(self.ran)
-        self.assertFalse(any("superpowers@claude-plugins-official" in argv for argv, _ in self.ran))
+        self.assertTrue(any("superpowers@claude-plugins-official" in argv for argv, _ in self.ran))
         self.assertTrue(all(e is env for _, e in self.ran))
         self.assertIn("superpowers@claude-plugins-official is not installed", buf.getvalue())
+
+    def test_superpowers_failure_does_not_abort(self):
+        import io
+        from contextlib import redirect_stdout
+        self.di.run = lambda argv, cwd=None, env=None: self.ran.append((argv, env)) or (
+            3 if any("superpowers@" in a for a in argv) else 0)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = run_cmd.thirdparty(["superpowers", "design"], True, self.home / ".claude")
+        self.assertEqual(rc, 0)
+        self.assertIn("failed (exit 3); Superpowers is optional, Dryas setup continues", buf.getvalue())
+        self.assertIn("warning:", buf.getvalue())
+        table = json.loads((HERE.parent / "components.json").read_text())
+        design = [list(a) for a in table["design"]["commands"]]
+        self.assertTrue(all(c in [a for a, _ in self.ran] for c in design))
 
 
 class WrapperTest(unittest.TestCase):
@@ -482,7 +502,9 @@ class WrapperTest(unittest.TestCase):
             path += [sysroot + r"\System32", sysroot + r"\System32\WindowsPowerShell\v1.0"]
         else:
             path += ["/usr/bin", "/bin"]
-        self.env = dict(os.environ, HOME=str(self.home), USERPROFILE=str(self.home), PATH=os.pathsep.join(path))
+        base = {k: v for k, v in os.environ.items()
+                if k not in ("DRYAS_DATA_ROOT", "CLAUDE_CONFIG_DIR", "CODEX_HOME") and not k.startswith("JEV_")}
+        self.env = dict(base, HOME=str(self.home), USERPROFILE=str(self.home), PATH=os.pathsep.join(path))
 
     def tearDown(self):
         shutil.rmtree(str(self.tmp), ignore_errors=True)
@@ -501,9 +523,15 @@ class WrapperTest(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Windows usually has an 8.3 short name for the space")
     def test_space_in_home_refuses_ruflo(self):
-        p = self.wrapper("--preflight-only")
+        # 2.0: Ruflo is an optional extra, so only an explicit --with-ruflo meets the space check
+        p = self.wrapper("--preflight-only", "--with-ruflo")
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn("--no-ruflo", p.stdout + p.stderr)
+        self.assertIn("--with-ruflo", p.stdout + p.stderr)
+
+    @unittest.skipIf(os.name == "nt", "Windows usually has an 8.3 short name for the space")
+    def test_space_in_home_is_fine_without_ruflo(self):
+        p = self.wrapper("--preflight-only")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
 
 if __name__ == "__main__":

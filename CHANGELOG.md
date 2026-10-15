@@ -2,6 +2,56 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## 2.0.0 - 2026-10-15
+
+Dryas 2.0 owns its core. The judge, the memory and the process skills ship in this repo with no third-party dependency, no Node and no key; Ruflo, Superpowers and the Jev model stay as optional extras. The change is additive: every 1.x tool, flag, hook, skill and record keeps working.
+
+### Added
+
+- **Local judge and providers.** A deterministic judge (`judge: local`) decides gate and routing questions with no key and no network. Provider slots: `judge: local | jev`, `judge.shadow: local | jev | none`, `memory: dryas | ruflo | none`, `process: dryas | superpowers`.
+- **Task-level judgement, in shadow.** The judge can score and review a whole task instead of every edit. All switches are off by default; `/tune` reports the evidence before anything is turned on.
+- **Dryas memory** and its tools on the existing `jev` MCP server (same name, same six tools). Memory stages join the hook chain in GOV-11 order (scope lock, gate, memory, observer); each is observe-only, exits 0 and is budgeted at 2 s.
+- **Background consolidation.** Memory consolidates outside the hook budget, per namespace, with a lock whose stale holder is taken over, a heartbeat, a retry marker and failure backoff.
+- **`dryas memory`** command (`claude/bin/dryas`, `dryas.cmd` on Windows): `dryas memory import-ruflo`, `dryas memory consolidate` and `dryas memory stats`.
+- **Eight Dryas process skills** (brainstorm, plan, tdd, debug, verify, review-request, review-receive, worktree), so the process no longer needs Superpowers.
+- **Installer flags** `--judge local|jev`, `--with-ruflo`, `--with-superpowers`, `--with-design`. Aliases keep working: `--no-jev` means `--judge local`; `--no-ruflo`, `--no-superpowers` and `--no-design` keep their meaning; `--openrouter-key` implies `--judge jev`. Preflight needs Python 3.9+ only; Node, npm and the path-with-spaces check apply only with Ruflo.
+- **Judge scorecard.** A labelled corpus (`reference/judge-corpus/`) and `tools/judge_score.py --check` measure the local judge in CI. The scorecard downgrades a deny to an ask where the corpus allows it and counts a missed deny as a failure.
+- **`/tune` additions:** judge disagreements as corpus candidates, allowlist proposals from approved asks (read-only commands only; a dangerous or destructive prefix is never proposed and `/tune apply gate.allowlist` refuses one typed by hand), lines changed per task (overall and by start tier), and memory counts. Gate outcomes are recorded in process.
+- **`/retro`**, `GLOSSARY.md` and `.out-of-scope/` decision records.
+- **Surgical changes.** Executors trace every changed line to the task; the review checks flag unrelated hunks.
+- **Dryas in cloud sessions** (`dryas cloud init | check | update | remove`, also `install.sh --repo` and `install.ps1 -Repo`). It writes a pinned, version-stamped copy of the Dryas core into a GitHub repo: the runtime in `.dryas/`, the skills, commands and executor agent in `.claude/`, the hooks, `.mcp.json`, the rules block and the ignore lines. A claude.ai/code cloud session on that repo then runs the workflow with the local judge, no key and no network. Every run is a dry run until `--yes`. Hand edits are kept unless you pass `--force`, and `remove` takes out exactly what Dryas added. `.dryas/jev/cloud_check.py` (and `/dryas-cloud check`) checks a copy for drift, Mac paths, non-stdlib scripts, licences and NOTICE lines, in a session or in CI. Options: `--with-design`, `--with-own`, `--prefix`, and opt-in redacted session notes with `--persist-memory`. `reference/cloud-bindings.json` lists every core component as copied, opt-in or excluded. See `docs/cloud-sessions.md`.
+- **CI:** a no-Node install and end-to-end loop on three operating systems, and the Ruflo tests in their own job on three operating systems. A no-Node check shim keeps the Ruflo path honest.
+
+### Changed
+
+- **Fresh-install defaults:** judge `local`, memory `dryas`, process `dryas`; design plugins stay installed by default. On upgrade an install keeps its current providers until you flip them.
+- **Executor rule 5:** commit your own task only when the dispatch prompt allows it; never push, merge or create worktrees.
+- **Templates** rewritten as a measured rules pass: `claude/CLAUDE.md.template` went from 4047 to 3247 bytes and `codex/AGENTS.md.template` from 2462 to 2388 bytes. `docs/template-coverage.md` maps every pre-2.0 rule to where it lives now, and a size budget test pins them.
+- **Docs and repositioning:** the workflow, memory, governance, install, harness and roadmap docs describe the owned core; the README calls Dryas a target operating model plugin; the spec's section 9.2 example manifest and `reference/dryas.yaml` show the new providers.
+- **Allowlist hardening:** user allowlist entries the local judge flags as dangerous or destructive are dropped at load.
+- **`--no-jev` means `--judge local`:** the gate stays on with the local judge. A flag-less rerun of a 1.x `--no-jev` install keeps its gates off.
+- **Uninstall legacy cleanup** of the Ruflo extra is opt-in, never runs under `--yes`, and removes only what setup recorded.
+- **GitHub repo description** (applied 2026-10-15): "Dryas: a target operating model plugin for AI software delivery — framework, draft spec and a reference implementation with its own judge, memory and process skills for Claude Code and Codex." Topics added: ai-software-delivery, target-operating-model, code-review, developer-tools, llm-governance.
+
+### Kept (optional extras)
+
+- **Ruflo** (`--with-ruflo`, `--memory ruflo`): memory and coordination tools. An upgrade of an install that has Ruflo keeps Ruflo memory.
+- **Superpowers** (`--with-superpowers`): the rules point at the Dryas skills even when it is installed.
+- **Design plugins** (installed by default; `--no-design` skips them).
+- **The Jev model** (`--judge jev`): the remote judge through OpenRouter, still needing `OPENROUTER_API_KEY`.
+
+### Upgrade
+
+Cut-over from 1.x, as in `docs/install.md`:
+
+1. Run `install.sh --judge jev --memory dryas`. Memory switches to Dryas; Ruflo stays as an extra unless you pass `--no-ruflo`. The local judge stays as shadow so `/tune` can compare the two.
+2. Run `dryas memory import-ruflo`. It copies your Ruflo memory into `dryas.db` read-only, is safe to repeat, and leaves `~/.dryas/ruflo` in place.
+3. The legacy cleanup is offered by `--uninstall`, not by setup.
+4. Keep working: Ruflo and Superpowers keep running as extras until you drop them.
+5. Flip to `--judge local` when `/tune` proposes it.
+
+A rerun with no flags changes nothing about your providers or extras.
+
 ## 1.0.2 - 2026-10-13
 
 ### Fixed

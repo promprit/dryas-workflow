@@ -350,6 +350,48 @@ def mock_env(env):
         os.environ.clear()
         os.environ.update(old)
 
+class NoNodeCheckTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def run_no_node(self, rc, out):
+        buf = io.StringIO()
+        done = subprocess.CompletedProcess([], rc, out, "")
+        with contextlib.redirect_stdout(buf), mock.patch.object(release_check.subprocess, "run", return_value=done) as run:
+            rep = release_check.Report()
+            release_check.no_node(rep, REPO, self.tmp)
+        return rep, buf.getvalue(), run
+
+    def test_pass_and_path_has_no_node(self):
+        rep, out, run = self.run_no_node(0, "preflight ok\n")
+        self.assertIn("PASS  no-node install", out)
+        self.assertEqual(rep.fails, 0)
+        path = run.call_args[1]["env"]["PATH"]
+        self.assertIsNone(shutil.which("node", path=path))
+
+    def test_claude_next_to_node_is_kept(self):
+        d = os.path.join(self.tmp, "nvm-bin")
+        os.mkdir(d)
+        ext = ".cmd" if os.name == "nt" else ""  # Windows finds commands by PATHEXT
+        for n in ("node", "claude"):
+            with open(os.path.join(d, n + ext), "w") as f:
+                f.write("@exit /b 0\n" if ext else "#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(d, n + ext), 0o755)
+        p = mock.patch.dict(os.environ, {"PATH": d + os.pathsep + os.path.dirname(sys.executable)})
+        p.start()
+        self.addCleanup(p.stop)
+        rep, out, run = self.run_no_node(0, "preflight ok\n")
+        path = run.call_args[1]["env"]["PATH"]
+        self.assertIsNone(shutil.which("node", path=path))
+        self.assertIsNotNone(shutil.which("claude", path=path))
+        self.assertEqual(rep.fails, 0)
+
+    def test_fail_when_preflight_fails(self):
+        rep, out, _ = self.run_no_node(1, "node missing\n")
+        self.assertIn("FAIL  no-node install", out)
+        self.assertEqual(rep.fails, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

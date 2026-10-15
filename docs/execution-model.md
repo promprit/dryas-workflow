@@ -52,4 +52,4 @@ Work in a specialist domain carries its own required skills. In the reference im
 
 ## Reference binding
 
-`/orchestrate` (skill), the `executor` agent (`model: sonnet`; `/orchestrate` passes `model: haiku` for build tasks), Superpowers worktrees and TDD, `planfile.py` for section extraction, Ruflo hierarchical swarm for parallel dispatch. Details: [workflow.md §4](workflow.md).
+`/orchestrate` (skill), the `executor` agent (`model: sonnet`; `/orchestrate` passes `model: haiku` for build tasks), the Dryas skills `dryas:worktree` and `dryas:tdd`, `planfile.py` for section extraction, the `swarm_init` ledger on the Dryas (`jev`) server for parallel dispatch. Details: [workflow.md §4](workflow.md).

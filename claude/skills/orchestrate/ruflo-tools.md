@@ -1,4 +1,6 @@
-# Ruflo tool names (consumed by the orchestrate skill)
+# Ruflo tool names (optional extra: --with-ruflo, memory provider ruflo)
+
+The Dryas core provides memory_search, memory_store and swarm_init on its own jev server; use these Ruflo names only when the install chose --memory ruflo.
 
 Source: ruflo-core 0.2.6 plugin MCP (`ruflo-core/.mcp.json`, server key `ruflo`), Ruflo CLI 3.51.0 (tool names checked then; Dryas now tracks the latest Ruflo).
 In a session the tools are `mcp__plugin_ruflo-core_ruflo__<tool>` (use `ToolSearch("memory_search")` to load). The upstream docs call the server `claude-flow`; with the plugin install the prefix is the one above.

@@ -22,11 +22,12 @@ Each line starts with PASS, FAIL, SKIP or WARN. The exit code is 1 if any line i
 Then, for each `--claude-dir`, under a `Claude Code: <dir>` heading:
 
 - `dryas plugin installed`: `claude plugin list --json` (with `CLAUDE_CONFIG_DIR=<dir>` only for a non-default dir) lists `dryas@dryas-workflow`; the path shown is the folder it runs from (`readFromFolder`, your clone's `claude/`). Without a working `claude` it falls back to `<dir>/plugins/installed_plugins.json`. FAIL means setup was not run for that dir.
-- `dryas loads without errors`: the plugin is enabled and reports no load errors (for example a missing `superpowers` dependency). Skipped when `claude` is not on PATH.
+- `dryas loads without errors`: the plugin is enabled and reports no load errors. Skipped when `claude` is not on PATH.
 - `plugin hooks run (<event>)`, one line each for PreToolUse, UserPromptSubmit, SessionStart and PreCompact: every command of that event in the installed plugin's `hooks/hooks.json` is run the way Claude Code runs it (`bash -c`, with `CLAUDE_PLUGIN_ROOT`, `DRYAS_PY` and `CLAUDE_CONFIG_DIR` set) with a sample event. It passes when each exits 0 and prints nothing or JSON. On Windows it needs Git Bash; without it the lines are SKIP.
 - `Scope lock (claude)`: in a temporary worktree whose plan allows only `src/feature/**`, a write to `src/other.ts` must be denied by the plugin's `jev/chain.py`.
 - `Jev route`: with an OpenRouter key in this shell (`OPENROUTER_API_KEY`, `DRYAS_OPENROUTER_KEY` or `CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY`), a sample prompt must produce a `Jev ` line. Skipped without one. A key stored only as the plugin option is visible only inside Claude Code; manual step 1 covers it.
-- Ruflo (when setup installed it for that dir): the data folder (`DRYAS_DATA_ROOT` or `~/.dryas`) exists and is writable, `ruflo/helpers/hook-handler.cjs` is in it, and the plugin's Ruflo helper runner exits quietly (run against a temporary data folder). Skipped otherwise.
+- Ruflo (only with the Ruflo extra, when setup installed it for that dir): the data folder (`DRYAS_DATA_ROOT` or `~/.dryas`) exists and is writable, `ruflo/helpers/hook-handler.cjs` is in it, and the plugin's Ruflo helper runner exits quietly (run against a temporary data folder). Skipped otherwise.
+- `no-Node preflight`: `release_check.py` checks a Node-free preflight: a fresh install selection (the owned core, without Ruflo) must pass the prerequisite checks on a machine with no Node and npm.
 - `jev MCP entry`: WARN when a user-scope `jev` MCP server, left by the old copy install, runs a `jev_mcp.py` that no longer exists. Re-run setup to remove it.
 - `stub config` (default dir only, unless `CLAUDE_CONFIG_DIR` is exported for `~/.claude` itself): WARN when `~/.claude/.claude.json` exists. Claude Code reads `~/.claude.json`, so check that the stub holds nothing you need, then delete it.
 

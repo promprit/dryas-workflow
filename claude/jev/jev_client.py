@@ -52,7 +52,11 @@ def _normalize(answers: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def api_key() -> str:
     """OPENROUTER_API_KEY (shell), then DRYAS_OPENROUTER_KEY (MCP env from the plugin option), then
-    CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY (hook processes). Blank or unexpanded "${...}" values are unset. Never stored."""
+    CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY (hook processes). Blank or unexpanded "${...}" values are unset. Never stored.
+    A cloud session without DRYAS_JUDGE=jev gets no key, so callers outside providers (PreCompact, /handoff) stay local."""
+    from providers import _cloud_without_jev  # lazy: providers imports this module lazily too
+    if _cloud_without_jev():
+        return ""
     for name in ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY"):
         v = os.environ.get(name, "").strip()
         if v and not v.startswith("${"):

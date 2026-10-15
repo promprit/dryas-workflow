@@ -2,12 +2,12 @@
 
 ![ci](https://github.com/promprit/dryas-workflow/actions/workflows/ci.yml/badge.svg)
 
-**The Dryas Workflow Framework (Dryas for short) is a target operating model for AI-assisted software delivery.** It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
+**The Dryas Workflow Framework (Dryas for short) is a target operating model plugin for AI software delivery: a framework, a draft specification and a reference implementation that runs on its own core (a deterministic local judge, its own memory and process skills) on Claude Code and Codex. Superpowers, Ruflo and the Jev model are optional extras or upgrades.** It defines the process, decision rights, roles, controls, cost rules and metrics: who decides, who builds, what each agent may touch, what is remembered, when to pay for a stronger model, and what must be true before work merges.
 
 The method is the asset; the tools are replaceable. This repo holds both:
 
 - **The framework:** why it exists, five layers, one loop, and a draft specification any harness can implement.
-- **A reference implementation**: a Claude Code plugin (`dryas@dryas-workflow`) and a Codex plugin, built on Superpowers, Ruflo, Jev and a few design skills.
+- **A reference implementation**: a Claude Code plugin (`dryas@dryas-workflow`) and a Codex plugin, with the Dryas core (judge, memory, process skills) built in, a few design skills, and Ruflo, Superpowers and the Jev model as optional extras.
 
 This repo is public but expect rough edges. See [CONTRIBUTING.md](CONTRIBUTING.md) for the portability rules and how to run the tests.
 
@@ -17,7 +17,7 @@ See it running: [FlowObserve](https://github.com/promprit/flowobserve) shows eve
 
 ## Why not just install the skills?
 
-You can install Superpowers, Ruflo and a few design skills on their own. Side by side, their rules are prompts the agent may skip, they compete for the same jobs, their hooks fire in install order and nothing controls model spend. Dryas makes them one system: hooks enforce the rules, each job has one owner, the hook chain has a fixed order, a logged ladder picks the model, and a weekly tune checks that the guardrails fit. The full comparison: [Why not just install the skills?](docs/why-dryas.md#why-not-just-install-the-skills)
+You can install process skills, a memory server and a few design skills on their own. Side by side, their rules are prompts the agent may skip, they compete for the same jobs, their hooks fire in install order and nothing controls model spend. Dryas owns the core of that system, so it works as one: hooks enforce the rules, each job has one owner (the Dryas skills own process, Dryas memory owns memory, the judge owns judgement, the scope lock owns scope), the hook chain has a fixed order, a logged ladder picks the model, and a weekly tune checks that the guardrails fit. Ruflo, Superpowers and the Jev model plug into the same slots when you want them. The full comparison: [Why not just install the skills?](docs/why-dryas.md#why-not-just-install-the-skills)
 
 ## The framework
 
@@ -58,12 +58,14 @@ Brainstorm → Plan → Judge → Build → Escalate → Review → Ship
 - **Review**: the diff is reviewed and the tests are run before anything merges.
 - **Ship**: merge and commit, after verification.
 
+Commands you will use: `/orchestrate`, `/wreview`, `/interrogate`, `/commit`, `/handoff`, `/tune` and `/retro` (a session retrospective that proposes lessons and never applies them). Terms are in the [glossary](GLOSSARY.md).
+
 ## How the reference implementation works
 
 - **Escalation ladder.** `fast`, then `standard`, then `strong`, then `frontier`. Each step is logged with a reason.
 - **Scope lock.** An executor can only edit the files its task names. A hook blocks edits to other files made with the file-edit tools; writes from shell commands are not covered.
 - **Parallel loops.** One project can run many loops at once. The rule is one agent per git worktree: each loop has its own worktree and branch, so loops never collide, and each merges only after its own review.
-- **Jev gating.** Jev is a small model that answers narrow, typed questions. It never writes code or plans. If it is unsure, the main model decides.
+- **Judge.** A judge answers narrow, typed questions (is this command risky? which model?). By default `judge.provider` is `auto`: the Jev model when `OPENROUTER_API_KEY` is set, otherwise the deterministic local judge, which needs no key and no network. It never writes code or plans. If it is unsure, the main model decides.
 - **Design rule.** UI work goes through Impeccable and UI UX Pro Max.
 - **One source for the rules.** The always-loaded rules come from `claude/CLAUDE.md.template`; the Dryas plugin injects them at session start. The full reference comes from `docs/workflow.md`. Change them here and re-run the installer; every machine and account then matches the repo.
 
@@ -79,7 +81,18 @@ install\install.ps1                             # Windows (PowerShell)
 install/install.sh --claude-dir ~/.claude-team  # once more for each other Claude account
 ```
 
-Run it once per Claude config dir (`--claude-dir`). It adds the marketplace, installs the plugin and its Superpowers dependency, and merges model, env and permission rules into that dir's `settings.json`. All accounts share one state folder, `~/.dryas`.
+Run it once per Claude config dir (`--claude-dir`). A fresh install needs Python 3.9+ and git only: it adds the marketplace, installs the plugin and the owned core, and merges model, env and permission rules into that dir's `settings.json`. All accounts share one state folder, `~/.dryas`.
+
+Optional extras and choices, all flags on the same command:
+
+```
+install/install.sh --judge local|jev       # judge provider; without it the setting stays auto (Jev when a key is set, else local)
+install/install.sh --with-ruflo            # Ruflo extra (needs Node and npm); --memory dryas|ruflo|none picks the memory provider
+install/install.sh --with-superpowers      # Superpowers extra
+install/install.sh --no-design             # skip Impeccable and UI UX Pro Max (installed by default)
+```
+
+`--openrouter-key KEY` implies `--judge jev`. Upgrading from 1.x keeps what you have; the cut-over steps are in [docs/install.md](docs/install.md#cut-over-from-1x).
 
 Manual route, inside Claude Code:
 
@@ -88,7 +101,7 @@ Manual route, inside Claude Code:
 /plugin install dryas@dryas-workflow
 ```
 
-(Shell form: `claude plugin install dryas --marketplace promprit/dryas-workflow`.) This gives you the plugin only: the rules, hooks, scope lock, Jev chain, agents, commands and skills. It does not give you what setup merges into that dir's `settings.json`: the `model` setting, the `env` the hooks need (`DRYAS_PY`, `DRYAS_DATA_ROOT`, the Ruflo paths), the `permissions.allow` rules that let `/tune`, `/handoff` and the Jev scripts run without a prompt, and the `permissions.deny` rules that keep the Superpowers skills Dryas replaces out of the way. Without them the hooks run with your default Python and the skills compete again. Superpowers must also be installed from `claude-plugins-official`, and the shared state in `~/.dryas` is not set up. Run `install/install.sh` for all of that.
+(Shell form: `claude plugin install dryas --marketplace promprit/dryas-workflow`.) This gives you the plugin only: the rules, hooks, scope lock, judge chain, Dryas memory, agents, commands and skills. It does not give you what setup merges into that dir's `settings.json`: the `model` setting, the `env` the hooks need (`DRYAS_PY`, `DRYAS_DATA_ROOT`, the Ruflo paths), the `permissions.allow` rules that let `/tune`, `/handoff` and the Jev scripts run without a prompt, and, when you add Superpowers (`--with-superpowers`), the `permissions.deny` rules that keep its skills Dryas replaces out of the way. Without them the hooks run with your default Python, and the shared state in `~/.dryas` is not set up. Run `install/install.sh` for all of that.
 
 `--uninstall` lists what it will remove and asks (`--yes` answers every question), removes Dryas from one config dir and keeps `~/.dryas`; adding `--purge` on the last account also deletes the logs, `/tune` thresholds and handoffs there, but keeps your notes in `~/.dryas/docs/dryas-local.md`. It also offers to remove the third-party plugins setup installed (`--keep-extras` leaves them).
 
@@ -101,7 +114,7 @@ install/install.sh --harness codex                            # ~/.codex (--harn
 install/install.sh --harness codex --codex-dir ~/.codex-work  # once more for each other Codex home
 ```
 
-Codex 0.162.1 or newer. Setup adds the plugin to that Codex home, then lists the Dryas hooks and asks before it trusts them (`--yes` answers yes); untrusted hooks do not run. Set `OPENROUTER_API_KEY` in the shell Codex runs in. Codex runs a copy of the plugin, so re-run setup for each Codex home after `git pull`. `codex plugin marketplace add promprit/dryas-workflow` on its own is not enough: the hooks stay untrusted and setup does not run. Details: [docs/install.md](docs/install.md#codex-plugin-plus-setup).
+Codex 0.162.1 or newer. Setup adds the plugin to that Codex home, then lists the Dryas hooks and asks before it trusts them (`--yes` answers yes); untrusted hooks do not run. Codex reaches Dryas memory through the MCP tools; the memory hooks run on Claude Code only. For the Jev judge, set `OPENROUTER_API_KEY` in the shell Codex runs in; without it the local judge decides. Codex runs a copy of the plugin, so re-run setup for each Codex home after `git pull`. `codex plugin marketplace add promprit/dryas-workflow` on its own is not enough: the hooks stay untrusted and setup does not run. Details: [docs/install.md](docs/install.md#codex-plugin-plus-setup).
 
 Details, flags and troubleshooting: [docs/install.md](docs/install.md).
 
@@ -127,38 +140,56 @@ Fork this repo and make the workflow yours:
 
 Keep notes that only fit your machine in `~/.dryas/docs/dryas-local.md`. The installer never touches that file.
 
+## Local judge scorecard
+
+The local judge decides with deterministic rules and no key. This scorecard is measured on the checked-in corpus (`reference/judge-corpus/`, original to this repo) by `python3 tools/judge_score.py`, and CI fails when it gets worse. The numbers are the rule set's, not a model's, and they are what a keyless install gets.
+
+Each command in the corpus has a class: dangerous (must not be allowed), safe (must be allowed without a question) and tricky (quoting, wrappers and heredocs that hide a dangerous command or only look like one; each row names the verdict it should get). Latency (p95) is measured by `tools/judge_score.py` but not gated, because it depends on the machine.
+
+<!-- scorecard:start -->
+| Measure | Value |
+|---|---|
+| Commands in corpus | 79 |
+| Edits in corpus | 21 |
+| Missed dangerous commands | 14 |
+| Deny downgraded to ask | 4 |
+| Needless asks on safe commands | 0 |
+| Always-judged files not judged | 1 |
+<!-- scorecard:end -->
+
 ## Reference stack
 
-These are the reference implementation's bindings, not part of the method; each layer can be bound to something else. All parts are on by default. Each can be skipped with a flag.
+These are the reference implementation's bindings, not part of the method; each layer can be bound to something else. The Dryas core is always on; every other part is a choice.
 
-| Part | What it does | Skip with |
+| Part | What it does | Choose with |
 | --- | --- | --- |
-| [Claude Code](https://docs.claude.com/en/docs/claude-code) | The host: agents, hooks, commands | required |
-| [Jev (TypeSafe)](https://github.com/typesafe-ai/skills) | Decision support and gates | `--no-jev` |
-| [Ruflo](https://github.com/ruvnet/ruflo) | Orchestration and memory | `--no-ruflo` |
-| [Superpowers](https://github.com/obra/superpowers) | Process skills (brainstorming, worktrees, review) | required by the plugin (`--no-superpowers` drops only its deny rules) |
-| [Impeccable](https://github.com/pbakaus/impeccable) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Design skills | `--no-design` |
-| [pstack](https://github.com/michael-denyer/pstack-claude) picks | Interrogate review, cleanup, benchmark checklist, executor principles (vendored, adapted) | `--no-pstack-picks` |
+| [Claude Code](https://docs.claude.com/en/docs/claude-code) or [Codex](https://developers.openai.com/codex) | The host: agents, hooks, commands | required |
+| Dryas core | The local judge, Dryas memory (`~/.dryas/dryas.db`) and the process skills (`dryas:brainstorm`, `dryas:worktree`, `dryas:tdd`, `dryas:verify` and more) | always installed |
+| [Jev model (TypeSafe)](https://github.com/typesafe-ai/skills) | Upgrades the judge: decision support and gates through OpenRouter | `--judge jev` or `--openrouter-key` |
+| [Ruflo](https://github.com/ruvnet/ruflo) | Optional memory and orchestration | `--with-ruflo` (`--memory ruflo`) |
+| [Superpowers](https://github.com/obra/superpowers) | Optional alternative process skills | `--with-superpowers` |
+| [Impeccable](https://github.com/pbakaus/impeccable) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Design skills, installed by default | skip with `--no-design` |
+| [pstack](https://github.com/michael-denyer/pstack-claude) picks | Interrogate review, cleanup, benchmark checklist, executor principles (vendored, adapted) | skip with `--no-pstack-picks` |
 
 Optional, installed separately: [FlowObserve](https://github.com/promprit/flowobserve), an observe-only monitor for live Claude Code sessions. With Dryas it also shows escalations, one build lane per plan task, Jev spend against budget and per-stage timings. It never blocks or changes anything.
 
 ## Requirements
 
 - A Claude subscription with Claude Code, or the Codex CLI (0.162.1 or newer).
-- An OpenRouter API key for Jev. Jev is bring-your-own-key: set `OPENROUTER_API_KEY` in your shell, or pass `--openrouter-key` to setup (stored in Claude Code's secure storage; Codex reads the key from the shell only). Without a key, Jev checks are skipped and the workflow still runs.
+- Optional: an OpenRouter API key for the Jev judge. It is bring-your-own-key: set `OPENROUTER_API_KEY` in your shell, or pass `--openrouter-key` to setup (stored in Claude Code's secure storage; Codex reads the key from the shell only). Without a key the local judge decides and the workflow runs the same.
 - macOS, Linux, WSL or Windows.
-- Python 3.9+, Node and npm (for Ruflo), git. The hooks run `${DRYAS_PY:-python3}`; setup sets `DRYAS_PY` to the Python it ran with (in `settings.json` for Claude Code), and you can point it at another interpreter.
+- Python 3.9+ and git. Node and npm only with `--with-ruflo`. The hooks run `${DRYAS_PY:-python3}`; setup sets `DRYAS_PY` to the Python it ran with (in `settings.json` for Claude Code), and you can point it at another interpreter.
 
 ## Credits
 
-- [Superpowers](https://github.com/obra/superpowers) by obra
-- [Ruflo](https://github.com/ruvnet/ruflo) by ruvnet
+- [Superpowers](https://github.com/obra/superpowers) by obra: the Dryas process skills are derived from it, and it remains an optional extra
+- [Ruflo](https://github.com/ruvnet/ruflo) by ruvnet: an optional extra
 - [Impeccable](https://github.com/pbakaus/impeccable) by pbakaus
 - [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) by nextlevelbuilder
-- [TypeSafe skills (Jev)](https://github.com/typesafe-ai/skills) by TypeSafe
+- [TypeSafe skills (Jev)](https://github.com/typesafe-ai/skills) by TypeSafe: the optional Jev judge
 - [pstack](https://github.com/cursor/plugins/tree/main/pstack) by Lauren Tan, Claude Code port [pstack-claude](https://github.com/michael-denyer/pstack-claude) by Michael Denyer, and deslop from Cursor's cursor-team-kit (all MIT)
 
-Third-party code is fetched from upstream by the installer, except a few adapted pstack files in `claude/pstack/` (see [NOTICE.md](NOTICE.md)).
+Third-party code is fetched from upstream by the installer, except the adapted pstack files in `claude/pstack/` and the process skills derived from Superpowers (see [NOTICE.md](NOTICE.md)).
 
 ## License
 

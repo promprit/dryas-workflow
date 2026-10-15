@@ -1,6 +1,7 @@
 """All tunable Jev thresholds. Defaults here and in the shipped thresholds.json; user overrides in
 ~/.dryas/jev/thresholds.json (written by /tune after approval)."""
 import copy
+import datetime
 import json
 import math
 import os
@@ -25,9 +26,11 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
             "pnpm test", "npm test", "pnpm lint", "pnpm typecheck",
             "pytest", "python3 -m pytest", "swift test",
         ],
+        # /tune proposes an allowlist entry for a local ask the user approved at least this many times.
+        "allowlist_min_approvals": 3,
     },
     "route": {"min_confidence": 0.7, "swarm_min": 0.7},
-    "dispatch": {"min_confidence": 0.7, "haiku_default": True},
+    "dispatch": {"min_confidence": 0.7, "haiku_default": True, "scored_tier": False, "min_tasks": 50},
     # Ladder: fast -> standard -> strong -> frontier. Frontier only after the strong executor also failed.
     "escalation": {"executor_confidence_below": 0.5, "haiku_failures_before_sonnet": 1,
                    "sonnet_failures_before_opus": 2, "opus_failures_before_fable": 1, "haiku_climb_max": 0.35},
@@ -36,6 +39,12 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     "compact": {"keep_above": 0.5},
     "handoff": {"keep_min": 0.5},
     "context": {"warn_pct": 0.65},
+    # Who decides gate questions ("jev" | "local") and who answers in shadow ("local" | "jev" | "none").
+    # "auto": jev when a key is set, else local; shadow local when jev decides, else none (providers.py).
+    "judge": {"provider": "auto", "shadow": "auto"},
+    "review": {"task_skip": False, "min_tasks": 50, "max_false_skip_rate": 0.01},
+    "history": {"min_tasks": 30},
+    "baseline": {"until": ""},
 }
 
 
@@ -78,6 +87,15 @@ def _type_check(value: Any, default_value: Any) -> bool:
     if isinstance(default_value, dict):
         return isinstance(value, dict)
     return type(value) == type(default_value)
+
+
+def _is_date(value: str) -> bool:
+    """A real calendar date written YYYY-MM-DD (strptime alone also takes 2026-1-5)."""
+    try:
+        datetime.datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is not None
 
 
 def validate(dotted: str, value: Any) -> Optional[str]:
@@ -145,6 +163,15 @@ def validate(dotted: str, value: Any) -> Optional[str]:
                 first_word = item.split()[0]
                 if first_word in DANGEROUS_HEADS:
                     return f"{dotted} entry '{item}' starts with dangerous head '{first_word}'"
+        # An allowlisted command bypasses the gate: refuse anything the local judge would deny or ask about.
+        import local_judge
+        for item in value:
+            try:
+                bad = local_judge.danger(item) or local_judge.destructive(item)
+            except Exception:
+                bad = "error"  # fail closed: an entry the judge cannot read is not allowlisted
+            if bad:
+                return "refused: %r matches a dangerous or destructive pattern" % item
 
     if key == "ask_risk":
         # Must match gate.QUESTIONS["risk"]["criteria"] keys except "none_of_these"
@@ -152,6 +179,23 @@ def validate(dotted: str, value: Any) -> Optional[str]:
         valid_risks = {"routine", "worth_a_look", "destructive"}
         if value not in valid_risks:
             return f"{dotted} must be one of {valid_risks}, got {value}"
+
+    if key == "allowlist_min_approvals" and not 1 <= value <= 1000:
+        return f"{dotted} must be an int in [1, 1000]"
+
+    if key == "min_tasks" and not 1 <= value <= 100000:
+        return f"{dotted} must be an int in [1, 100000]"
+
+    if key == "max_false_skip_rate" and not 0.0 <= value <= 1.0:
+        return f"{dotted} must be a float in [0.0, 1.0]"
+
+    if dotted == "baseline.until" and value and not _is_date(value):
+        return f"{dotted} must be \"\" or a date YYYY-MM-DD"
+
+    if section == "judge":
+        allowed = {"provider": ("auto", "local", "jev"), "shadow": ("auto", "local", "jev", "none")}[key]
+        if value not in allowed:
+            return f"{dotted} must be one of {list(allowed)}"
 
     return None
 
@@ -162,6 +206,10 @@ def load() -> Dict[str, Dict[str, Any]]:
         if section in out and isinstance(values, dict):
             for key, value in values.items():
                 if key in out[section]:
+                    if (section, key) == ("gate", "allowlist") and isinstance(value, list) \
+                            and all(isinstance(e, str) for e in value):
+                        # Drop only the refused entries; a user's safe custom entries survive (silent: hooks).
+                        value = [e for e in value if validate("gate.allowlist", [e]) is None]
                     # Use default if value fails type or range validation (NaN/inf, out of range)
                     if _type_check(value, out[section][key]) and validate("%s.%s" % (section, key), value) is None:
                         out[section][key] = value

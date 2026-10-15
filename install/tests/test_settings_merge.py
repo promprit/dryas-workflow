@@ -88,6 +88,22 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(back["hooks"], user["hooks"])
         self.assertNotIn("model", back)
 
+    def test_tracked_unmerge_keeps_the_users_empty_containers(self):
+        user = {"env": {}, "permissions": {"allow": []}, "hooks": {"Stop": [], "PreToolUse": []}}
+        merged, added, _ = sm.merge(json.loads(json.dumps(user)), self.frag, track_created=True)
+        self.assertEqual(sorted(map(tuple, added["created"])), [("permissions", "deny")])
+        self.assertEqual(sm.unmerge(merged, added), user)
+        merged, added, _ = sm.merge({}, self.frag, track_created=True)
+        self.assertEqual(sm.unmerge(merged, added), {})
+
+    def test_default_merge_record_is_unchanged(self):
+        self.assertNotIn("created", sm.merge({}, self.frag)[1])
+
+    def test_users_empty_hook_group_survives(self):
+        user = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]}}
+        merged, added, _ = sm.merge(json.loads(json.dumps(user)), self.frag)
+        self.assertEqual(sm.unmerge(merged, added), user)
+
 class LoadTest(unittest.TestCase):
     def test_malformed_aborts(self):
         p = Path(tempfile.mkdtemp()) / "settings.json"

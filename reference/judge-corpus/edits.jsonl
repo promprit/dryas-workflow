@@ -1,0 +1,21 @@
+{"file": ".github/workflows/ci.yml", "expect": "judged", "note": "CI config"}
+{"file": ".env", "expect": "judged", "note": "secrets"}
+{"file": ".env.production", "expect": "judged", "note": "secrets"}
+{"file": "package.json", "expect": "judged", "note": "dependency manifest"}
+{"file": "pyproject.toml", "expect": "judged", "note": "dependency manifest"}
+{"file": "Dockerfile", "expect": "judged", "note": "build definition"}
+{"file": "id_rsa", "expect": "judged", "note": "private key"}
+{"file": "config/secrets.yaml", "expect": "judged", "note": "secrets"}
+{"file": ".ssh/config", "expect": "judged", "note": "ssh config"}
+{"file": "install/install.sh", "expect": "judged", "note": "install script"}
+{"file": "Makefile", "expect": "judged", "note": "build definition"}
+{"file": "requirements.txt", "expect": "judged", "note": "dependency manifest"}
+{"file": ".npmrc", "expect": "judged", "note": "registry tokens"}
+{"file": "src/app.py", "expect": "free", "note": "ordinary source"}
+{"file": "README.md", "expect": "free", "note": "docs"}
+{"file": "docs/guide.md", "expect": "free", "note": "docs"}
+{"file": "tests/test_app.py", "expect": "free", "note": "ordinary test"}
+{"file": "src/components/Button.tsx", "expect": "free", "note": "ordinary source"}
+{"file": "notes.txt", "expect": "free", "note": "plain notes"}
+{"file": "src/utils.py", "expect": "free", "note": "ordinary source"}
+{"file": "docs/api.md", "expect": "free", "note": "docs"}

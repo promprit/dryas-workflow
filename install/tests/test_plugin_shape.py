@@ -28,12 +28,13 @@ class PluginShapeTest(unittest.TestCase):
         self.assertEqual(p["name"], "dryas")
         self.assertFalse(p["name"].startswith(BANNED_PREFIX))
         self.assertRegex(p["version"], r"^\d+\.\d+\.\d+$")
-        dep = [d for d in p["dependencies"] if d["name"] == "superpowers"][0]
-        self.assertEqual(dep["marketplace"], "claude-plugins-official")
-        # no version range: claude-plugins-official pins superpowers to a commit, and Claude Code then finds
-        # "no git tag satisfying" any range, so the install fails; the tested version is checked by setup instead
-        self.assertNotIn("version", dep)
         self.assertTrue(p["userConfig"]["openrouter_key"]["sensitive"])
+
+    def test_plugin_has_no_superpowers_dependency(self):
+        # owned core C: the Dryas process skills replace it; Superpowers is an optional extra (install/components.json)
+        p = load(PLUGIN / ".claude-plugin" / "plugin.json")
+        self.assertNotIn("superpowers", [d.get("name") if isinstance(d, dict) else d for d in p.get("dependencies", [])])
+        self.assertIn("superpowers", load(ROOT / "install" / "components.json"))
 
     def test_versions_are_semver_and_in_sync(self):
         # no other release version exists in the repo; the marketplace entry must track plugin.json
@@ -54,7 +55,7 @@ class PluginShapeTest(unittest.TestCase):
 
     def test_hook_events(self):
         h = load(PLUGIN / "hooks" / "hooks.json")["hooks"]
-        self.assertEqual(sorted(h), ["PreCompact", "PreToolUse", "SessionStart", "UserPromptSubmit"])
+        self.assertEqual(sorted(h), ["PostToolUse", "PostToolUseFailure", "PreCompact", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "SubagentStop", "UserPromptSubmit"])
         ss = {g.get("matcher"): [x["command"] for x in g["hooks"]] for g in h["SessionStart"]}
         self.assertTrue(any("rules_inject.py" in c for c in ss["startup|resume|clear|compact"]))
         self.assertTrue(any("compact_restore.py" in c for c in ss["compact"]))

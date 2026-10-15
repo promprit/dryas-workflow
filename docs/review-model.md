@@ -25,4 +25,4 @@
 
 ## Reference binding
 
-`/wreview` (two-stage), `superpowers:verification-before-completion`, `/interrogate` (pstack picks, gated by the judge's `needs_interrogate`), the pstack cleanup task, `/benchmark-checklist`, `/commit` (Jev-gated, never pushes). Details: [workflow.md §4 steps 8b–9](workflow.md).
+`/wreview` (two-stage), `dryas:verify`, `/interrogate` (pstack picks, gated by the judge's `needs_interrogate`), the pstack cleanup task, `/benchmark-checklist`, `/commit` (Jev-gated, never pushes). Details: [workflow.md §4 steps 8b–9](workflow.md).
