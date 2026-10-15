@@ -139,12 +139,14 @@ class GateTaskReviewTest(unittest.TestCase):
 # Under an active task a run never asks: the same verdict comes out as a deny with the NEEDS DECISION hint.
 RUN_ASK = ASK = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                   "permissionDecisionReason": "Jev gate: looks destructive (0.90)" + gate.RUN_DENY}}
+PLAIN_ASK = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "ask",
+                                    "permissionDecisionReason": "Jev gate: looks destructive (0.90) - please confirm"}}
 # Hook output of gate.py before task review (captured from the previous commit's gate.py), per event and judge
 # answer. With review.task_skip off the gate must return exactly this.
 BASELINE = {("edit_plain", "routine"): None, ("edit_plain", "destructive"): ASK, ("edit_plain", "raise"): None,
             ("edit_always", "routine"): None, ("edit_always", "destructive"): ASK, ("edit_always", "raise"): None,
             ("bash", "routine"): None, ("bash", "destructive"): ASK, ("bash", "raise"): None,
-            ("write_outside", "routine"): None, ("write_outside", "destructive"): ASK,
+            ("write_outside", "routine"): None, ("write_outside", "destructive"): PLAIN_ASK,  # cwd outside the run: asks
             ("write_outside", "raise"): None}
 
 
