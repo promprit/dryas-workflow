@@ -91,7 +91,9 @@ A cheap way for the orchestrator to see a large repo's structure without reading
 - [ ] Measure planning turns and tokens with and without it, from the dispatch records. Only if the map is not enough on large repos, add semantic search as a pluggable component (off by default; Ruflo is now an optional extra).
 - [ ] Say in [memory-model.md](memory-model.md) that a source index is not memory: derived, rebuildable, never authoritative, never in the memory layer (MEM-4 bars file contents there), and a missing index never blocks the loop (MEM-5).
 
-## Later: an OpenCode edition (parked 2026-10-15)
+## Next: 2.2, the OpenCode edition
+
+2.2 ships the OpenCode edition and removes the optional Ruflo and Superpowers extras: Dryas memory and the Dryas skills replace them, and `dryas memory import-ruflo` stays for 1.x memory.
 
 Parked until after 2.0. Estimate: 3–5 days of build to reach the Codex edition's level (partial conformance), after a half-day spike. Most of Dryas carries over unchanged: OpenCode reads `AGENTS.md` (the Codex template plus a harness block), skills and commands are markdown (one more render target in `tools/sync_codex_plugin.py`), the `jev` MCP server runs as a local stdio server (memory, judge and logging as-is), and per-agent models give the tier table.
 

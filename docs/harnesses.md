@@ -5,7 +5,8 @@
 | Claude Code | Supported: plugin `dryas@dryas-workflow` |
 | Codex | Supported: plugin `dryas@dryas-workflow` |
 | Claude Code cloud sessions | Supported: a pinned copy of the core committed to the repo (`dryas cloud init`) |
-| Pi, OpenCode, Roo, Cursor | Later |
+| OpenCode | Next (2.2) |
+| Pi, Roo, Cursor | Later |
 
 
 ## Claude Code
@@ -43,4 +44,4 @@ FlowObserve reads the Jev logs in `~/.dryas/jev/logs`, so it sees escalations an
 
 ## Later
 
-Pi, OpenCode, Roo and Cursor are planned, not started. Each needs an edition written against the [specification](../spec/dryas-spec-v1.md).
+OpenCode is in progress for 2.2. Pi, Roo and Cursor are planned, not started. Each needs an edition written against the [specification](../spec/dryas-spec-v1.md).

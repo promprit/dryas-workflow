@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Docs
+- The README is rewritten for launch: what Dryas does in one line, the problem, asked vs enforced, the loop, a 60-second install, the commands, proof from our own logs, and the operating model for teams. Brand images in `docs/assets/` (light and dark), with their sources in `docs/assets/src/`.
+- New `docs/README.md` (docs landing page) and `docs/judge-scorecard.md` (the scorecard moved out of the README).
+- Ruflo and Superpowers are marked deprecated in `docs/install.md` and `docs/workflow.md`; they are removed in 2.2 with the OpenCode edition.
+
 ## 2.0.1 - 2026-10-15
 
 ### Fixed
