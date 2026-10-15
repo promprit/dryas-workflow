@@ -1,12 +1,14 @@
 #!/bin/sh
 # Dryas Workflow installer for macOS, Linux and WSL. Finds Python >= 3.9 and runs install/dryas_install.py.
 # Usage: install.sh [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks] [--yes] [--force] [--dry-run]
-#                   [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both]
-#                   [--claude-dir DIR] [--codex-dir DIR] [--flowobserve|--no-flowobserve] [--openrouter-key KEY]   See docs/install.md.
+#                   [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both|opencode|all]
+#                   [--claude-dir DIR] [--codex-dir DIR] [--opencode-dir DIR] [--tier-fast|--tier-standard|--tier-strong|--tier-frontier PROVIDER/MODEL]
+#                   [--flowobserve|--no-flowobserve] [--openrouter-key KEY]   See docs/install.md.
 #        install.sh --repo PATH [--yes] [--force] [--prefix P] [--with-design] [--with-own NAME] [--persist-memory]
 #                   sets the repo at PATH up for claude.ai/code cloud sessions (tools/dryas_cloud.py init; docs/cloud-sessions.md)
 # Claude Code: run once per config dir (--claude-dir; default $CLAUDE_CONFIG_DIR, else ~/.claude).
 # Codex: run once per CODEX_HOME (--codex-dir; default $CODEX_HOME, else ~/.codex).
+# OpenCode: run once per config dir (--opencode-dir; default $XDG_CONFIG_HOME/opencode, else ~/.config/opencode).
 # Jev reads $OPENROUTER_API_KEY from the shell; --openrouter-key also stores a key as the plugin option.
 # DRYAS_PYTHON overrides the interpreter.
 set -eu

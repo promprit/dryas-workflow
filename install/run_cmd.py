@@ -3,12 +3,14 @@
   dryas_install.py run [--repo PATH] [--judge local|jev] [--memory dryas|ruflo|none] [--with-ruflo] [--with-superpowers] [--with-design]
                        [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
                        [--yes] [--force] [--dry-run] [--uninstall] [--purge] [--keep-extras] [--preflight-only]
-                       [--harness claude|codex|both] [--claude-dir DIR] [--codex-dir DIR]
+                       [--harness claude|codex|both|opencode|all] [--claude-dir DIR] [--codex-dir DIR] [--opencode-dir DIR]
+                       [--tier-fast|--tier-standard|--tier-strong|--tier-frontier PROVIDER/MODEL]
                        [--flowobserve|--no-flowobserve] [--openrouter-key KEY]
 
 Claude Code: the dryas plugin in one config dir (--claude-dir, else $CLAUDE_CONFIG_DIR, else ~/.claude); a copy
 install found there is migrated first. Codex: the dryas plugin in one CODEX_HOME (--codex-dir, else $CODEX_HOME,
 else ~/.codex); a Codex copy install found there is migrated.
+OpenCode: the edition copied into one config dir (--opencode-dir, else $XDG_CONFIG_HOME/opencode, else ~/.config/opencode).
 --uninstall touches only that config dir / CODEX_HOME; --purge also removes the data root once no account uses it.
 Both list what they will remove and ask first; --yes answers every question. The third-party plugins setup installed
 are offered for removal too (--keep-extras leaves them, --yes removes them).
@@ -19,7 +21,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import platform_util as pu
 
@@ -27,7 +29,8 @@ HERE = Path(__file__).resolve().parent
 OPTIONAL = ("jev", "memory", "ruflo", "superpowers", "design", "pstack-picks")
 EXTRAS = ("ruflo", "superpowers")  # off unless selected or already installed
 FRESH = ("jev", "memory", "design", "pstack-picks")
-HARNESSES = ("claude", "codex", "both")
+HARNESSES = ("claude", "codex", "both", "opencode", "all")
+CLAUDE_H, CODEX_H, OPENCODE_H = ("claude", "both", "all"), ("codex", "both", "all"), ("opencode", "all")
 NO_SPACE_RUFLO = ("Your Python, Dryas data folder or Dryas plugin path contains a space and has no short form; "
                   "Ruflo's hook override cannot handle that. Re-run without --with-ruflo (--no-ruflo on an upgrade that has it).")
 LEGACY_REFUSAL = ("A Codex copy install (%s) uses %s; run install.sh --harness both (install.ps1 on Windows) to move "
@@ -37,7 +40,9 @@ NO_PYTHON3 = "Codex runs the Dryas hooks with python3: install Python 3.9+ as py
 NO_RUFLO_EFFECT = {"claude": "Claude Code then runs without Ruflo's orchestration, memory and hooks",
                    "codex": "Codex then runs without the Ruflo MCP server",
                    "both": "Claude Code then runs without Ruflo's orchestration, memory and hooks, Codex without "
-                           "the Ruflo MCP server"}
+                           "the Ruflo MCP server",
+                   "opencode": "OpenCode never uses Ruflo",
+                   "all": "Claude Code and Codex then run without Ruflo"}
 NO_PYTHON_WIN = ("warning: `python` is not on PATH; on Windows Codex runs the Dryas hooks with `python` "
                  "(install Python 3.9+ from python.org and tick \"Add python.exe to PATH\").")
 
@@ -59,6 +64,9 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--harness", default="claude", choices=HARNESSES)
     ap.add_argument("--claude-dir", default=None)
     ap.add_argument("--codex-dir", default=None)
+    ap.add_argument("--opencode-dir", default=None)
+    for t in ("fast", "standard", "strong", "frontier"):
+        ap.add_argument("--tier-" + t, default=None, metavar="PROVIDER/MODEL")
     ap.add_argument("--openrouter-key", default="")  # explicit only: it reaches the `claude plugin install` argv
     a = ap.parse_args(argv)
     for c in ("ruflo", "superpowers", "design"):
@@ -131,6 +139,11 @@ def codex_version() -> Optional[tuple]:
     return cps.codex_version(out) if rc == 0 else None
 
 
+def di_capture(argv: List[str]) -> Tuple[int, str]:
+    import dryas_install as di
+    return di.capture(argv, timeout=60)
+
+
 def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Sequence[Path] = ()) -> List[str]:
     """Problems that stop the install, as messages; an empty list means go.
     claude_dir: the Claude config dir (unused by the checks); ruflo_paths: more paths Ruflo's hook override names."""
@@ -139,9 +152,9 @@ def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Seq
         missing.append("python>=3.9")
     if not pu.which("git"):
         missing.append("git")
-    if harness in ("claude", "both") and not pu.which("claude"):
+    if harness in CLAUDE_H and not pu.which("claude"):
         missing.append("claude(Claude Code CLI)")
-    if harness in ("codex", "both") and not pu.which("codex"):
+    if harness in CODEX_H and not pu.which("codex"):
         missing.append("codex(Codex CLI)")
     node = [t for t in ("node", "npm") if not pu.which(t)] if "ruflo" in comps else []
     missing += node
@@ -157,19 +170,29 @@ def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Seq
         root = Path(os.path.expanduser(os.environ.get("DRYAS_DATA_ROOT") or str(Path.home() / ".dryas")))
         if any(pu.space_free(p) is None for p in [sys.executable, root] + list(ruflo_paths)):
             probs.append(NO_SPACE_RUFLO)
-    if harness in ("codex", "both") and pu.which("codex"):
+    if harness in CODEX_H and pu.which("codex"):
         import codex_plugin_setup as cps
         ver, want = codex_version(), cps.MIN_CODEX
         if ver is None or ver < want:
             probs.append("Dryas needs Codex CLI %s or newer (found: %s). Update it (npm install -g @openai/codex) and "
                          "re-run." % (".".join(map(str, want)), ".".join(map(str, ver)) if ver else "no version"))
-    if harness in ("codex", "both"):
+    if harness in CODEX_H:
         import codex_plugin_setup as cps
         if pu.IS_WINDOWS:
             if not pu.which("python"):
                 print(NO_PYTHON_WIN)
         elif not cps.python3_ok():
             probs.append(NO_PYTHON3)
+    if harness in OPENCODE_H:
+        import opencode_setup as ocs
+        if not pu.which("opencode"):
+            probs.append("Missing: opencode (OpenCode CLI). Install it and re-run (this installer never installs it).")
+        else:
+            rc, out = di_capture(["opencode", "--version"])
+            ver = ocs.opencode_version(out) if rc == 0 else None
+            if ver is None or ver < ocs.MIN_OPENCODE:
+                probs.append("Dryas needs OpenCode %s or newer (found: %s). Update it and re-run."
+                             % (".".join(map(str, ocs.MIN_OPENCODE)), out.strip() or "no version"))
     return probs
 
 
@@ -231,25 +254,31 @@ def main(argv: Optional[List[str]] = None) -> int:
     import dryas_install as di
     import migrate
     import plugin_setup as ps
+    import opencode_setup as ocs
     a = parse(list(sys.argv[1:] if argv is None else argv))
     repo, home = Path(a.repo).resolve(), Path.home()
     cd = ps.claude_dir(a.claude_dir)
     rec = ps._load_json(cd / ps.RECORD, {}) if (cd / ps.RECORD).is_file() else {}
     recorded = (rec.get("components") or None) if isinstance(rec, dict) else None
     comps = select(a, recorded)
-    want_claude, want_codex = a.harness in ("claude", "both"), a.harness in ("codex", "both")
+    want_claude, want_codex, want_oc = a.harness in CLAUDE_H, a.harness in CODEX_H, a.harness in OPENCODE_H
+    od = ocs.opencode_dir(a.opencode_dir)
+    oc_comps = [c for c in comps if c not in ("superpowers", "design", "ruflo")]
+    tiers = {t: getattr(a, "tier_" + t) for t in ("fast", "standard", "strong", "frontier")}
     cdx = cps.codex_home(a.codex_dir)
     legacy = cps.legacy_components(cdx)
     no_flags = not (any(_no(a, c) for c in OPTIONAL) or any(getattr(a, "with_" + c) for c in ("ruflo", "superpowers", "design"))
                     or a.judge or a.memory)
     codex_comps = legacy if (legacy is not None and no_flags) else comps
-    if a.harness == "codex" and not a.uninstall and ("superpowers" in comps or "design" in comps):
-        print("note: superpowers and design are Claude Code plugins; skipped for Codex.")
+    if a.harness in ("codex", "opencode") and not a.uninstall and ("superpowers" in comps or "design" in comps):
+        print("note: superpowers and design are Claude Code plugins; skipped for %s." % ("Codex" if a.harness == "codex" else "OpenCode"))
     if a.uninstall:  # Codex first: Claude's --purge then sees whether a CODEX_HOME still uses the data root
         plan = []
         if want_codex and (cdx / cps.RECORD).exists():
             plan.append("Codex: `codex plugin remove %s` for %s, the Dryas block in its config.toml, the hook trust "
                         "setup recorded, %s" % (cps.ID, cdx, cdx / cps.RECORD))
+        if want_oc and (od / ocs.RECORD).exists():
+            plan.append("OpenCode: the files Dryas wrote into %s (listed in %s)" % (od, od / ocs.RECORD))
         if want_claude:
             plan += ps.uninstall_plan(cd, a.purge)
         elif a.purge:
@@ -263,7 +292,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 return 1
         extras, legacy = [], []
         if want_claude:
-            others = ps.other_accounts(cd, cdx if want_codex else None)
+            others = ps.other_accounts(cd, cdx if want_codex else None, od if want_oc else None)
             extras = ps.extras_commands(ps._load_json(cd / ps.RECORD, {}), last_account=not others)
             if extras and a.keep_extras:
                 extras = []
@@ -282,7 +311,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                         print("Legacy Ruflo pieces (each asked separately):")
                     for label, _, _ in legacy:
                         print("  " + label)
-        rc = cps.uninstall(cdx) if want_codex else 0
+        rc = (cps.uninstall(cdx) if want_codex else 0) or (ocs.uninstall(od) if want_oc else 0)
         if rc:
             return rc
         if want_claude:
@@ -319,6 +348,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         rc = cps.setup(repo, cdx, codex_comps, yes=a.yes, dry=a.dry_run)
         if rc:
             return rc
+    if want_oc:
+        rc = ocs.setup(repo, od, oc_comps, tiers, yes=a.yes, dry=a.dry_run)
+        if rc:
+            return rc
     if want_claude:
         if copy_install and a.dry_run:
             print("would migrate the copy install in %s" % cd)
@@ -338,4 +371,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     fails = ps.verify(cd, comps) if want_claude else 0
     if want_codex:
         fails += cps.verify(cdx, codex_comps)
+    if want_oc:
+        fails += ocs.verify(od, oc_comps)
     return 1 if fails else 0
