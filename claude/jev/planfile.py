@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Parse PLAN.md ('## Task N:' sections) for the orchestrator and the scope lock.
+"""Parse PLAN.md ('## Task N:' sections) for the orchestrator and the scope lock,
+and its `## Risky actions` section.
 
 CLI: planfile.py section PLAN.md N | planfile.py scope PLAN.md N
 """
@@ -37,6 +38,19 @@ def scope(section: str) -> List[str]:
         else:
             break
     return globs
+
+
+_RISKY = re.compile(r"^## Risky actions[ \t]*\n(.*?)(?=^## |\Z)", re.M | re.S)
+_RISKY_ITEM = re.compile(r"- `([^`\n]+)` +— +\S")
+
+
+def risky(text: str) -> List[str]:
+    """Commands of the plan's `## Risky actions` section, one bullet each: - `<command or prefix*>` — <plain
+    sentence>. A bullet without the backticked command or the sentence is skipped (nothing pre-approved)."""
+    m = _RISKY.search(text)
+    if not m:
+        return []
+    return [im.group(1).strip() for line in m.group(1).splitlines() for im in [_RISKY_ITEM.match(line.strip())] if im]
 
 
 def _glob_re(glob: str) -> Pattern[str]:
