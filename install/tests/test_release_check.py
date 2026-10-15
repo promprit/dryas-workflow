@@ -373,10 +373,11 @@ class NoNodeCheckTest(unittest.TestCase):
     def test_claude_next_to_node_is_kept(self):
         d = os.path.join(self.tmp, "nvm-bin")
         os.mkdir(d)
+        ext = ".cmd" if os.name == "nt" else ""  # Windows finds commands by PATHEXT
         for n in ("node", "claude"):
-            with open(os.path.join(d, n), "w") as f:
-                f.write("#!/bin/sh\nexit 0\n")
-            os.chmod(os.path.join(d, n), 0o755)
+            with open(os.path.join(d, n + ext), "w") as f:
+                f.write("@exit /b 0\n" if ext else "#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(d, n + ext), 0o755)
         p = mock.patch.dict(os.environ, {"PATH": d + os.pathsep + os.path.dirname(sys.executable)})
         p.start()
         self.addCleanup(p.stop)
