@@ -11,6 +11,8 @@ sys.path.insert(0, JEV)
 import cloud_check as cc
 
 LIC = ".dryas/licenses/LICENSE-dryas"
+HOOK = ["Stop", None, '"${DRYAS_PY:-python3}" -X utf8 "$CLAUDE_PROJECT_DIR/.dryas/jev/cloud_hook.py" stop.py']
+MCP = dict(command="${DRYAS_PY:-python3}", args=["-X", "utf8", "${CLAUDE_PROJECT_DIR}/.dryas/jev/jev_mcp.py"])
 NOTE = "- Dryas 9.9.9 (MIT): " + LIC
 
 
@@ -48,7 +50,9 @@ class CheckTest(unittest.TestCase):
         self.copy.put(".dryas/jev/tool.py", "import json\nimport helper\n")
         self.copy.put(".dryas/jev/helper.py", "import os\n")
         self.copy.put(".claude/commands/tune.md", 'Run `".dryas/bin/dryas-py" ".dryas/jev/tune.py" report`.\n')
-        self.copy.save()
+        self.copy.save(config=dict(settings=dict(added=dict(hooks=[HOOK])), mcp=dict(entry=MCP)))
+        self.write(".claude/settings.json", json.dumps(dict(hooks=dict(Stop=[dict(hooks=[dict(type="command", command=HOOK[2])])]))))
+        self.write(".mcp.json", json.dumps(dict(mcpServers=dict(jev=MCP))))
         self.write(".gitignore", "node_modules/\n.dryas/state/\n")
         self.write("CLAUDE.md", "# Repo\n\n<!-- dryas:start -->\nDryas rules\n<!-- dryas:end -->\n")
 
@@ -175,6 +179,56 @@ class GapTest(unittest.TestCase):
     def test_mac_path_in_claude_md_block(self):
         self.write("CLAUDE.md", "<!-- dryas:start -->\nsee /Users/x/y\n<!-- dryas:end -->\n")
         self.assertIn("CLAUDE.md:2: absolute Mac path", cc.check(self.repo))
+
+
+class LiveConfigTest(unittest.TestCase):
+    """check reads the repo's real .claude/settings.json and .mcp.json, not only the manifest's record of them."""
+    setUp = CheckTest.setUp
+    write = CheckTest.write
+
+    def settings(self, **kw):
+        self.write(".claude/settings.json", json.dumps(kw))
+
+    def test_disabled_gate_is_reported(self):
+        self.settings()  # the Dryas hook entry was deleted: the gate is off
+        probs = cc.check(self.repo, "9.9.9")
+        self.assertTrue(any("Stop" in p and "stop.py" in p for p in probs), probs)
+
+    def test_live_env_is_reported(self):
+        good = dict(hooks=dict(Stop=[dict(hooks=[dict(type="command", command=HOOK[2])])]))
+        for k in ("DRYAS_DATA_ROOT", "CLAUDE_PLUGIN_ROOT", "JEV_X"):
+            self.settings(env={k: "x"}, **good)
+            self.assertTrue(any("env" in p and k in p for p in cc.check(self.repo, "9.9.9")), k)
+        self.settings(env={"OTHER": "x"}, **good)
+        self.assertEqual(cc.check(self.repo, "9.9.9"), [])
+
+    def test_mcp_entry_must_match_the_record(self):
+        self.write(".mcp.json", json.dumps(dict(mcpServers=dict(jev=dict(command="other")))))
+        self.assertTrue(any(".mcp.json" in p and "jev" in p for p in cc.check(self.repo, "9.9.9")))
+        self.write(".mcp.json", json.dumps(dict(mcpServers={})))
+        self.assertTrue(any(".mcp.json" in p and "jev" in p for p in cc.check(self.repo, "9.9.9")))
+
+    def test_mac_and_home_paths_in_live_files(self):
+        self.write(".mcp.json", json.dumps(dict(mcpServers=dict(jev=MCP), x="/Users/a/b")))
+        self.assertIn(".mcp.json:1: absolute Mac path", cc.check(self.repo, "9.9.9"))
+
+    def test_missing_or_unparseable_live_file(self):
+        for rel in (".claude/settings.json", ".mcp.json"):
+            self.write(rel, "{nope")
+            self.assertTrue(any(p.startswith(rel) for p in cc.check(self.repo, "9.9.9")), rel)
+            os.remove(os.path.join(self.repo, rel))
+            self.assertTrue(any(p.startswith(rel) for p in cc.check(self.repo, "9.9.9")), rel)
+            self.setUp()
+
+    def test_memory_notes_are_owned_but_scanned(self):
+        os.makedirs(os.path.join(self.repo, ".dryas/memory/notes"))
+        self.write(".dryas/memory/notes/a.md", "fine note\n")
+        self.assertEqual(cc.check(self.repo, "9.9.9"), [])
+        self.write(".dryas/memory/notes/b.md", "see /Users/me/x\nkey sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789\n")
+        probs = cc.check(self.repo, "9.9.9")
+        self.assertIn(".dryas/memory/notes/b.md:1: absolute Mac path", probs)
+        self.assertTrue(any(p.startswith(".dryas/memory/notes/b.md") and "secret" in p for p in probs), probs)
+        self.assertFalse(any(p.startswith("unowned") for p in probs), probs)
 
 
 class ScanTest(unittest.TestCase):

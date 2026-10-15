@@ -9,7 +9,9 @@ Problems:
 - a manifest file missing or hand-edited (drift), or a file under .dryas/ the manifest does not own;
 - an absolute Mac path (a path under /Users or /Volumes) in any copied file;
 - ~/.dryas or ${CLAUDE_PLUGIN_ROOT} in a copied file outside .dryas/;
-- a home or Mac path in Dryas's .claude/settings.json or .mcp.json entries, or any env in its settings.json entries;
+- the live .claude/settings.json or .mcp.json: unreadable, a Dryas hook entry gone, the jev server changed, a DRYAS_*,
+  CLAUDE_PLUGIN_ROOT or JEV_* env, or a home or Mac path; the same for the manifest's record of Dryas's entries;
+- a memory note (.dryas/memory/notes/*.md, the repo's own work, not unowned) with a Mac path or secret-shaped text;
 - a copied Python file that imports a non-stdlib module (import statements, __import__, importlib.import_module);
 - a file without its licence file or NOTICE line;
 - .dryas/state/ not git-ignored, or the CLAUDE.md block missing;
@@ -25,6 +27,9 @@ import sys
 import sysconfig
 from typing import Any, Dict, Iterable, List, Optional, Set
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from redact import redact  # noqa: E402
+
 COPY = ".dryas"
 MANIFEST = COPY + "/manifest.json"
 NOTICE = COPY + "/NOTICE"
@@ -37,7 +42,8 @@ PLATFORM_STDLIB = frozenset(("msvcrt", "winreg", "_winapi", "winsound", "nt", "p
                              "termios", "resource", "_overlapped", "__future__"))
 # Under .dryas/ but not copied files: the manifest and VERSION describe the copy, state/ is its runtime data.
 UNOWNED_OK = (MANIFEST, VERSION)
-UNOWNED_SKIP_DIRS = (COPY + "/state", "__pycache__")
+NOTES = COPY + "/memory/notes/"
+ENV_NAMES = re.compile(r"(?:DRYAS_|JEV_).*|CLAUDE_PLUGIN_ROOT")
 
 
 def sha256(data: bytes) -> str:
@@ -184,9 +190,65 @@ def _unowned(repo: str, files: Dict[str, Any]) -> List[str]:
         dirs[:] = sorted(x for x in dirs if x != "__pycache__" and rel_d + "/" + x != COPY + "/state")
         for n in sorted(names):
             rel = rel_d + "/" + n
-            if rel not in files and rel not in UNOWNED_OK:
+            if rel not in files and rel not in UNOWNED_OK and not (rel.startswith(NOTES) and rel.endswith(".md")):
                 out.append("unowned: " + rel)
     return out
+
+
+def _live_json(repo: str, rel: str, probs: List[str]) -> Optional[Dict[str, Any]]:
+    """A live config file's object, scanned for Mac and home paths; None (and a problem) when missing or unparseable."""
+    text = _read(os.path.join(repo, rel))
+    if text is None:
+        probs.append("%s: missing or unreadable (run dryas cloud update)" % rel)
+        return None
+    probs.extend(scan_text(rel, text))
+    try:
+        obj = json.loads(text)
+    except ValueError:
+        obj = None
+    if not isinstance(obj, dict):
+        probs.append("%s: not a JSON object" % rel)
+        return None
+    return obj
+
+
+def _live_config(repo: str, cfg: Dict[str, Any]) -> List[str]:
+    probs: List[str] = []
+    s = _live_json(repo, ".claude/settings.json", probs)
+    if s is not None:
+        env = s.get("env")
+        for k in sorted(k for k in env if ENV_NAMES.fullmatch(k)) if isinstance(env, dict) else []:
+            probs.append(".claude/settings.json: env %s (hooks get it from cloud_hook.py only)" % k)
+        have = set()
+        hooks = s.get("hooks") if isinstance(s.get("hooks"), dict) else {}
+        for ev, groups in hooks.items():
+            for g in groups if isinstance(groups, list) else []:
+                for h in (g.get("hooks") or []) if isinstance(g, dict) else []:
+                    if isinstance(h, dict):
+                        have.add((ev, g.get("matcher"), h.get("command")))
+        for rec in ((cfg.get("settings") or {}).get("added") or {}).get("hooks") or []:
+            if isinstance(rec, list) and len(rec) == 3 and tuple(rec) not in have:
+                probs.append(".claude/settings.json: Dryas hook missing: %s %s %s" % (rec[0], rec[1] or "(any)", rec[2]))
+    mcp = _live_json(repo, ".mcp.json", probs)
+    if mcp is not None:
+        servers = mcp.get("mcpServers") if isinstance(mcp.get("mcpServers"), dict) else {}
+        want = (cfg.get("mcp") or {}).get("entry")
+        if want is not None and servers.get("jev") != want:
+            probs.append(".mcp.json: mcpServers.jev is missing or differs from what dryas cloud wrote")
+    return probs
+
+
+def _scan_notes(repo: str) -> List[str]:
+    probs = []
+    d = os.path.join(repo, NOTES)
+    for n in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        text = _read(os.path.join(d, n)) if n.endswith(".md") else None
+        if text is None:
+            continue
+        probs += scan_text(NOTES + n, text)
+        probs += ["%s%s:%d: secret-shaped text" % (NOTES, n, i) for i, line in enumerate(text.splitlines(), 1)
+                  if redact(line) != line]
+    return probs
 
 
 def check(repo: str, version: Optional[str] = None) -> List[str]:
@@ -219,6 +281,7 @@ def check(repo: str, version: Optional[str] = None) -> List[str]:
         if e.get("notice") and e["notice"] not in notice:
             probs.append("%s: no NOTICE line %r" % (rel, e["notice"]))
     cfg = m.get("config") if isinstance(m.get("config"), dict) else {}
+    probs += _live_config(repo, cfg) + _scan_notes(repo)
     if ((cfg.get("settings") or {}).get("added") or {}).get("env"):
         probs.append(".claude/settings.json: Dryas entries set env (hooks get it from cloud_hook.py only)")
     for name, rel, key in (("settings", ".claude/settings.json", "added"), ("mcp", ".mcp.json", "entry")):
