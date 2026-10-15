@@ -27,16 +27,15 @@ class PitchDocsTest(unittest.TestCase):
         self.assertIn("## Next: retire the optional extras", r)
         self.assertIn("owned core", r)
         h = read("docs/harnesses.md")
-        self.assertIn("| OpenCode | Supported (core)", h)
+        self.assertIn("| OpenCode | Supported (Dryas Full)", h)
 
     def test_contributing(self):
         self.assertNotIn("rough edges", read("CONTRIBUTING.md"))
 
-    def test_changelog_unreleased(self):
+    def test_changelog_launch_docs_in_2_3_0(self):
         c = read("CHANGELOG.md")
-        u = c.index("## Unreleased")
-        self.assertLess(u, c.index("## 2.0.1"))
-        self.assertIn("### Docs", c[u:c.index("## 2.0.1")])
+        u = c.index("## 2.3.0")
+        self.assertIn("### Docs", c[u:c.index("## 2.2.0")])
 
 
 if __name__ == "__main__":
