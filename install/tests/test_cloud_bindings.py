@@ -102,6 +102,16 @@ class CloudBindingsExtraTest(unittest.TestCase):
             self.assertIn("dryas cloud " + sub, doc)
             self.assertIn('"%s"' % sub, code, sub)
 
+    def test_docs_describe_the_current_behaviour(self):
+        doc = (ROOT / "docs/cloud-sessions.md").read_text(encoding="utf-8")
+        for want in ("--no-design", "--without-own", "--no-persist-memory", ".claude/skills/**/__pycache__/",
+                     "Stop, PreCompact and SessionEnd", "memnotes.py export", "before the final commit",
+                     "custom data root", "plugin registry", "disabled but still installed",
+                     "keeps what it cannot rebuild", "only dropping its option removes",
+                     "live `.claude/settings.json`", "memory note", "no-op without a notes folder",
+                     "codex_event.py", "ruflo_import.py", "chain.py", "memcli.py"):
+            self.assertIn(want, doc)
+
     def test_docs_paths_exist(self):
         doc = (ROOT / "docs/cloud-sessions.md").read_text(encoding="utf-8")
         for rel in ("tools/dryas_cloud.py", "claude/jev/cloud_check.py", "claude/jev/cloud_hook.py",

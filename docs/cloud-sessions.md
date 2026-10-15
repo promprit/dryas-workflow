@@ -25,8 +25,12 @@ Every run first prints a dry run: each file it would add, change or remove, with
 | `--with-design` | also copy the design skills, each only with a confirmed licence; the licence text goes to `.dryas/licenses/` and a line to `.dryas/NOTICE` |
 | `--with-own NAME` | also copy that skill from your Claude config dir; a secret-shaped line stops it until `--confirm-own NAME` |
 | `--persist-memory` | keep short, redacted session notes in `.dryas/memory/notes/`, committed with the work |
+| `--confirm-own NAME` | confirm a `--with-own NAME` skill whose secret-shaped line stopped the run |
+| `--no-design` | `update` only: drop the design skills an earlier run copied |
+| `--without-own NAME` | `update` only: drop that own skill |
+| `--no-persist-memory` | `update` only: stop keeping session notes (the notes already written stay, as the repo's own work) |
 
-`dryas cloud update` refreshes the copy from this checkout. Files you edited by hand are reported as drift and kept unless you pass `--force`. `dryas cloud remove` takes out exactly what Dryas added. `dryas cloud check` runs the copy's check and also compares the copy with this checkout. `init`, `update` and `remove` need a Dryas checkout, so they do not run inside a cloud session; `/dryas-cloud check` does.
+`dryas cloud update` refreshes the copy from this checkout. Options you leave out keep what the manifest records. Files you edited by hand are reported as drift and kept unless you pass `--force`. Update keeps what it cannot rebuild this run (a skill it had to skip); only dropping its option removes it, even with `--force`. `dryas cloud remove` takes out exactly what Dryas added. `dryas cloud check` runs the copy's check and also compares the copy with this checkout. `init`, `update` and `remove` need a Dryas checkout, so they do not run inside a cloud session; `/dryas-cloud check` does.
 
 ## What the repo gets
 
@@ -35,26 +39,26 @@ Every run first prints a dry run: each file it would add, change or remove, with
 - `.claude/settings.json`: Dryas's hooks (through `.dryas/jev/cloud_hook.py`) and one allow rule, merged with what is there. Dryas adds no `env` entries there; the hook entry sets the copy's paths itself, so nothing leaks into the plugin's hooks on a machine with Dryas installed.
 - `.mcp.json`: the `jev` MCP server with its own `env` block, merged with what is there.
 - `CLAUDE.md`: the Dryas rules between `<!-- dryas:start -->` and `<!-- dryas:end -->`; the rest of the file is untouched.
-- `.gitignore`: `.dryas/state/`, `.dryas/**/__pycache__/` and `.orchestrate/`.
+- `.gitignore`: `.dryas/state/`, `.dryas/**/__pycache__/`, `.claude/skills/**/__pycache__/` and `.orchestrate/`.
 
-[reference/cloud-bindings.json](../reference/cloud-bindings.json) lists every core component as copied, opt-in or excluded, with the reason. It never copies Ruflo, Superpowers, Codex files, MCP servers that need npm or network, or skills that live only on one machine.
+[reference/cloud-bindings.json](../reference/cloud-bindings.json) lists every core component as copied, opt-in or excluded, with the reason. The copy ships `codex_event.py` and `ruflo_import.py` too, because `chain.py` and `memcli.py` import them; the copy never calls Ruflo. It never copies Ruflo, Superpowers, Codex files, MCP servers that need npm or network, or skills that live only on one machine.
 
 ## In the cloud session
 
 - **Judge:** local, so there is no network and no key. To use Jev in one environment, set `DRYAS_JUDGE=jev`, add the secret `OPENROUTER_API_KEY`, and allow `openrouter.ai` in that environment's network settings.
 - **State:** `.dryas/state/` holds the logs, threshold overrides and scope-lock files. It is git-ignored and new in every session, and nothing depends on an earlier one.
-- **Memory:** within a session, Dryas memory works as on a workstation. With `--persist-memory`, each session end writes a redacted note to `.dryas/memory/notes/`, and the next session start reads the notes back. The notes are plain markdown, reviewed in pull requests.
+- **Memory:** within a session, Dryas memory works as on a workstation. With `--persist-memory`, a redacted note is written to `.dryas/memory/notes/` at Stop, PreCompact and SessionEnd (the same session overwrites its own note), and the next session start reads the notes back. A session can end without a clean SessionEnd, so run `python3 .dryas/jev/memnotes.py export` before the final commit to put the latest note in it. The notes are plain markdown, reviewed in pull requests. The plugin's own Stop route is a no-op without a notes folder, so a machine with the plugin installed never writes one.
 - **Hooks:** they run as on a workstation: scope lock, gate, memory, observer. A hook that fails internally exits 0 and drops its output; for the pre-tool gate it answers "ask" instead.
 
 ## Check it in CI
 
     python3 .dryas/jev/cloud_check.py --repo .
 
-It exits 1 on any problem: drift, a Mac path, a non-stdlib script, a missing licence or NOTICE line, the ignore line or the rules block. In a session, `/dryas-cloud check` runs the same check.
+It exits 1 on any problem: drift, a Mac path, a non-stdlib script, a missing licence or NOTICE line, the ignore line or the rules block. It also reads the live `.claude/settings.json` and `.mcp.json`: a Dryas hook entry gone, a `DRYAS_*` env entry in settings, or the `jev` server changed is a problem. Each memory note is scanned for a Mac path or secret-shaped text. In a session, `/dryas-cloud check` runs the same check.
 
 ## On a machine where Dryas is installed
 
-The plugin's own hooks already run there. The repo copy's hooks see `~/.dryas/chain.local.json` and do nothing outside a cloud session, so the chain does not run twice. Set `DRYAS_CLOUD_HOOKS=1` to run the copy's hooks anyway, or `DRYAS_CLOUD_HOOKS=0` to turn them off everywhere.
+The plugin's own hooks already run there. Outside a cloud session the repo copy's hooks stay quiet when `chain.local.json` exists (in `~/.dryas`, in `$DRYAS_DATA_ROOT` for a custom data root, or at `JEV_CHAIN_LOCAL`) or the Claude plugin registry (`installed_plugins.json`) lists `dryas@...`, so the chain does not run twice. For a plugin that is disabled but still installed the registry still lists it, so set `DRYAS_CLOUD_HOOKS=1` to run the copy's hooks anyway, or `DRYAS_CLOUD_HOOKS=0` to turn them off everywhere.
 
 ## Manual acceptance (once, by the maintainer)
 
