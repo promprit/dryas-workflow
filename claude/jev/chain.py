@@ -320,7 +320,11 @@ def main(argv: List[str]) -> int:
         if isinstance(v, str) and v:
             os.environ[env] = v  # inherited by every stage subprocess; read by jevlog.append
     if kind == "pretool":
-        jevlog.append("calls", {"tool": str(event.get("tool_name", ""))})
+        rec = {"tool": str(event.get("tool_name", ""))}
+        mode = event.get("permission_mode")  # Claude Code: default, acceptEdits, plan, auto, bypassPermissions
+        if isinstance(mode, str) and mode:
+            rec["permission_mode"] = mode[:32]
+        jevlog.append("calls", rec)
         stages = load_stages("pretool", harness)
         out = pretool_codex(event, stages) if harness in ("codex", "opencode") else pretool(event, raw, stages)
     elif kind == "prompt":
