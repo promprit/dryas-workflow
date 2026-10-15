@@ -1782,7 +1782,7 @@ Scope:
 - reference/README.md
 - install/tests/test_unattended_docs_editions.py
 Done:
-- `python3 -m pytest -q install/tests/test_unattended_docs_editions.py install/tests/test_opencode_docs.py install/tests/test_opencode_skills.py install/tests/test_codex_skill_render.py` passes
+- `python3 -m pytest -q install/tests/test_unattended_docs_editions.py install/tests/test_opencode_docs.py install/tests/test_opencode_skills.py install/tests/test_codex_skill_render.py install/tests/test_task_review_docs.py` (the latter checks that Codex's orchestrate skill names every file and tool Claude's names, e.g. `.orchestrate/approved.json`) passes
 Failing test first: install/tests/test_unattended_docs_editions.py :: EditionsDocsTest.test_codex_and_opencode_orchestrate
 
 **Interfaces:**
