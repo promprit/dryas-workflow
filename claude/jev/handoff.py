@@ -39,7 +39,7 @@ def projects_dir() -> str:
 
 def encode_cwd(cwd: str) -> str:
     """Claude Code's project folder name: every char outside [A-Za-z0-9] becomes '-'.
-    Verified against <config dir>/projects: /Users/x/.claude -> -Users-x--claude."""
+    Verified against <config dir>/projects: /home/x/.claude -> -home-x--claude."""
     return re.sub(r"[^A-Za-z0-9]", "-", cwd)
 
 
