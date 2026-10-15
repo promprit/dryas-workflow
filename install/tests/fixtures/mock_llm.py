@@ -2,17 +2,25 @@
 """OpenAI-compatible mock model for the OpenCode end-to-end tests: scripted tool calls by keyword, no network.
 Usage: mock_llm.py LOG. Binds 127.0.0.1 on a free port, prints the port as the first stdout line, logs each request
 as one JSON line in LOG (model, tool names, system prompts, plan)."""
+import hashlib
 import json
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+RESET = {"command": "git reset --hard", "description": "reset"}
+# The shim's approval code for the RESET call: first 4 hex of SHA-1 over "bash\n" + JSON.stringify(args).
+RESET_CODE = hashlib.sha1(("bash\n" + json.dumps(RESET, separators=(",", ":"))).encode()).hexdigest()[:4]
 SCRIPT = (  # keyword in the latest user message -> tool and arguments; first match wins
+    ("DELEGATE_APPROVE", "task", {"description": "probe", "prompt": "dryas allow %s RESET" % RESET_CODE,
+                                  "subagent_type": "dryas-executor-fast"}),
     ("DELEGATE", "task", {"description": "probe", "prompt": "WRITE_OUT", "subagent_type": "dryas-executor-fast"}),
     ("WRITE_OUT", "write", {"filePath": "out.txt", "content": "x"}),
     ("WRITE_ALLOWED", "write", {"filePath": "allowed.txt", "content": "x"}),
-    ("RESET", "bash", {"command": "git reset --hard", "description": "reset"}),
+    ("dryas allow", "bash", RESET),
+    ("RESET", "bash", RESET),
     ("ECHO", "bash", {"command": "echo hi", "description": "echo"}),
+    ("LS", "bash", {"command": "ls", "description": "list"}),
     ("MEMSEARCH", "jev_memory_search", {"query": "opencode"}),
 )
 USAGE = {"prompt_tokens": 1234, "completion_tokens": 5, "total_tokens": 1239}
