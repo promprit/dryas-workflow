@@ -204,7 +204,7 @@ VERSION_FILES = ("claude/.claude-plugin/plugin.json", "codex/.codex-plugin/plugi
 
 def versions(repo: Path) -> dict:
     """The release version as each shipped file states it: the two plugin manifests, the dryas entry in the
-    Claude marketplace, the first `## X.Y.Z` heading in CHANGELOG.md and the Jev MCP serverInfo version.
+    Claude marketplace, the first `## X.Y.Z` heading in CHANGELOG.md (an `X.Y.Z - unreleased` heading is skipped) and the Jev MCP serverInfo version.
     A file that cannot be read or has no version maps to None."""
     repo = Path(repo)
     out = {}
@@ -216,7 +216,7 @@ def versions(repo: Path) -> dict:
         if isinstance(d, dict) else []
     out[VERSION_FILES[2]] = ours[0].get("version") if ours else None
     try:
-        m = re.search(r"^## (\d+\.\d+\.\d+)\b", (repo / VERSION_FILES[3]).read_text(encoding="utf-8"), re.M)
+        m = re.search(r"^## (\d+\.\d+\.\d+)\b(?! - unreleased)", (repo / VERSION_FILES[3]).read_text(encoding="utf-8"), re.M)
         out[VERSION_FILES[3]] = m.group(1) if m else None
     except OSError:
         out[VERSION_FILES[3]] = None

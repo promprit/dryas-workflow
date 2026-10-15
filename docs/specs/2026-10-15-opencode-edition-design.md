@@ -152,9 +152,9 @@ Setup writes a copy (re-run after `git pull`, as with Codex):
 
 ## 9. Delivery
 
-**Plan 1: core (about 3 days).** The unprobed items were settled while planning (section 3). Plan 1 covers: layout and sync, `--harness opencode` in chain and rules, the shim's step-1 rows, skills, commands, executor agents and the tier ladder, installer, uninstall, release check, step-1 tests, CI jobs, docs with the OC column. The OC rows for the step-2 features say `partial: step 2`; the rows touched by section 8 (session end, headless ask) say `partial` with the reason. `accounts.json` readers are checked to tolerate the new `opencode_dirs` key. Release 2.1.0.
+**Plan 1: core (about 3 days).** The unprobed items were settled while planning (section 3). Plan 1 covers: layout and sync, `--harness opencode` in chain and rules, the shim's step-1 rows, skills, commands, executor agents and the tier ladder, installer, uninstall, release check, step-1 tests, CI jobs, docs with the OC column. The OC rows for the step-2 features say `partial: step 2`; the rows touched by section 8 (session end, headless ask) say `partial` with the reason. `accounts.json` readers are checked to tolerate the new `opencode_dirs` key. Release 2.2.0.
 
-**Plan 2: full (about 1.5 days).** The shim's step-2 rows, `chain.json` lists, `context_watch.py` and memory-stage event input, `/handoff` on OpenCode, step-2 tests, the OC column updated to Full. Release 2.2.0.
+**Plan 2: full (about 1.5 days).** The shim's step-2 rows, `chain.json` lists, `context_watch.py` and memory-stage event input, `/handoff` on OpenCode, step-2 tests, the OC column updated to Full. Release: a later version (after 2.2.0).
 
 ## 10. Out of scope
 

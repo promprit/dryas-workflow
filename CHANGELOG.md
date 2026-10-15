@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 2.2.0 - unreleased
 
 ### Added
 - The OpenCode edition (core): `opencode/plugin/dryas.ts`, skills, commands and executor agents, with the `jev` MCP server. Memory hook stages, context warnings, compaction keep/restore and `/handoff` come in plan 2.
