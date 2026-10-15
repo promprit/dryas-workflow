@@ -10,7 +10,7 @@
 
 **Spec:** `docs/specs/2026-10-15-scope-lock-shell-writes-design.md`
 
-**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); 15 is independent; 16 after 9, 13, 14; 17 after 3; **Task 12 (release) runs last**.
+**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); 15 is independent; 16 after 9, 13, 14; 17 after 3; 18 after 13 and 17; **Task 12 (release) runs last**.
 
 ## Global Constraints
 
@@ -2293,7 +2293,7 @@ Goal: The full suite's real failures are fixed and the run's process lessons are
 Scope:
 - install/tests/test_cloud_session.py
 - claude/jev/tests/test_interrogate_tune_fixes.py
-- install/tests/fixtures/pre_pstack/executor.md
+- install/tests/fixtures/pre_pstack/**
 - claude/CLAUDE.md.template
 - docs/workflow.md
 - claude/skills/plan/SKILL.md
@@ -2335,3 +2335,53 @@ Failing test first: claude/jev/tests/test_scope_lock_scratchpad_files.py :: Scra
 - [ ] **Step 3: Implement.** In `scope_lock.run`, right after `path = os.path.realpath(os.path.join(cwd, str(target)))`, add `if _in_scratchpad(path, event): return None` (the realpath already resolves symlinks, so a link out of the scratchpad is checked at its target). Update the module docstring's Edit/Write sentence: "...outside the active tasks' Scope globs (this session's Claude scratchpad excepted)".
 - [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS.
 - [ ] **Step 5: Commit** with a pathspec as `fix(scope-lock): Edit and Write may use this session's scratchpad (task 17)`.
+
+## Task 18: Not slower than v1 — the scope lock runs inside the chain
+
+Goal: The chain runs the scope-lock stage in its own process instead of starting a Python subprocess for it, so a tool call costs one process start less than in 2.3.0 (Edit/Write become faster than Dryas 1.0, Bash no slower beyond noise), and `tools/compare_v1.py` counts the chain's `[scope-lock] scope lock:` denies correctly.
+Scope:
+- claude/jev/chain.py
+- claude/jev/chain.json
+- claude/jev/tests/test_chain_inproc_scope.py
+- tools/compare_v1.py
+- install/tests/test_compare_v1.py
+Done:
+- `python3 -m pytest -q claude/jev/tests/test_chain_inproc_scope.py claude/jev/tests/test_chain.py claude/jev/tests/test_chain_local.py claude/jev/tests/test_chain_observe.py claude/jev/tests/test_scope_lock.py install/tests/test_compare_v1.py` passes
+- `python3 tools/compare_v1.py` exits 0 (PASS) on this Mac; paste its table in the report and answer benchmark-checklist questions 4 and 5
+Failing test first: claude/jev/tests/test_chain_inproc_scope.py :: InprocScopeTest.test_scope_lock_runs_without_a_subprocess
+
+**Interfaces:**
+- Consumes: `scope_lock.run(event) -> Optional[dict]` (PreToolUse output or None).
+- Produces: pretool stage key `"inproc": "scope_lock"` honoured by `chain.pretool`; compare_v1 `_one` counts a deny as the scope lock's when its reason contains `scope lock:`.
+
+- [ ] **Step 1: Write the failing test.** Create `claude/jev/tests/test_chain_inproc_scope.py`, in the style of `claude/jev/tests/test_chain.py` (read it for how it loads stages and builds a temp worktree with `.orchestrate/PLAN.md` Scope `src/feature/**` and active `["1"]`). Tests:
+  - `test_scope_lock_runs_without_a_subprocess`: patch `chain._run` with a mock that raises if called for a stage named `scope-lock`; `chain.pretool(event, json.dumps(event), [scope_stage])` with `scope_stage = {"name": "scope-lock", "inproc": "scope_lock", "cmd": ["unused"], "match": "Bash|Edit|Write|MultiEdit|NotebookEdit", "fail_closed": True}` and an out-of-scope `Write` → decision `deny`, reason starts with `[scope-lock] scope lock:`; the mock was never called.
+  - `test_in_scope_allowed`: an in-scope `Write` → `None`.
+  - `test_bash_out_of_scope_denied_in_process`: an executor `Bash` `echo x > docs/a.md` (with `agent_id`) → `deny`.
+  - `test_crash_fails_closed_while_active`: patch `scope_lock.run` to raise → `deny` with `fail closed` in the reason while a task is active; with no `active.json` → `None`.
+  - `test_chain_json_scope_stage_is_inproc`: `chain.json`'s `scope-lock` pretool stage has `"inproc": "scope_lock"`.
+- [ ] **Step 2: Run it to see it fail.** Expected: the mock is called (the stage still runs as a subprocess) and `test_chain_json_scope_stage_is_inproc` fails.
+- [ ] **Step 3: Implement.**
+  1. `claude/jev/chain.py` `pretool`: right after the `if decision == "deny": continue` check, add:
+
+```python
+            if st.get("inproc") == "scope_lock":  # pure path check: no process start per tool call
+                try:
+                    import scope_lock
+                    hso = ((scope_lock.run(event) or {}).get("hookSpecificOutput") or {})
+                    d, r = hso.get("permissionDecision"), str(hso.get("permissionDecisionReason", ""))
+                except Exception as e:
+                    fc = _fail_closed(st, event, "failed in process (%s)" % type(e).__name__)
+                    if fc is None:
+                        continue
+                    d, r = fc
+                if d in RANK and RANK[d] > RANK.get(decision or "", 0):
+                    decision, reason = d, "[%s] %s" % (st.get("name", "?"), r)
+                continue
+```
+
+     Extend the module docstring: "A stage with `inproc` runs in this process (only the known `scope_lock`); its `cmd` stays for tools that run stages one by one."
+  2. `claude/jev/chain.json`: add `"inproc": "scope_lock"` to the `scope-lock` pretool stage (keep `cmd`, `match`, `timeout`, `per_file`, `fail_closed`).
+  3. `tools/compare_v1.py` `_one`: count a deny as the scope lock's when `"scope lock:" in reason` (the chain prefixes `[scope-lock] `), not `startswith`; add `test_one_counts_prefixed_scope_denies` to `install/tests/test_compare_v1.py` that feeds `_one` a fake chain script printing `{"hookSpecificOutput": {"permissionDecision": "deny", "permissionDecisionReason": "[scope-lock] scope lock: x"}}` and asserts `"deny"`, and one with `[jev-gate] Jev gate: ...` asserting `"gate_deny"`.
+- [ ] **Step 4: Run the tests and the gate.** Run the Done commands. Before the comparison, check `uptime`; if the load average is above the core count, say so and run it twice. Expected: PASS. If the median is still slower than v1 beyond noise, profile one Bash event with `python3 -X importtime claude/jev/chain.py pretool` and report the top imports; do not loosen `verdict`.
+- [ ] **Step 5: Commit** with a pathspec as `perf(chain): scope lock runs in process; compare_v1 counts prefixed scope denies (task 18)`.
