@@ -313,6 +313,18 @@ def _secret_lines(src: Path) -> List[str]:
     return hits
 
 
+def confirm_sha(src: Path) -> str:
+    """sha256 of what an own skill's --confirm-own covers: its redaction hits (place and text) and each file it
+    cannot scan (path and sha256), so `dryas cloud` keeps a confirmation until one of them changes."""
+    parts = []
+    for hit in _secret_lines(src):
+        rel, n = hit.rsplit(":", 1)
+        lines = (src / rel).read_text(encoding="utf-8").splitlines()
+        parts.append("%s\0%s" % (hit, lines[int(n) - 1]))
+    parts += ["%s\0%s" % (rel, cc.sha256((src / rel).read_bytes())) for rel in _binaries(src)]
+    return cc.sha256("\n".join(parts).encode("utf-8"))
+
+
 def own(claude_dir: Path, wanted: List[str], confirmed: List[str], nm: ct.Names,
         skipped: List[Tuple[str, str]]) -> Dict[str, Entry]:
     out: Dict[str, Entry] = {}
@@ -361,6 +373,21 @@ def build(repo: Path, opts: Dict[str, Any], claude_dir: Path) -> Dict[str, Any]:
     if opts.get("own"):
         files.update(own(Path(claude_dir), list(opts["own"]), list(opts.get("confirm_own") or []), nm, skipped))
     return dict(files=files, skipped=skipped, names=nm, version=ver, commit=commit(repo))
+
+
+def _component(rec: Any) -> List[str]:
+    """The plan's skip names a manifest record belongs to: an own skill, a design plugin or one of its skills."""
+    src = str((rec or {}).get("source") or "")
+    if src.startswith("own:"):
+        return [src[4:]]
+    if src.startswith("plugin:"):
+        pid, _, rest = src[7:].partition("/")
+        return [pid, pid + "/" + rest.rsplit("/", 1)[-1]]
+    return []
+
+
+def why_skipped(rec: Any, skipped: Dict[str, str]) -> Optional[str]:
+    return next((skipped[k] for k in _component(rec) if k in skipped), None)
 
 
 def finish(plan: Dict[str, Any]) -> None:
