@@ -3,5 +3,8 @@
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 case "$1" in
   memory) shift; exec "$here/dryas-py" "$here/../jev/memcli.py" "$@" ;;
-  *) echo "usage: dryas memory {import-ruflo|consolidate|stats} [options]" >&2; exit 2 ;;
+  cloud) shift; t="$here/../../tools/dryas_cloud.py"
+         if [ ! -f "$t" ]; then echo "dryas cloud: needs a Dryas checkout (tools/dryas_cloud.py beside claude/)" >&2; exit 2; fi
+         exec "$here/dryas-py" "$t" "$@" ;;
+  *) echo "usage: dryas memory {import-ruflo|consolidate|stats} [options] | dryas cloud {init|check|update|remove} [options]" >&2; exit 2 ;;
 esac
