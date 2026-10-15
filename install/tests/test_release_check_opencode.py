@@ -44,6 +44,22 @@ class ReleaseCheckOpenCodeTest(unittest.TestCase):
             self.assertIn("WARN  installed files unchanged", out)
             self.assertEqual(rep.fails, 0)
 
+    def test_mcp_check_skips_untargetable_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            od = Path(d) / "oc-other"
+            (od / "dryas").mkdir(parents=True)
+            (od / "dryas/install.json").write_text(json.dumps({"files": {}, "tiers": {}}), encoding="utf-8")
+            (od / "agent").mkdir()
+            rep, buf = rc.Report(), io.StringIO()
+            with redirect_stdout(buf), mock.patch.object(rco.di, "capture", return_value=(0, "1.18.32\n")), \
+                    mock.patch.object(rco.di, "scope_smoke", return_value=True), \
+                    mock.patch.object(rco, "_mcp_connected", return_value=(True, "")) as mcp, \
+                    mock.patch.object(rco, "_rules_ok", return_value=True):
+                rco.check(rep, od, "/usr/bin/opencode", {})
+            self.assertIn("SKIP  jev MCP server connects  (OpenCode reads <XDG_CONFIG_HOME>/opencode; "
+                          "re-run with a dir named opencode)", buf.getvalue())
+            mcp.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

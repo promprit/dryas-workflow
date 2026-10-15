@@ -62,8 +62,12 @@ def check(rep, od: Path, opencode: Optional[str], env: dict) -> None:
     rep.say("FAIL" if missing else "PASS", "installed files present", ", ".join(missing[:3]))
     rep.say("WARN" if edited else "PASS", "installed files unchanged",
             ("edited after setup: " + ", ".join(edited[:3])) if edited else "")
-    ok, why = _mcp_connected(opencode, od, env)
-    rep.say("PASS" if ok else "FAIL", "jev MCP server connects", why)
+    if od.name != "opencode":
+        rep.say("SKIP", "jev MCP server connects",
+                "OpenCode reads <XDG_CONFIG_HOME>/opencode; re-run with a dir named opencode")
+    else:
+        ok, why = _mcp_connected(opencode, od, env)
+        rep.say("PASS" if ok else "FAIL", "jev MCP server connects", why)
     rep.say("PASS" if _rules_ok(od, env) else "FAIL", "rules hook prints the OpenCode rules")
     rep.say("PASS" if di.scope_smoke(od / "dryas/jev/chain.py", {}, harness="opencode") else "FAIL",
             "scope lock blocks an out-of-scope apply_patch")
