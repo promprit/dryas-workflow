@@ -460,15 +460,24 @@ The scorecard counts what the rules miss, in the open. Missed dangerous commands
 
 The table is today's `reference/judge-corpus/SCORECARD.md` from `| Measure` on; if that file changed since this plan was written, copy its current table instead (the test compares them after stripping).
 
-- [ ] **Step 4: Move the README reference material into `docs/install.md`.** Add a `## Reference stack` section after `## Components` holding the README's "Reference stack" table and the FlowObserve paragraph below it, verbatim. Add `### Manual plugin route` at the end of `## Claude Code: plugin plus setup` holding the README's "Manual route, inside Claude Code" block and the paragraph after it, verbatim. Add the README's optional-flags block (`--judge`, `--with-ruflo`, `--with-superpowers`, `--no-design`) and the `--uninstall`/`--purge`/`--keep-extras` paragraph to `## Flags` and `### Uninstall and purge` where they are not already said; do not duplicate a sentence that is already there. Then put this banner as the first line under each heading or table row block that is about the Ruflo or Superpowers extras (at least the flag rows for `--with-ruflo` and `--with-superpowers`, and any `###` section about them):
+- [ ] **Step 4: Move the README reference material into `docs/install.md`.** `docs/install.md` already holds every flag (`## Flags` table) and the uninstall, purge and `--keep-extras` text (`### Uninstall and purge`): add none of that again. Make exactly these three changes:
+  1. Insert a `### Manual plugin route` section immediately before the line `## Components` (so it ends `## Claude Code: plugin plus setup`). Its body is the README's block starting "Manual route, inside Claude Code:" through the paragraph ending "Run `install/install.sh` for all of that.", verbatim (the fenced `/plugin marketplace add promprit/dryas-workflow` block included).
+  2. Insert a `## Reference stack` section immediately before the line `## Flags`. Its body is the README's `## Reference stack` section verbatim: the sentence "These are the reference implementation's bindings...", the table, and the FlowObserve paragraph after it.
+  3. Insert this banner as its own paragraph directly after the `## Components` table, directly after the new `## Reference stack` table, and directly after the `## Flags` table (three places; never inside a table):
+
+```markdown
+> Deprecated: removed in 2.2. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`. (Applies to the Ruflo and Superpowers rows above.)
+```
+
+  Change nothing else in the file: the flags work until 2.2, and `install/tests/test_owned_core_docs.py` requires `--with-ruflo`, `--with-superpowers` and `dryas memory import-ruflo` to stay. After the edit run `python3 -m pytest -q install/tests/test_owned_core_docs.py install/tests/test_pstack_docs.py install/tests/test_interrogate_install_fixes.py` and fix any failure by adjusting your insertion, not the tests.
+
+- [ ] **Step 5: Banners in `docs/workflow.md`.** Insert this banner (without the parenthetical used in `docs/install.md`) as the first paragraph under `## 7. Dryas memory, and the optional extra Ruflo` and under `## 8. Optional extra: Superpowers`:
 
 ```markdown
 > Deprecated: removed in 2.2. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`.
 ```
 
-Keep the existing text below each banner unchanged: the flags work until 2.2, and `install/tests/test_owned_core_docs.py` requires `--with-ruflo`, `--with-superpowers` and `dryas memory import-ruflo` to stay in this file.
-
-- [ ] **Step 5: Banners in `docs/workflow.md`.** Insert the same banner as the first paragraph under `## 7. Dryas memory, and the optional extra Ruflo` and under `## 8. Optional extra: Superpowers`. Change nothing else in the file.
+  Change nothing else in the file.
 
 - [ ] **Step 6: Move "Use it for yourself" into `docs/adoption-guide.md`.** Insert a `## Use it for yourself` section after `## 2. Fork it and make it yours`, holding the README's three numbered steps and the `~/.dryas/docs/dryas-local.md` sentence, verbatim. If section 2 already says the same thing, keep section 2 and make the new section the short version with a pointer to it; the four strings `Fork`, `claude/CLAUDE.md.template`, `docs/workflow.md`, `install/install.sh` must appear in it.
 
