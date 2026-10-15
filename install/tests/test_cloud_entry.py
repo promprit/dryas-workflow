@@ -240,8 +240,8 @@ class CmdShapeTest(unittest.TestCase):
         env = dict(os.environ, DRYAS_PYTHON=sys.executable, DRYAS_PY=sys.executable,
                    CLAUDE_CONFIG_DIR=str(base / "cfg"))
         args = ["init", "--repo", str(spaced), "--prefix", "my-", "--with-design", "--persist-memory", "--force",
-                "--claude-dir", str(base / "cd"), "--with-design", "--force", "--yes"]  # 12 arguments, --yes last
-        self.assertEqual(len(args), 12)
+                "--claude-dir", str(base / "cd"), "--with-design", "--force", "--yes"]  # more than nine arguments, --yes last
+        self.assertEqual(len(args), 13)
         p = subprocess.run(["cmd", "/c", str(ROOT / "claude/bin/dryas.cmd"), "cloud"] + args,
                            capture_output=True, text=True, env=env, timeout=300)
         self.assertNotIn("unrecognized", p.stderr)
@@ -265,7 +265,8 @@ class CmdShapeTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, str(base), True)
         repo = fx.git_repo(base / "a&b" / "repo")
         env = dict(os.environ, DRYAS_PYTHON=sys.executable, DRYAS_PY=sys.executable, CLAUDE_CONFIG_DIR=str(base / "cfg"))
-        p = subprocess.run(["cmd", "/c", str(ROOT / "claude/bin/dryas.cmd"), "cloud", "init", "--repo", str(repo)],
+        # a string, quoted as a user types it: subprocess leaves "&" unquoted, and cmd would split the line there
+        p = subprocess.run('cmd /s /c ""%s" cloud init --repo "%s""' % (ROOT / "claude/bin/dryas.cmd", repo),
                            capture_output=True, text=True, env=env, timeout=300)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertIn("Dry run: nothing written.", p.stdout)
@@ -273,7 +274,7 @@ class CmdShapeTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows wrapper")
     def test_cmd_ampersand_in_a_quoted_argument_is_not_a_cmd_error(self):
-        p = subprocess.run(["cmd", "/c", str(ROOT / "claude/bin/dryas.cmd"), "cloud", "init", "--prefix", "a&b-"],
+        p = subprocess.run('cmd /s /c ""%s" cloud init --prefix "a&b-""' % (ROOT / "claude/bin/dryas.cmd"),
                            capture_output=True, text=True, timeout=120,
                            env=dict(os.environ, DRYAS_PYTHON=sys.executable, DRYAS_PY=sys.executable))
         self.assertEqual(p.returncode, 2, p.stdout + p.stderr)  # argparse rejects the prefix

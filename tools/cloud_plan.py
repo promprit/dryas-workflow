@@ -82,8 +82,29 @@ def _walk(base: Path) -> Iterator[Tuple[str, Path]]:
             yield rel.as_posix(), p
 
 
+_GIT_EXECS: Dict[str, frozenset] = {}
+
+
+def _git_execs(d: Path) -> frozenset:
+    """Paths git records as 100755 in the work tree holding d (Windows has no exec bit on disk)."""
+    key = str(d)
+    if key not in _GIT_EXECS:
+        try:
+            top = subprocess.run(["git", "-C", key, "rev-parse", "--show-toplevel"], capture_output=True,
+                                 universal_newlines=True, timeout=30).stdout.strip()
+            out = subprocess.run(["git", "-C", top, "ls-files", "-s"], capture_output=True, universal_newlines=True,
+                                 timeout=30).stdout if top else ""
+        except (OSError, subprocess.SubprocessError):
+            top, out = "", ""
+        _GIT_EXECS[key] = frozenset(os.path.normcase(os.path.join(top, ln.split("\t", 1)[1]))
+                                    for ln in out.splitlines() if ln.startswith("100755 ") and "\t" in ln)
+    return _GIT_EXECS[key]
+
+
 def _exec(p: Path) -> bool:
-    return os.name != "nt" and os.access(str(p), os.X_OK)
+    if os.name == "nt":
+        return os.path.normcase(os.path.abspath(str(p))) in _git_execs(p.parent)
+    return os.access(str(p), os.X_OK)
 
 
 def entry(data: bytes, source: str, group: str, version: str, licence: str, licence_file: str, notice: str,

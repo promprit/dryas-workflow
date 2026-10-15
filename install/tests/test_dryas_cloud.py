@@ -287,7 +287,6 @@ class CloudCliGapTest(unittest.TestCase):
 
     def test_bare_repo_init_then_remove_restores_it(self):
         # defect: files Dryas created (settings.json, .mcp.json, CLAUDE.md, .gitignore) survive remove
-        shutil.rmtree(str(self.repo))
         self.repo = fx.git_repo(self.base / "bare", {"README.md": "# demo\n"})
         before = fx.snapshot(self.repo)
         self.init()
@@ -304,7 +303,7 @@ class CloudCliGapTest(unittest.TestCase):
         self.init("--persist-memory")
         self.assertIn(ct.NOTES_RULE, (self.repo / "CLAUDE.md").read_text(encoding="utf-8"))
         note = self.repo / ".dryas/memory/notes/decision.md"
-        note.write_text("We chose X.\n", encoding="utf-8")
+        note.write_bytes(b"We chose X.\n")  # bytes: no CRLF on Windows
         fx.commit_all(self.repo)
         state = self.repo / ".dryas/state/jev"
         state.mkdir(parents=True)

@@ -189,7 +189,8 @@ class MemNotesTest(unittest.TestCase):
         self.start()
         memstore.store(self.conn, self.ns, "Lesson", "Body.")
         env = dict(os.environ, DRYAS_CWD="")
-        ev = b'{"session_id": "s1", "cwd": "' + self.cwd.encode() + b'", "x": "\xff\xfe"}'
+        # json.dumps escapes the backslashes of a Windows path
+        ev = b'{"session_id": "s1", "cwd": ' + json.dumps(self.cwd).encode() + b', "x": "\xff\xfe"}'
         p = subprocess.run([sys.executable, os.path.join(JEV, "memnotes.py"), "export"], input=ev,
                            capture_output=True, env=env, timeout=30)
         self.assertEqual((p.returncode, p.stdout), (0, b""))
