@@ -58,10 +58,10 @@ class BookkeepingTest(unittest.TestCase):
                     "rm .orchestrate/active.json", "sed -i s/a/b/ .orchestrate/active.json"):
             self.assertEqual(self.decision(scope_lock.run(self.bash(cmd))), "deny", cmd)
 
-    def test_orchestrator_shell_write_never_asks_executor_write_asks(self):
+    def test_orchestrator_shell_write_never_asks_executor_write_in_scope_allowed(self):
         self.assertIsNone(scope_lock.run(self.bash("rm .orchestrate/active.json", agent=False)))
         self.assertIsNone(scope_lock.run(self.bash("cat .orchestrate/active.json")))
-        self.assertEqual(self.decision(scope_lock.run(self.bash("echo hi > out.txt"))), "ask")
+        self.assertIsNone(scope_lock.run(self.bash("echo hi > out.txt")))
 
 
     def test_executor_denied_every_spelling_of_orchestrate_path(self):
@@ -89,10 +89,11 @@ class BookkeepingTest(unittest.TestCase):
             self.assertIn("orchestrator bookkeeping", out["hookSpecificOutput"]["permissionDecisionReason"])
 
     def test_obfuscated_shell_write_never_allowed(self):
-        # Literal matching is the deny line; forms that hide the name keep today's ask, never pass silently.
+        # An executor's shell write whose quote-free text names orchestr/active.json/approved.json is denied:
+        # the audit cannot see .orchestrate/, which git ignores.
         for cmd in ("echo x > .orche''strate/active.json", "D=.orchestrate; echo x > $D/active.json",
                     "echo x > $D/active.json"):
-            self.assertIn(self.decision(scope_lock.run(self.bash(cmd))), ("ask", "deny"), cmd)
+            self.assertEqual(self.decision(scope_lock.run(self.bash(cmd))), "deny", cmd)
 
     def test_executor_reads_pass_and_main_thread_unaffected(self):
         self.assertIsNone(scope_lock.run(self.bash("cat .orchestrate/PLAN.md")))
