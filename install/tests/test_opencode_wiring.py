@@ -34,8 +34,44 @@ class OpenCodeWiringTest(unittest.TestCase):
         claude_setup.assert_not_called()
         args = setup.call_args[0]
         self.assertEqual(args[3], {"fast": None, "standard": None, "strong": "p/big", "frontier": None})
-        self.assertNotIn("superpowers", args[2])
-        self.assertNotIn("design", args[2])
+        self.assertEqual(args[2], run_cmd.select(run_cmd.parse(["--harness", "opencode"]), None))
+
+    def test_opencode_setup_keeps_shared_component_choices(self):
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": os.path.join(d, "data")}), \
+                mock.patch.object(run_cmd, "preflight", return_value=[]), \
+                mock.patch("codex_plugin_setup.legacy_components", return_value=None), \
+                mock.patch("dryas_install.capture", return_value=(0, "1.18.32\n")), \
+                mock.patch.object(opencode_setup, "verify", return_value=0):
+            root, cd = Path(d) / "data", Path(d) / "claude"
+            root.mkdir()
+            (cd / ps.RECORD).parent.mkdir(parents=True)
+            (cd / ps.RECORD).write_text(json.dumps({"components": ["core", "jev", "ruflo", "design", "superpowers"]}),
+                                        encoding="utf-8")
+            (root / "chain.local.json").write_text(json.dumps({"off": []}), encoding="utf-8")
+            with redirect_stdout(io.StringIO()):
+                rc = run_cmd.main(["--harness", "opencode", "--yes", "--opencode-dir", os.path.join(d, "oc"),
+                                   "--claude-dir", str(cd)])
+            self.assertEqual(rc, 0)
+            off = json.loads((root / "chain.local.json").read_text(encoding="utf-8"))["off"]
+            for c in ("ruflo", "design", "superpowers"):
+                self.assertNotIn(c, off)
+
+    def test_uninstall_leaves_unreadable_accounts_alone(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": os.path.join(d, "data")}):
+            root, od = Path(d) / "data", Path(d) / "oc"
+            root.mkdir()
+            (od / "dryas").mkdir(parents=True)
+            (od / opencode_setup.RECORD).write_text(json.dumps({"files": {}}), encoding="utf-8")
+            (root / "accounts.json").write_bytes(b"{not json")
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(opencode_setup.uninstall(od), 0)
+            self.assertEqual((root / "accounts.json").read_bytes(), b"{not json")
+
+    def test_preflight_opencode_alone_skips_ruflo_node_checks(self):
+        with mock.patch.object(run_cmd.pu, "which", side_effect=lambda t: None if t in ("node", "npm") else "/bin/" + t), \
+                mock.patch.object(opencode_setup, "installed_version", return_value=(1, 18, 32)):
+            self.assertEqual(run_cmd.preflight(["core", "jev"], "opencode", Path("/x")), [])
 
     def test_other_accounts_and_purge_count_opencode(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": d}):

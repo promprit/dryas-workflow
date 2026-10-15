@@ -21,7 +21,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence
 
 import platform_util as pu
 
@@ -139,11 +139,6 @@ def codex_version() -> Optional[tuple]:
     return cps.codex_version(out) if rc == 0 else None
 
 
-def di_capture(argv: List[str]) -> Tuple[int, str]:
-    import dryas_install as di
-    return di.capture(argv, timeout=60)
-
-
 def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Sequence[Path] = ()) -> List[str]:
     """Problems that stop the install, as messages; an empty list means go.
     claude_dir: the Claude config dir (unused by the checks); ruflo_paths: more paths Ruflo's hook override names."""
@@ -188,11 +183,10 @@ def preflight(comps: List[str], harness: str, claude_dir: Path, ruflo_paths: Seq
         if not pu.which("opencode"):
             probs.append("Missing: opencode (OpenCode CLI). Install it and re-run (this installer never installs it).")
         else:
-            rc, out = di_capture(["opencode", "--version"])
-            ver = ocs.opencode_version(out) if rc == 0 else None
+            ver = ocs.installed_version()
             if ver is None or ver < ocs.MIN_OPENCODE:
                 probs.append("Dryas needs OpenCode %s or newer (found: %s). Update it and re-run."
-                             % (".".join(map(str, ocs.MIN_OPENCODE)), out.strip() or "no version"))
+                             % (".".join(map(str, ocs.MIN_OPENCODE)), ".".join(map(str, ver)) if ver else "no version"))
     return probs
 
 
@@ -263,7 +257,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     comps = select(a, recorded)
     want_claude, want_codex, want_oc = a.harness in CLAUDE_H, a.harness in CODEX_H, a.harness in OPENCODE_H
     od = ocs.opencode_dir(a.opencode_dir)
-    oc_comps = [c for c in comps if c not in ("superpowers", "design", "ruflo")]
     tiers = {t: getattr(a, "tier_" + t) for t in ("fast", "standard", "strong", "frontier")}
     cdx = cps.codex_home(a.codex_dir)
     legacy = cps.legacy_components(cdx)
@@ -311,7 +304,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                         print("Legacy Ruflo pieces (each asked separately):")
                     for label, _, _ in legacy:
                         print("  " + label)
-        rc = (cps.uninstall(cdx) if want_codex else 0) or (ocs.uninstall(od) if want_oc else 0)
+        rc_cdx = cps.uninstall(cdx) if want_codex else 0
+        rc = max(rc_cdx, ocs.uninstall(od) if want_oc else 0)
         if rc:
             return rc
         if want_claude:
@@ -336,7 +330,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
     if want_codex and a.openrouter_key:
         print("note: --openrouter-key is not used for Codex; Codex reads OPENROUTER_API_KEY from your shell.")
-    probs = preflight(sorted(set(comps) | set(codex_comps if want_codex else [])), a.harness, cd,
+    pre = sorted(set(comps) | set(codex_comps if want_codex else []))
+    if a.harness == "opencode":  # OpenCode never uses Ruflo: no node/npm or path checks for it
+        pre = [c for c in pre if c != "ruflo"]
+    probs = preflight(pre, a.harness, cd,
                       [repo / "claude", cd] if want_claude else [])
     if probs:
         print("\n".join(probs))
@@ -349,7 +346,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if rc:
             return rc
     if want_oc:
-        rc = ocs.setup(repo, od, oc_comps, tiers, yes=a.yes, dry=a.dry_run)
+        rc = ocs.setup(repo, od, comps, tiers, yes=a.yes, dry=a.dry_run)
         if rc:
             return rc
     if want_claude:
@@ -372,5 +369,5 @@ def main(argv: Optional[List[str]] = None) -> int:
     if want_codex:
         fails += cps.verify(cdx, codex_comps)
     if want_oc:
-        fails += ocs.verify(od, oc_comps)
+        fails += ocs.verify(od, comps)
     return 1 if fails else 0

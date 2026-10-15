@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 import dryas_install as di
+import opencode_e2e
 import opencode_setup as os_
 
 REPO = Path(__file__).resolve().parents[2]
@@ -79,10 +80,53 @@ class OpenCodeSetupTest(unittest.TestCase):
         (self.od / "command/tune.md").write_text("edited\n", encoding="utf-8")
         self.assertEqual(os_.uninstall(self.od), 0)
         self.assertFalse((self.od / "plugin/dryas.ts").exists())
-        self.assertFalse((self.od / os_.RECORD).exists())
+        rec = json.loads((self.od / os_.RECORD).read_text(encoding="utf-8"))
+        self.assertEqual(list(rec["files"]), ["command/tune.md"])
         self.assertTrue((self.od / "command/tune.md").exists())
         acc = json.loads((self.data / "accounts.json").read_text(encoding="utf-8"))
         self.assertEqual(acc.get("opencode_dirs"), [])
+
+    def test_uninstall_without_record_says_so(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(os_.uninstall(self.od), 0)
+        self.assertIn("nothing to uninstall in", buf.getvalue())
+
+    def test_reinstall_after_uninstall_kept_edited_file(self):
+        self.assertEqual(self.setup_(), 0)
+        (self.od / "command/tune.md").write_text("edited\n", encoding="utf-8")
+        self.assertEqual(os_.uninstall(self.od), 0)
+        rec = json.loads((self.od / os_.RECORD).read_text(encoding="utf-8"))
+        self.assertEqual(list(rec["files"]), ["command/tune.md"])
+        self.assertEqual(self.setup_(), 0)
+        self.assertEqual((self.od / "command/tune.md.dryas-old").read_text(encoding="utf-8"), "edited\n")
+        self.assertIn(os_.MARK, (self.od / "command/tune.md").read_text(encoding="utf-8"))
+
+    def test_setup_recovers_after_interrupted_run(self):
+        real, calls = Path.write_bytes, []
+
+        def flaky(p, data):
+            calls.append(p)
+            if len(calls) == 3:
+                raise OSError("disk full")
+            return real(p, data)
+        with mock.patch.object(Path, "write_bytes", flaky):
+            with self.assertRaises(OSError):
+                self.setup_()
+        self.assertTrue(json.loads((self.od / os_.RECORD).read_text(encoding="utf-8")).get("partial"))
+        self.assertEqual(self.setup_(), 0)
+        self.assertNotIn("partial", json.loads((self.od / os_.RECORD).read_text(encoding="utf-8")))
+
+    def test_dryas_old_never_overwritten(self):
+        self.assertEqual(self.setup_(), 0)
+        cmd = self.od / "command/commit.md"
+        (self.od / "command/commit.md.dryas-old").write_text("first\n", encoding="utf-8")
+        cmd.write_text("second\n", encoding="utf-8")
+        self.assertEqual(self.setup_(), 0)
+        self.assertEqual((self.od / "command/commit.md.dryas-old").read_text(encoding="utf-8"), "first\n")
+        self.assertEqual((self.od / "command/commit.md.dryas-old.1").read_text(encoding="utf-8"), "second\n")
 
     def test_record_py_forward_slashes(self):
         with mock.patch.object(di, "PY", "C:\\Python312\\python.exe"):
@@ -104,6 +148,28 @@ class OpenCodeSetupTest(unittest.TestCase):
             self.assertTrue(di.scope_smoke(REPO / "claude/jev/chain.py", {}, harness="opencode"))
         finally:
             self.ver.start()
+
+
+@unittest.skipIf(opencode_e2e.opencode_ok(), opencode_e2e.opencode_ok())
+class InstalledEditionTest(unittest.TestCase):
+    def test_installed_edition_blocks_out_of_scope_write(self):
+        with tempfile.TemporaryDirectory() as d:
+            srv = opencode_e2e.Server(Path(d), install=True)
+            try:
+                self.assertTrue((Path(d) / "xdg/config/opencode/dryas/install.json").is_file())
+                orch = srv.proj / ".orchestrate"
+                orch.mkdir()
+                (orch / "PLAN.md").write_text("## Task 1: t\nGoal: g\nScope:\n- src/**\nDone:\n- d\n"
+                                              "Failing test first: none (review)\n", encoding="utf-8")
+                (orch / "active.json").write_text(json.dumps({"active": ["1"]}), encoding="utf-8")
+                kids = srv.children(srv.prompt("DELEGATE"))
+                self.assertEqual(len(kids), 1)
+                write = [t for t in srv.tools(kids[0]) if t[0] == "write"]
+                self.assertEqual(write[0][1], "error")
+                self.assertIn("[scope-lock]", write[0][2])
+                self.assertFalse((srv.proj / "out.txt").exists())
+            finally:
+                srv.close()
 
 
 if __name__ == "__main__":

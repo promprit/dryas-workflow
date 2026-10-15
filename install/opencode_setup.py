@@ -33,6 +33,12 @@ def opencode_version(text: str) -> Optional[Tuple[int, ...]]:
     return tuple(int(x) for x in m.groups()) if m else None
 
 
+def installed_version() -> Optional[Tuple[int, ...]]:
+    """`opencode --version` as an int tuple; None when it does not run or prints no version."""
+    rc, out = di.capture(["opencode", "--version"], timeout=60)
+    return opencode_version(out) if rc == 0 else None
+
+
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -97,11 +103,10 @@ def _legacy_skill_warning(home: Path) -> None:
 
 def setup(repo: Path, od: Path, comps: List[str], tiers: Dict[str, str], yes: bool, dry: bool = False) -> int:
     repo, od, root = Path(repo).resolve(), opencode_dir(str(od)), ps.data_root()
-    rc, out = di.capture(["opencode", "--version"], timeout=60)
-    ver = opencode_version(out) if rc == 0 else None
+    ver = installed_version()
     if ver is None or ver < MIN_OPENCODE:
         print("error: Dryas needs OpenCode %s or newer (found: %s); nothing changed"
-              % (".".join(map(str, MIN_OPENCODE)), out.strip() or "no opencode --version"))
+              % (".".join(map(str, MIN_OPENCODE)), ".".join(map(str, ver)) if ver else "no opencode --version"))
         return 1
     rec = ps._load_json(od / RECORD, {})
     rec = rec if isinstance(rec, dict) else {}
@@ -129,10 +134,17 @@ def setup(repo: Path, od: Path, comps: List[str], tiers: Dict[str, str], yes: bo
         print("would write %d files into %s" % (len(want), od))
         return 0
     written = {}
+    # record every planned file first, so a run that stops half-way still owns what it wrote
+    ps._save_json(od / RECORD, {"version": _version(repo), "py": str(di.PY).replace("\\", "/"), "tiers": chosen,
+                                "files": {**{r: _sha(d) for r, d in want.items()}, **old}, "partial": True})
     for rel, data in want.items():
         dest = od / rel
         if dest.is_file() and rel in old and _sha(dest.read_bytes()) != old[rel] and dest.read_bytes() != data:
             keep = dest.with_name(dest.name + ".dryas-old")
+            n = 0
+            while keep.exists():
+                n += 1
+                keep = dest.with_name("%s.dryas-old.%d" % (dest.name, n))
             keep.write_bytes(dest.read_bytes())
             print("kept your edited %s as %s" % (dest, keep))
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -158,16 +170,21 @@ def uninstall(od: Path) -> int:
     od = opencode_dir(str(od))
     p = od / RECORD
     if not p.exists():
+        print("nothing to uninstall in %s" % od)
         return 0
     rec = ps._load_json(p, {})
-    files = rec.get("files") if isinstance(rec, dict) and isinstance(rec.get("files"), dict) else {}
+    rec = rec if isinstance(rec, dict) else {}
+    files = rec.get("files") if isinstance(rec.get("files"), dict) else {}
     kept = [rel for rel, sha in sorted(files.items()) if not _remove(od, rel, sha)]
-    if p.exists():
+    if kept:  # a reinstall must still recognise these as Dryas's
+        rec.pop("partial", None)
+        ps._save_json(p, {**rec, "files": {rel: files[rel] for rel in kept}})
+    else:
         p.unlink()
-    for d in (od / "dryas",):
-        if d.is_dir() and not os.listdir(str(d)):
-            d.rmdir()
-    ps.remove_account(ps.data_root(), od, "opencode_dirs")
+        for d in (od / "dryas",):
+            if d.is_dir() and not os.listdir(str(d)):
+                d.rmdir()
+    ps.forget_account(ps.data_root(), od, "opencode_dirs")
     for rel in kept:
         print("kept %s (edited after setup)" % (od / rel))
     print("uninstalled Dryas from %s" % od)

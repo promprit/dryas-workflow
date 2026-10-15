@@ -15,6 +15,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from unittest import mock
 from typing import List, Optional, Tuple
 
 REPO = Path(__file__).resolve().parents[2]
@@ -47,7 +48,7 @@ def _free_port() -> int:
 
 class Server:
     def __init__(self, tmp: Path, edition: Optional[Path] = REPO / "opencode", config_extra: Optional[dict] = None,
-                 env_extra: Optional[dict] = None):
+                 env_extra: Optional[dict] = None, install: bool = False):
         self.tmp = Path(tmp)
         self.proj = self.tmp / "proj"
         (self.proj / "src").mkdir(parents=True)
@@ -58,7 +59,16 @@ class Server:
                                       stdout=subprocess.PIPE, universal_newlines=True)
         mport = int(self._mock.stdout.readline())
         cfg = self.tmp / "xdg/config/opencode"
-        if edition is not None:
+        self.data = self.tmp / "dryas-data"
+        self.data.mkdir()
+        if install and edition == REPO / "opencode":
+            import opencode_setup
+            mm = "mock/m2"
+            with mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": str(self.data)}):
+                rc = opencode_setup.setup(REPO, cfg, ["core", "jev"], dict.fromkeys(opencode_setup.TIERS, mm), yes=True)
+            if rc:
+                raise RuntimeError("opencode_setup.setup failed (%d)" % rc)
+        elif edition is not None:
             shutil.copytree(str(edition), str(cfg), ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
             for a in (cfg / "agent").glob("dryas-executor-*.md"):
                 a.write_text(a.read_text(encoding="utf-8").replace("model: {{MODEL}}", "model: mock/m2"), encoding="utf-8")
@@ -71,8 +81,6 @@ class Server:
                                                  "m2": {"name": "m2"}}}}}
         conf.update(config_extra or {})
         (cfg / "opencode.json").write_text(json.dumps(conf), encoding="utf-8")
-        self.data = self.tmp / "dryas-data"
-        self.data.mkdir()
         env = {k: v for k, v in os.environ.items() if k not in KEYS}
         env.update(HOME=str(self.tmp), USERPROFILE=str(self.tmp), XDG_CONFIG_HOME=str(self.tmp / "xdg/config"),
                    XDG_DATA_HOME=str(self.tmp / "xdg/data"), XDG_STATE_HOME=str(self.tmp / "xdg/state"),
