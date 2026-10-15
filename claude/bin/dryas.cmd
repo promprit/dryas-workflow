@@ -1,4 +1,5 @@
 @echo off
+setlocal
 rem Dryas command-line entry (owned core D). `dryas memory ...` runs the memory CLI; `dryas cloud ...` the cloud CLI.
 set "DRYAS_SUB="
 if /I "%~1"=="memory" set "DRYAS_SUB=memory"
@@ -13,7 +14,7 @@ rem Collect every remaining argument, quotes intact, so there is no cap on how m
 set "DRYAS_ARGS="
 :collect
 if "%~1"=="" goto dispatch
-set DRYAS_ARGS=%DRYAS_ARGS% %1
+set "DRYAS_ARGS=%DRYAS_ARGS% %1"
 shift /1
 goto collect
 :dispatch

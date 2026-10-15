@@ -224,6 +224,12 @@ class CmdShapeTest(unittest.TestCase):
         self.assertIn("goto collect", t)
         self.assertEqual(t.count("%DRYAS_ARGS%"), 9)  # collector once, eight launchers (memory + cloud x4)
 
+    def test_setlocal_and_quoted_set(self):
+        lines = self.text.splitlines()
+        self.assertEqual(lines[:2], ["@echo off", "setlocal"])  # variables never leak into the caller
+        self.assertIn('set "DRYAS_ARGS=%DRYAS_ARGS% %1"', lines)  # & | < > inside quotes cannot split the line
+        self.assertNotIn("set DRYAS_ARGS=%DRYAS_ARGS% %1", lines)
+
     def test_crlf_and_lookup_order_kept(self):
         raw = (ROOT / "claude/bin/dryas.cmd").read_bytes()
         self.assertEqual(raw.count(b"\n"), raw.count(b"\r\n"))
@@ -245,6 +251,15 @@ class CmdShapeTest(unittest.TestCase):
         self.assertNotIn("unrecognized", p.stderr)
         self.assertNotIn("Traceback", p.stderr)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+    @unittest.skipUnless(os.name == "nt", "Windows wrapper")
+    def test_cmd_ampersand_in_a_quoted_argument_is_not_a_cmd_error(self):
+        p = subprocess.run(["cmd", "/c", str(ROOT / "claude/bin/dryas.cmd"), "cloud", "init", "--prefix", "a&b-"],
+                           capture_output=True, text=True, timeout=120,
+                           env=dict(os.environ, DRYAS_PYTHON=sys.executable, DRYAS_PY=sys.executable))
+        self.assertEqual(p.returncode, 2, p.stdout + p.stderr)  # argparse rejects the prefix
+        self.assertIn("--prefix takes up to 20 characters", p.stderr)
+        self.assertNotIn("is not recognized", p.stderr)
 
 
 if __name__ == "__main__":
