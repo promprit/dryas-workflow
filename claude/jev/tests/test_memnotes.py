@@ -183,5 +183,29 @@ class ChainStageTest(unittest.TestCase):
         self.assertEqual((st["component"], st["observe"], st["timeout"]), ("core", True, 2))
 
 
+class TimingTest(unittest.TestCase):
+    """The note must exist before the agent's final commit: SessionEnd comes after it, so Stop and PreCompact refresh it."""
+
+    def stages(self, kind):
+        with open(os.path.join(JEV, "chain.json"), encoding="utf-8") as f:
+            return json.load(f).get(kind, [])
+
+    def test_note_refreshed_on_stop(self):
+        names = [s["name"] for s in self.stages("stop")]
+        self.assertIn("mem-notes", names)
+        st = self.stages("stop")[names.index("mem-notes")]
+        self.assertEqual(st["cmd"], ["$PY", "-X", "utf8", "$CD/jev/memnotes.py", "export"])
+        self.assertEqual(st["requires_path"], "$CD/memory/notes")
+        self.assertEqual((st["component"], st["observe"], st["timeout"]), ("core", True, 2))
+
+    def test_note_refreshed_on_precompact(self):
+        names = [s["name"] for s in self.stages("precompact")]
+        self.assertIn("mem-notes", names)
+        self.assertGreater(names.index("mem-notes"), names.index("mem-session-end"))
+        st = self.stages("precompact")[names.index("mem-notes")]
+        self.assertEqual((st["component"], st["observe"], st["timeout"], st["requires_path"]),
+                         ("core", True, 2, "$CD/memory/notes"))
+
+
 if __name__ == "__main__":
     unittest.main()

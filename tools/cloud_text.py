@@ -69,10 +69,14 @@ def set_name(text: str, name: str) -> str:
     return re.sub(r"(?m)^name:[^\n]*$", "name: " + name, text[:end], count=1) + text[end:]
 
 
-def claude_md_body(template: str, names: Names, comps: Iterable[str], version: str) -> str:
+NOTES_RULE = "Before your final commit, include .dryas/memory/notes/ in it."
+
+
+def claude_md_body(template: str, names: Names, comps: Iterable[str], version: str, persist_memory: bool = False) -> str:
     """The rules block for the repo's CLAUDE.md: one paragraph on the copy, then the rules as the copy reads them."""
     lead = LEAD.format(version=version, check=names.name("dryas-cloud") + " check")
-    return lead + "\n\n" + rewrite(template, names, comps).strip() + "\n"
+    body = lead + "\n\n" + rewrite(template, names, comps).strip() + "\n"
+    return body + "\n" + NOTES_RULE + "\n" if persist_memory else body
 
 
 def third_party(text: str, skills_rel: str, renames: Dict[str, str]) -> str:

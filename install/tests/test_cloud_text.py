@@ -82,6 +82,13 @@ class HelpersTest(unittest.TestCase):
             self.assertNotIn(token, body)
         self.assertIn("`/x-dryas-cloud check`", ct.claude_md_body(tpl, PX, COMPS, "9.9.9"))
 
+    def test_commit_the_notes_line_only_with_persist_memory(self):
+        tpl = (ROOT / "claude/CLAUDE.md.template").read_text(encoding="utf-8")
+        line = "Before your final commit, include .dryas/memory/notes/ in it."
+        self.assertIn(line, ct.claude_md_body(tpl, NM, COMPS, "9.9.9", persist_memory=True))
+        self.assertNotIn(line, ct.claude_md_body(tpl, NM, COMPS, "9.9.9"))
+        self.assertNotIn(line, ct.claude_md_body(tpl, NM, COMPS, "9.9.9", persist_memory=False))
+
     def test_third_party_paths(self):
         src = 'python "${CLAUDE_PLUGIN_ROOT}/.claude/skills/ui-ux-pro-max/scripts/search.py" and "${CLAUDE_SKILL_DIR}/x"'
         self.assertEqual(ct.third_party(src, "./.claude/skills/", {"ui-ux-pro-max": "x-ui-ux-pro-max"}),
