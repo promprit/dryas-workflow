@@ -58,8 +58,8 @@ class BookkeepingTest(unittest.TestCase):
                     "rm .orchestrate/active.json", "sed -i s/a/b/ .orchestrate/active.json"):
             self.assertEqual(self.decision(scope_lock.run(self.bash(cmd))), "deny", cmd)
 
-    def test_orchestrator_shell_write_still_asks_and_reads_pass(self):
-        self.assertEqual(self.decision(scope_lock.run(self.bash("rm .orchestrate/active.json", agent=False))), "ask")
+    def test_orchestrator_shell_write_never_asks_executor_write_asks(self):
+        self.assertIsNone(scope_lock.run(self.bash("rm .orchestrate/active.json", agent=False)))
         self.assertIsNone(scope_lock.run(self.bash("cat .orchestrate/active.json")))
         self.assertEqual(self.decision(scope_lock.run(self.bash("echo hi > out.txt"))), "ask")
 
@@ -99,7 +99,7 @@ class BookkeepingTest(unittest.TestCase):
         self.assertIsNone(scope_lock.run(self.bash("cat .orchestrate/PLAN.md", agent=False)))
         for path in (self.active, ".orchestrate/PLAN.md", ".orchestrate/other.txt"):
             self.assertIsNone(scope_lock.run(self.edit("Write", path, agent=False)), path)
-        self.assertEqual(self.decision(scope_lock.run(self.bash("tee .orchestrate/PLAN.md", agent=False))), "ask")
+        self.assertIsNone(scope_lock.run(self.bash("tee .orchestrate/PLAN.md", agent=False)))
     def test_executor_denied_any_case_of_orchestrate(self):
         for path in (".ORCHESTRATE/active.json", ".Orchestrate/PLAN.md", os.path.join(self.wt, ".orchestrate".upper()),
                      "./.oRcHeStRaTe/other.txt"):
