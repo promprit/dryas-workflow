@@ -115,9 +115,12 @@ def _shell_writes(cmd: str) -> bool:
 
 
 def _bash(ti: Dict[str, Any], cwd: str, has_agent_id: bool = False) -> Optional[Dict[str, Any]]:
-    """Ask for a write-like shell command while a task is active; deny it when an executor's command names
-    .orchestrate (the orchestrator's bookkeeping, see check)."""
-    if not task_active(cwd):
+    """Ask for an executor's write-like shell command while a task is active; deny it when the command names
+    .orchestrate (the orchestrator's bookkeeping, see check). The orchestrator (no agent_id) is never asked: it edits
+    any file with Edit/Write anyway, and destructive commands still go to the Jev gate. Codex carries no worker
+    identity, so there every write-like command still asks."""
+    main_session = not has_agent_id and os.environ.get("DRYAS_HARNESS") != "codex"
+    if main_session or not task_active(cwd):
         return None
     cmd = str(ti.get("command", ""))
     if not _shell_writes(cmd):

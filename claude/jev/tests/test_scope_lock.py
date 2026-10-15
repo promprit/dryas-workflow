@@ -84,11 +84,21 @@ class ScopeLockTest(unittest.TestCase):
     def test_bash_write_like_asks_never_denies(self):
         for cmd in ("rm x", "echo hi > out.txt", "cat a >> b", "sed -i 's/a/b/' f", "git checkout -- f", "git restore f",
                     "mv a b", "cp a b", "tee f", "truncate -s0 f", "dd if=a of=b", "git stash", "npm install left-pad"):
-            out = scope_lock.run(self.bash(cmd))
+            out = scope_lock.run(self.bash(cmd, agent_id="a1"))
             self.assertEqual(self.decision(out), "ask", cmd)
             self.assertIn("shell writes are not covered by the file scope", out["hookSpecificOutput"]["permissionDecisionReason"])
         recs = self.scope_records()
         self.assertTrue(recs and all(r["decision"] == "ask" and r["tool"] == "Bash" and r["task"] == ["1"] for r in recs))
+
+    def test_bash_main_session_writes_never_ask(self):
+        # the orchestrator (no agent_id) already edits any file with Edit/Write; asking about its shell writes only adds prompts
+        for cmd in ("rm x", "echo hi > out.txt", "cat a >> .orchestrate/PLAN.md", "cp a b"):
+            self.assertIsNone(scope_lock.run(self.bash(cmd)), cmd)
+        self.assertEqual(self.scope_records(), [])
+
+    def test_bash_codex_main_session_still_asks(self):
+        with mock.patch.dict(os.environ, {"DRYAS_HARNESS": "codex"}):
+            self.assertEqual(self.decision(scope_lock.run(self.bash("rm x"))), "ask")
 
     def test_bash_read_only_allowed(self):
         for cmd in ("ls -la", "git status", "grep -rn foo src", "cat a 2>/dev/null", "python3 -m pytest -q", "echo '>' done"):
@@ -104,12 +114,12 @@ class ScopeLockTest(unittest.TestCase):
     def test_bash_unusable_active_json_asks_not_denies(self):
         with open(os.path.join(self.wt, ".orchestrate", "active.json"), "w") as f:
             f.write("{not json")
-        self.assertEqual(self.decision(scope_lock.run(self.bash("rm x"))), "ask")
+        self.assertEqual(self.decision(scope_lock.run(self.bash("rm x", agent_id="a1"))), "ask")
         self.assertIsNone(scope_lock.run(self.bash("ls")))
 
     def test_bash_broken_prescreen_asks_for_every_command(self):
         with mock.patch.dict(sys.modules, {"prescreen": None}):  # import fails -> every command counts as a write
-            self.assertEqual(self.decision(scope_lock.run(self.bash("ls"))), "ask")
+            self.assertEqual(self.decision(scope_lock.run(self.bash("ls", agent_id="a1"))), "ask")
 
     def test_non_dict_tool_input_no_crash(self):
         # a file tool with no path cannot be checked: denied while a task is active, ignored otherwise
