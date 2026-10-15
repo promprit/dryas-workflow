@@ -10,6 +10,9 @@ const PROMPT_MS = 15000
 const RULES_MS = 5000
 const OBSERVE_MS = 10000
 const END_MS = 3000
+const COMPACT_MS = 30000
+const HANDOFF_MS = 90000
+const RESTORE_MS = 5000
 let partSeq = 0
 const APPROVE = /\bdryas allow ([0-9a-f]{4})\b/gi
 
@@ -84,7 +87,7 @@ function taskActive(dir: string): boolean {
 }
 
 type Usage = { input_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }
-type Session = { agent?: string; parentID?: string; known?: boolean; contextLimit?: number; usage?: Usage; model?: string; ended?: boolean }
+type Session = { agent?: string; parentID?: string; known?: boolean; contextLimit?: number; usage?: Usage; model?: string; ended?: boolean; restore?: string | null }
 
 function toolCwd(dir: string, tool: string, args: any): string {
   const wd = args?.workdir
@@ -262,13 +265,41 @@ export const DryasPlugin = async (ctx: any) => {
       if (add) parts.push({ id: `prt_dryas${Date.now()}_${++partSeq}`, sessionID: input.sessionID, messageID: output.message?.id, type: "text", text: String(add), synthetic: true })
     },
 
-    "experimental.chat.system.transform": async (_input: any, output: any) => {
+    "experimental.session.compacting": async (input: any, output: any) => {
+      const ev = { ...base(input.sessionID), hook_event_name: "PreCompact", trigger: "auto" }
+      const messages = await sessionMessages(input.sessionID)
+      const out = parse(await runScript("opencode_session.py", ["compact"], { ...ev, messages }, COMPACT_MS))
+      if (out?.context) output.context.push(String(out.context))
+      void observe("precompact", ev)
+    },
+
+    "command.execute.before": async (input: any, output: any) => {
+      if (input?.command !== "handoff") return
+      const messages = await sessionMessages(input.sessionID)
+      const out = parse(await runScript("opencode_session.py", ["handoff"], { ...base(input.sessionID), messages }, HANDOFF_MS))
+      const line = String(out?.line || `Handoff failed: Dryas could not run Python (${PY}); nothing saved.`)
+      const text = `Show the user this line exactly, and if it says the handoff was saved, tell them to type /new to start a fresh session seeded with it. Do nothing else.\n\n${line}`
+      for (const p of output?.parts ?? []) if (p?.type === "text") p.text = text
+    },
+
+    "experimental.chat.system.transform": async (input: any, output: any) => {
       if (rules === null) {
         const out = parse(await runScript("rules_inject.py", ["--harness", "opencode"], {}, RULES_MS))
         const text = String(out?.hookSpecificOutput?.additionalContext ?? "")
         if (text) rules = text
       }
       if (rules) output.system.push(rules)
+      const sid = input?.sessionID
+      if (sid) {
+        const s = await resolveSession(sid)
+        if (s.known && !s.parentID && s.restore === undefined) {
+          s.restore = null // first request of this root session: a fresh /handoff for this project, used once
+          const out = parse(await runScript("handoff_restore.py", [], { cwd: ctx.directory, source: "clear", session_id: sid }, RESTORE_MS))
+          const add = out?.hookSpecificOutput?.additionalContext
+          if (add) s.restore = String(add)
+        }
+        if (s.restore) output.system.push(s.restore)
+      }
     },
 
     dispose: async () => {

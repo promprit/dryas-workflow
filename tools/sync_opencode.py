@@ -48,8 +48,14 @@ RULES_TAIL = (
     "- Executors are the subagents `dryas-executor-fast`, `dryas-executor-standard`, `dryas-executor-strong` and "
     "`dryas-executor-frontier` (dispatch them with the task tool). Logs and thresholds keep the slot names `haiku`, "
     "`sonnet`, `opus` and `fable` for them.\n"
-    "- Not yet on OpenCode: context-window warnings, compaction keep/restore, `/handoff` and the memory hooks "
-    "(plan 2 of the edition). Call `jev_memory_search` and `jev_memory_store` yourself.\n")
+    "- Context warnings, compaction keep and the memory hooks run on their own. `/handoff` saves a Jev-scored handoff; the next new session (`/new`) starts with it.\n")
+
+HANDOFF_COMMAND = (
+    "---\ndescription: \"Score this session with Jev and save a handoff; then /new starts fresh with only what matters\"\n"
+    "---\n" + MARK + "\n"
+    "The Dryas plugin replaces this text with the result of the handoff. If you can read this, the plugin did not "
+    "load: tell the user /handoff needs the Dryas plugin (re-run install.sh --harness opencode), that nothing was "
+    "saved, and stop.\n")
 
 
 def names(text: str) -> str:
@@ -118,6 +124,7 @@ def plan(repo: Path) -> Dict[str, Union[Path, str]]:
                 raise ValueError("%s: %s" % (f.relative_to(repo).as_posix(), e))
     for name in THIN + FROM_CODEX:
         out["opencode/command/%s.md" % name] = render_command(name, scp._lf(repo / "codex/skills" / name / "SKILL.md"))
+    out["opencode/command/handoff.md"] = HANDOFF_COMMAND
     executor = scp._lf(repo / "claude/agents/executor.md")
     for tier in TIERS:
         out["opencode/agent/dryas-executor-%s.md" % tier] = render_agent(executor, tier)

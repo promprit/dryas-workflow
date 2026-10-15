@@ -26,4 +26,4 @@ Process rules for coding sessions on this machine. Full reference: `~/.dryas/doc
 
 ## OpenCode notes
 - Executors are the subagents `dryas-executor-fast`, `dryas-executor-standard`, `dryas-executor-strong` and `dryas-executor-frontier` (dispatch them with the task tool). Logs and thresholds keep the slot names `haiku`, `sonnet`, `opus` and `fable` for them.
-- Not yet on OpenCode: context-window warnings, compaction keep/restore, `/handoff` and the memory hooks (plan 2 of the edition). Call `jev_memory_search` and `jev_memory_store` yourself.
+- Context warnings, compaction keep and the memory hooks run on their own. `/handoff` saves a Jev-scored handoff; the next new session (`/new`) starts with it.

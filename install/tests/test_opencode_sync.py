@@ -58,6 +58,12 @@ class OpenCodeSyncTest(unittest.TestCase):
         self.assertIn("dryas-executor-fast", rules)
         self.assertNotIn("Not available in Codex", rules)
 
+    def test_handoff_command_and_rules_tail(self):
+        out = so.plan(REPO)
+        self.assertIn(so.MARK, out["opencode/command/handoff.md"])
+        self.assertNotIn("Not yet on OpenCode", out["opencode/dryas/AGENTS.md.template"])
+        self.assertIn("/handoff", out["opencode/dryas/AGENTS.md.template"])
+
     def test_repo_has_no_drift_or_leaks(self):
         self.assertEqual(so.drift(REPO), [])
         self.assertEqual(so.leaks(REPO), [])
