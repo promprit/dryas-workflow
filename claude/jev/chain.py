@@ -279,7 +279,7 @@ def prompt(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Opt
     return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "\n".join(parts)}}
 
 
-OBSERVE_KINDS = ("post", "subagent-stop", "session-start", "session-end", "precompact")
+OBSERVE_KINDS = ("post", "subagent-stop", "session-start", "session-end", "precompact", "stop")
 
 
 def observe(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> None:

@@ -12,6 +12,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import cloud_fixtures as fx
 sys.path.insert(0, str(fx.ROOT / "tools"))
+import cloud_text as ct
 
 SETTINGS = '{\n    "permissions": {"allow": ["Bash(make test)"]},\n    "env": {"FOO": "1"}\n}\n'
 MCP = '{"mcpServers": {"docs": {"command": "docs-server"}}}\n'
@@ -217,6 +218,18 @@ class CloudCliGapTest(unittest.TestCase):
         fx.commit_all(self.repo)
         return out
 
+    def test_persist_memory_rules_line_and_stop_route(self):
+        md = lambda: (self.repo / "CLAUDE.md").read_text(encoding="utf-8").count(ct.NOTES_RULE)
+        self.init()
+        self.assertEqual(md(), 0)
+        for flag, want in (("--persist-memory", 1), ("--no-persist-memory", 0)):
+            self.assertEqual(self.cli("update", "--yes", flag)[0], 0)
+            self.assertEqual(md(), want, flag)
+            fx.commit_all(self.repo)
+        s = json.loads((self.repo / ".claude/settings.json").read_text(encoding="utf-8"))
+        cmds = [h["command"] for g in s["hooks"].get("Stop", []) for h in g["hooks"]]
+        self.assertTrue(any("cloud_hook.py" in c and c.endswith("chain.py stop") for c in cmds), cmds)
+
     def test_update_and_remove_without_yes_write_nothing(self):
         # defect: only init honours the dry run
         self.init()
@@ -289,6 +302,7 @@ class CloudCliGapTest(unittest.TestCase):
     def test_remove_drops_state_and_pycache_keeps_memory_notes(self):
         before = fx.snapshot(self.repo)
         self.init("--persist-memory")
+        self.assertIn(ct.NOTES_RULE, (self.repo / "CLAUDE.md").read_text(encoding="utf-8"))
         note = self.repo / ".dryas/memory/notes/decision.md"
         note.write_text("We chose X.\n", encoding="utf-8")
         fx.commit_all(self.repo)

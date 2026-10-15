@@ -164,9 +164,9 @@ def _bytes(texts: Dict[str, Optional[str]]) -> Changes:
     return {r: (t.encode("utf-8") if t is not None else None) for r, t in texts.items()}
 
 
-def config_new(repo: Path, plan: Dict[str, Any], old: Dict[str, Any]
-               ) -> Tuple[Dict[str, Optional[str]], Dict[str, Any], List[str]]:
-    """New text of the four config files, the records the manifest keeps, and notes. old: an earlier run's records."""
+def config_new(repo: Path, plan: Dict[str, Any], old: Dict[str, Any], opts: Dict[str, Any]
+               ) -> Tuple[Dict[str, Optional[str]], Dict[str, Any]]:
+    """New text of the four config files and the records the manifest keeps. old: an earlier run's records."""
     cur = {r: _read(repo, r) for r in CONFIG}
     o_s, o_m, o_g = old.get("settings") or {}, old.get("mcp") or {}, old.get("gitignore") or {}
     s_orig = o_s["original"] if "original" in o_s else cur[".claude/settings.json"]
@@ -175,11 +175,12 @@ def config_new(repo: Path, plan: Dict[str, Any], old: Dict[str, Any]
     if o_s.get("added"):
         s_text = cfg.remove_settings(s_text, o_s["added"], s_orig)
     hooks_json = json.loads((ROOT / "claude/hooks/hooks.json").read_text(encoding="utf-8"))
-    s_new, added, conflicts = cfg.add_settings(s_text, cfg.fragment(hooks_json))
+    s_new, added = cfg.add_settings(s_text, cfg.fragment(hooks_json))
     m_new, entry = cfg.add_mcp(cur[".mcp.json"], o_m.get("entry"))
     rec = dict(old.get("claude_md") or {})
     tpl = (ROOT / "claude/CLAUDE.md.template").read_text(encoding="utf-8")
-    c_new = cfg.claude_md(cur["CLAUDE.md"], ct.claude_md_body(tpl, plan["names"], cp.COMPS, plan["version"]), rec)
+    c_new = cfg.claude_md(cur["CLAUDE.md"], ct.claude_md_body(tpl, plan["names"], cp.COMPS, plan["version"],
+                                                                persist_memory=bool(opts.get("persist_memory"))), rec)
     g_new, g_rec = cfg.add_gitignore(cur[".gitignore"])
     if o_g:
         g_rec = dict(added=list(o_g.get("added") or []) + g_rec["added"], sep=o_g.get("sep", ""),
@@ -187,7 +188,7 @@ def config_new(repo: Path, plan: Dict[str, Any], old: Dict[str, Any]
     texts = {".claude/settings.json": s_new, ".mcp.json": m_new, "CLAUDE.md": c_new, ".gitignore": g_new}
     records = dict(settings=dict(added=added, original=s_orig), mcp=dict(entry=entry, original=m_orig),
                    claude_md=rec, gitignore=g_rec)
-    return texts, records, ["kept the repo's own .claude/settings.json value for %s" % k for k in conflicts]
+    return texts, records
 
 
 def config_undo(repo: Path, old: Dict[str, Any]) -> Dict[str, Optional[str]]:
@@ -384,12 +385,11 @@ def init(a: argparse.Namespace, repo: Path) -> int:
     clashes = [r for r in plan["files"] if (repo / r).exists()] + [d for d in skill_dirs if (repo / d).exists()]
     if clashes:
         raise cfg.CloudError(clash_message(clashes))
-    texts, records, notes = config_new(repo, plan, {})
+    texts, records = config_new(repo, plan, {}, opts)
     changes = reconcile(repo, {}, plan["files"], plan["skipped"], a.force)[0]
     changes.update(_bytes(texts))
     changes[cc.MANIFEST] = manifest_bytes(plan, records, opts, {})
-    notes = (["skipped %s: %s" % s for s in plan["skipped"]] + ["not copied: %s (%s)" % n for n in cp.NOT_COPIED]
-             + notes)
+    notes = ["skipped %s: %s" % s for s in plan["skipped"]] + ["not copied: %s (%s)" % n for n in cp.NOT_COPIED]
     return run(a, repo, changes, plan, notes, "chore: add Dryas %s for cloud sessions" % plan["version"])
 
 
@@ -400,11 +400,11 @@ def update(a: argparse.Namespace, repo: Path) -> int:
     changes, kept, clashes = reconcile(repo, man["files"], plan["files"], plan["skipped"], a.force)
     if clashes:
         raise cfg.CloudError(clash_message(clashes))
-    texts, records, cnotes = config_new(repo, plan, man.get("config") or {})
+    texts, records = config_new(repo, plan, man.get("config") or {}, opts)
     changes.update(_bytes(texts))
     changes[cc.MANIFEST] = manifest_bytes(plan, records, opts, {r: k[0] for r, k in kept.items()})
     notes = [kept[r][1] for r in sorted(kept)]
-    notes += ["skipped %s: %s" % s for s in plan["skipped"]] + cnotes
+    notes += ["skipped %s: %s" % s for s in plan["skipped"]]
     return run(a, repo, changes, plan, notes, "chore: update the Dryas cloud copy to %s" % plan["version"])
 
 

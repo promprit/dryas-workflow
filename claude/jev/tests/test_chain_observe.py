@@ -109,9 +109,34 @@ class ShippedChainTest(unittest.TestCase):
             h = json.load(f)["hooks"]
         cmds = lambda ev: " ".join(x["command"] for m in h.get(ev, []) for x in m["hooks"])
         for ev, kind in (("PostToolUse", "post"), ("PostToolUseFailure", "post"), ("SubagentStop", "subagent-stop"),
-                         ("SessionStart", "session-start"), ("SessionEnd", "session-end"), ("PreCompact", "precompact")):
+                         ("SessionStart", "session-start"), ("SessionEnd", "session-end"), ("PreCompact", "precompact"),
+                         ("Stop", "stop")):
             self.assertIn("chain.py\" " + kind, cmds(ev), ev)
         with open(os.path.join(root, "codex", "hooks", "hooks.json"), encoding="utf-8") as f:
             cx = json.load(f)["hooks"]
         for ev in cx:
             self.assertNotIn("session-start", " ".join(x["command"] for m in cx[ev] for x in m["hooks"]), ev)
+
+
+class StopRouteTest(unittest.TestCase):
+    def test_stop_event_runs_mem_notes(self):
+        """Stop must reach the shipped mem-notes stage: hooks.json routes it, chain.py runs it as observe-only."""
+        root = os.path.dirname(os.path.dirname(JEV))
+        with open(os.path.join(root, "claude", "hooks", "hooks.json"), encoding="utf-8") as f:
+            stop = " ".join(x["command"] for m in json.load(f)["hooks"].get("Stop", []) for x in m["hooks"])
+        self.assertIn("chain.py\" stop", stop)
+        with open(os.path.join(JEV, "chain.json"), encoding="utf-8") as f:
+            shipped = json.load(f)["stop"]
+        self.assertEqual([s["name"] for s in shipped], ["mem-notes"])
+        d = tempfile.mkdtemp()
+        out = os.path.join(d, "ran.txt")
+        stage = dict(shipped[0], cmd=[sys.executable, "-c", "import sys;open(sys.argv[1],'a').write('ran');print('noise')",
+                                      out])
+        stage.pop("requires_path", None)
+        cfg = os.path.join(d, "chain.json")
+        with open(cfg, "w", encoding="utf-8") as f:
+            json.dump({"stop": [stage]}, f)
+        p, _ = run_chain("stop", {"session_id": "s", "hook_event_name": "Stop"}, cfg)
+        self.assertEqual((p.returncode, p.stdout), (0, ""))
+        with open(out, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "ran")

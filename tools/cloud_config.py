@@ -13,7 +13,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "install") not in sys.path:
@@ -101,9 +101,10 @@ def restore(obj: Dict[str, Any], original: Optional[str], text: str) -> Optional
     return dump(obj, text)
 
 
-def add_settings(text: Optional[str], frag: Dict[str, Any]) -> Tuple[str, Dict[str, Any], List[str]]:
-    new, added, conflicts = sm.merge(parse(".claude/settings.json", text), frag, track_created=True)
-    return dump(new, text), added, conflicts
+def add_settings(text: Optional[str], frag: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    """The fragment has only permissions and hooks, which merge adds to and never conflict."""
+    new, added, _ = sm.merge(parse(".claude/settings.json", text), frag, track_created=True)
+    return dump(new, text), added
 
 
 def remove_settings(text: Optional[str], added: Dict[str, Any], original: Optional[str]) -> Optional[str]:

@@ -34,25 +34,24 @@ class HooksTest(unittest.TestCase):
 
 class SettingsTest(unittest.TestCase):
     def test_merge_keeps_the_users_entries_and_undo_restores_bytes(self):
-        text, added, conflicts = cfg.add_settings(USER, cfg.fragment(PLUGIN_HOOKS))
+        text, added = cfg.add_settings(USER, cfg.fragment(PLUGIN_HOOKS))
         obj = json.loads(text)
-        self.assertEqual(conflicts, [])
         self.assertEqual(obj["permissions"]["allow"], ["Bash(make test)", "mcp__jev"])
         self.assertEqual(obj["env"]["FOO"], "1")
         self.assertEqual(cfg.remove_settings(text, added, USER), USER)
 
     def test_created_file_is_removed_again(self):
-        text, added, _ = cfg.add_settings(None, cfg.fragment(PLUGIN_HOOKS))
+        text, added = cfg.add_settings(None, cfg.fragment(PLUGIN_HOOKS))
         self.assertIsNone(cfg.remove_settings(text, added, None))
         self.assertIsNone(cfg.remove_settings(None, added, None))
 
     def test_settings_env_is_never_touched(self):
         user = '{"env": {"DRYAS_DATA_ROOT": "elsewhere", "FOO": "1"}}'
-        text, added, conflicts = cfg.add_settings(user, cfg.fragment(PLUGIN_HOOKS))
+        text, added = cfg.add_settings(user, cfg.fragment(PLUGIN_HOOKS))
         self.assertEqual(json.loads(text)["env"], {"DRYAS_DATA_ROOT": "elsewhere", "FOO": "1"})
-        self.assertEqual((conflicts, added["env"]), ([], {}))
+        self.assertEqual(added["env"], {})
         self.assertEqual(cfg.remove_settings(text, added, user), user)
-        text, added, _ = cfg.add_settings(None, cfg.fragment(PLUGIN_HOOKS))
+        text, added = cfg.add_settings(None, cfg.fragment(PLUGIN_HOOKS))
         self.assertNotIn("env", json.loads(text))
 
     def test_unparseable_settings_raise(self):
@@ -61,7 +60,7 @@ class SettingsTest(unittest.TestCase):
                 cfg.add_settings(bad, cfg.fragment(PLUGIN_HOOKS))
 
     def test_later_user_edits_survive_removal(self):
-        text, added, _ = cfg.add_settings(USER, cfg.fragment(PLUGIN_HOOKS))
+        text, added = cfg.add_settings(USER, cfg.fragment(PLUGIN_HOOKS))
         obj = json.loads(text)
         obj["env"]["BAR"] = "2"
         out = json.loads(cfg.remove_settings(json.dumps(obj), added, USER))
@@ -135,20 +134,20 @@ class EdgeCaseTest(unittest.TestCase):
             "{}",
         )
         for user in shapes:
-            text, added, _ = cfg.add_settings(user, self.FRAG)
+            text, added = cfg.add_settings(user, self.FRAG)
             self.assertEqual(cfg.remove_settings(text, added, user), user, user)
-        text, _, _ = cfg.add_settings(shapes[1], self.FRAG)
+        text, _ = cfg.add_settings(shapes[1], self.FRAG)
         self.assertEqual(len(json.loads(text)["hooks"]["PreToolUse"]), 2)
 
     def test_settings_second_add_changes_nothing(self):
-        text, added, _ = cfg.add_settings(USER, self.FRAG)
-        again, added2, _ = cfg.add_settings(text, self.FRAG)
+        text, added = cfg.add_settings(USER, self.FRAG)
+        again, added2 = cfg.add_settings(text, self.FRAG)
         self.assertEqual(json.loads(again), json.loads(text))
         self.assertEqual((added2["hooks"], added2["allow"]), ([], []))
 
     def test_users_own_allow_survives_removal(self):
         user = '{"permissions": {"allow": ["mcp__jev"]}}'
-        text, added, _ = cfg.add_settings(user, self.FRAG)
+        text, added = cfg.add_settings(user, self.FRAG)
         self.assertEqual(json.loads(cfg.remove_settings(text, added, None))["permissions"]["allow"], ["mcp__jev"])
 
     def test_mcp_odd_shapes_come_back_byte_exact(self):
@@ -207,7 +206,7 @@ class RoundTripTest(unittest.TestCase):
 
     def test_empty_user_keys_survive_remove(self):
         for user in self.EMPTY:
-            text, added, _ = cfg.add_settings(user, self.FRAG)
+            text, added = cfg.add_settings(user, self.FRAG)
             self.assertEqual(cfg.remove_settings(text, added, user), user, user)
             edited = json.loads(text)
             edited["later"] = 1  # a user edit after init: removal cannot fall back to the original bytes
@@ -216,16 +215,16 @@ class RoundTripTest(unittest.TestCase):
 
     def test_no_drift_after_three_updates(self):
         for user in self.EMPTY + (USER, None):
-            text, added, _ = cfg.add_settings(user, self.FRAG)
+            text, added = cfg.add_settings(user, self.FRAG)
             first = text
             for _ in range(3):
-                text, added, _ = self._update(text, added, user)
+                text, added = self._update(text, added, user)
                 self.assertEqual(text, first, user)
             self.assertEqual(cfg.remove_settings(text, added, user), user, user)
 
     def test_removal_after_a_user_edit_keeps_the_files_format(self):
         user = '{\n    "a": "caf\u00e9"\n}'  # 4 spaces, no final newline, non-ASCII
-        text, added, _ = cfg.add_settings(user, self.FRAG)
+        text, added = cfg.add_settings(user, self.FRAG)
         obj = json.loads(text)
         obj["b"] = 2
         out = cfg.remove_settings(cfg.dump(obj, text), added, user)
@@ -239,7 +238,7 @@ class RoundTripTest(unittest.TestCase):
                 self.assertNotIn("\\u00e9", text)
                 self.assertTrue(text.startswith("{\n" + unit + '"'), (user, text[:20]))
                 self.assertEqual(text.endswith("\n"), user.endswith("\n"), user)
-        text, _, _ = cfg.add_settings(None, self.FRAG)
+        text, _ = cfg.add_settings(None, self.FRAG)
         self.assertTrue(text.startswith('{\n  "') and text.endswith("}\n"))
 
     def test_gitignore_covers_skill_bytecode(self):
