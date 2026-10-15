@@ -42,8 +42,8 @@ class DocsTest(unittest.TestCase):
 
 
 class RepositionTest(unittest.TestCase):
-    def test_readme_scorecard_matches(self):
-        r = (ROOT / "README.md").read_text(encoding="utf-8")
+    def test_scorecard_page_matches(self):
+        r = (ROOT / "docs/judge-scorecard.md").read_text(encoding="utf-8")
         block = r.split("<!-- scorecard:start -->")[1].split("<!-- scorecard:end -->")[0]
         card = (ROOT / "reference/judge-corpus/SCORECARD.md").read_text(encoding="utf-8")
         table = card[card.index("| Measure"):]
@@ -51,10 +51,13 @@ class RepositionTest(unittest.TestCase):
 
     def test_readme_positioning(self):
         r = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("target operating model plugin", r)
+        self.assertIn("Rules your AI agents can't ignore.", r)
+        self.assertIn("target operating model", r)
         self.assertNotIn("built on Superpowers, Ruflo", r)
+        self.assertIn("docs/install.md", r)
+        i = (ROOT / "docs/install.md").read_text(encoding="utf-8")
         for flag in ("--with-ruflo", "--with-superpowers", "--judge"):
-            self.assertIn(flag, r)
+            self.assertIn(flag, i)
 
     def test_manifest_bindings(self):
         y = (ROOT / "reference/dryas.yaml").read_text(encoding="utf-8")

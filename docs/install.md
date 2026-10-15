@@ -80,6 +80,17 @@ With `--harness codex` or `both`, `--uninstall` also removes the Codex plugin fr
 
 Plugin hooks run as soon as the plugin is installed; there is no per-hook approval. An organization policy with `allowManagedHooksOnly` in managed settings blocks them. Then the rules, the scope lock and the Jev chain do not run, even though `/plugin` shows dryas as enabled. Ask your admin to allow the plugin's hooks.
 
+### Manual plugin route
+
+Manual route, inside Claude Code:
+
+```
+/plugin marketplace add promprit/dryas-workflow
+/plugin install dryas@dryas-workflow
+```
+
+(Shell form: `claude plugin install dryas --marketplace promprit/dryas-workflow`.) This gives you the plugin only: the rules, hooks, scope lock, judge chain, Dryas memory, agents, commands and skills. It does not give you what setup merges into that dir's `settings.json`: the `model` setting, the `env` the hooks need (`DRYAS_PY`, `DRYAS_DATA_ROOT`, the Ruflo paths), the `permissions.allow` rules that let `/tune`, `/handoff` and the Jev scripts run without a prompt, and, when you add Superpowers (`--with-superpowers`), the `permissions.deny` rules that keep its skills Dryas replaces out of the way. Without them the hooks run with your default Python, and the shared state in `~/.dryas` is not set up. Run `install/install.sh` for all of that.
+
 ## Components
 
 | Component | What it adds | Upstream |
@@ -91,6 +102,8 @@ Plugin hooks run as soon as the plugin is installed; there is no per-hook approv
 | Superpowers (optional extra) | The upstream process skills ([obra/superpowers](https://github.com/obra/superpowers), from the `claude-plugins-official` marketplace; plugin tested 6.4.1) | off by default; `--with-superpowers` adds, `--no-superpowers` skips |
 | Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (latest; tested 4.5.0) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
 | pstack picks | Interrogate review, cleanup, benchmark checklist and principles, adapted from [pstack-claude](https://github.com/michael-denyer/pstack-claude) (see NOTICE.md) | `--no-pstack-picks` skips |
+
+> Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`. (Applies to the Ruflo and Superpowers rows above.)
 
 Dryas installs the latest version of each component. If Dryas's Ruflo patches do not apply to the latest Ruflo, the installer falls back to the tested version. A weekly CI job checks the latest Ruflo.
 
@@ -118,6 +131,24 @@ To move a 1.x install (Ruflo, Superpowers and a Jev key) to the owned core:
 3. The legacy cleanup is offered by `--uninstall`, not by setup (see [Uninstall and purge](#uninstall-and-purge)); to remove the Ruflo extra earlier, run setup with `--no-ruflo` and then uninstall.
 4. Keep working. Ruflo and Superpowers keep running as extras until you drop them.
 5. Flip to `--judge local` when `/tune` proposes it, once the local judge has agreed with Jev for long enough.
+
+## Reference stack
+
+These are the reference implementation's bindings, not part of the method; each layer can be bound to something else. The Dryas core is always on; every other part is a choice.
+
+| Part | What it does | Choose with |
+| --- | --- | --- |
+| [Claude Code](https://docs.claude.com/en/docs/claude-code), [Codex](https://developers.openai.com/codex) or [OpenCode](https://opencode.ai) | The host: agents, hooks, commands | required |
+| Dryas core | The local judge, Dryas memory (`~/.dryas/dryas.db`) and the process skills (`dryas:brainstorm`, `dryas:worktree`, `dryas:tdd`, `dryas:verify` and more) | always installed |
+| [Jev model (TypeSafe)](https://github.com/typesafe-ai/skills) | Upgrades the judge: decision support and gates through OpenRouter | `--judge jev` or `--openrouter-key` |
+| [Ruflo](https://github.com/ruvnet/ruflo) | Optional memory and orchestration | `--with-ruflo` (`--memory ruflo`) |
+| [Superpowers](https://github.com/obra/superpowers) | Optional alternative process skills | `--with-superpowers` |
+| [Impeccable](https://github.com/pbakaus/impeccable) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Design skills, installed by default | skip with `--no-design` |
+| [pstack](https://github.com/michael-denyer/pstack-claude) picks | Interrogate review, cleanup, benchmark checklist, executor principles (vendored, adapted) | skip with `--no-pstack-picks` |
+
+> Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`. (Applies to the Ruflo and Superpowers rows above.)
+
+Optional, installed separately: [FlowObserve](https://github.com/promprit/flowobserve), an observe-only monitor for live Claude Code sessions. With Dryas it also shows escalations, one build lane per plan task, Jev spend against budget and per-stage timings. It never blocks or changes anything.
 
 ## Flags
 

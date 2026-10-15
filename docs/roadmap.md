@@ -102,3 +102,7 @@ Shipped at Dryas Full (plans 1 and 2). Most of Dryas carries over unchanged: Ope
 - [x] Executor and orchestration (half a day to a day): map `dryas:executor` and the fast → standard → strong → frontier ladder onto OpenCode agents and subagents.
 - [x] Tests, docs and conformance (about 1 day): mock-event tests like the Codex ones, an OpenCode column in [harnesses.md](harnesses.md) and the conformance table, a CI job.
 - [x] Plan 2: memory hooks, context warnings, compaction keep/restore, /handoff on OpenCode.
+
+## Next: retire the optional extras
+
+A later release removes the optional Ruflo and Superpowers extras: Dryas memory and the Dryas skills replace them, and `dryas memory import-ruflo` stays for 1.x memory. Until then the extras keep working and are marked deprecated in [install.md](install.md) and [workflow.md](workflow.md).

@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 - The OpenCode edition at Dryas Full: memory hook stages, context-window warnings, compaction keep and `/handoff` run on OpenCode (`opencode_session.py` turns OpenCode session messages into a transcript for the existing engines).
 
+### Docs
+- The README is rewritten for launch: what Dryas does in one line, the problem, asked vs enforced, the loop, a 60-second install, the commands, proof from our own logs, and the operating model for teams. Brand images in `docs/assets/` (light and dark), with their sources in `docs/assets/src/`.
+- New `docs/README.md` (docs landing page) and `docs/judge-scorecard.md` (the scorecard moved out of the README).
+- Ruflo and Superpowers are marked deprecated in `docs/install.md` and `docs/workflow.md`; they will be removed in a future release.
+
 ## 2.2.0 - 2026-10-15
 
 ### Added
