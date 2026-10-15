@@ -95,7 +95,7 @@ A cheap way for the orchestrator to see a large repo's structure without reading
 
 2.2 ships the OpenCode edition and removes the optional Ruflo and Superpowers extras: Dryas memory and the Dryas skills replace them, and `dryas memory import-ruflo` stays for 1.x memory.
 
-Parked until after 2.0. Estimate: 3–5 days of build to reach the Codex edition's level (partial conformance), after a half-day spike. Most of Dryas carries over unchanged: OpenCode reads `AGENTS.md` (the Codex template plus a harness block), skills and commands are markdown (one more render target in `tools/sync_codex_plugin.py`), the `jev` MCP server runs as a local stdio server (memory, judge and logging as-is), and per-agent models give the tier table.
+Estimate: 3–5 days of build to reach the Codex edition's level (partial conformance), after a half-day spike. Most of Dryas carries over unchanged: OpenCode reads `AGENTS.md` (the Codex template plus a harness block), skills and commands are markdown (one more render target in `tools/sync_codex_plugin.py`), the `jev` MCP server runs as a local stdio server (memory, judge and logging as-is), and per-agent models give the tier table.
 
 - [ ] Spike (half a day): confirm OpenCode's plugin events before and after a tool call, whether a plugin can ask the user or only block (if only block, the local judge's `ask` becomes a deny with a reason on OpenCode), and whether the acting agent's identity reaches the plugin (the scope lock needs it; Codex does not provide it).
 - [ ] Hook shim (1–2 days): a small plugin, run by OpenCode itself (no Node for the user), that maps tool events to the hook JSON `claude/jev/chain.py` reads, like `codex_event.py` does for Codex.

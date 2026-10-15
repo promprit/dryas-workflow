@@ -28,7 +28,7 @@ For: a team that agrees with the model but has its own tools, models or rules.
 Fork this repo and make the workflow yours:
 
 1. Fork it and clone your fork.
-2. Edit `claude/CLAUDE.md.template` (the rules every session loads) and `docs/workflow.md` (the full reference). If your method differs, change the layer docs and `reference/dryas.yaml` too (see section 2 below).
+2. Edit `claude/CLAUDE.md.template` (the rules every session loads) and `docs/workflow.md` (the full reference). If your method differs, change the layer docs and `reference/dryas.yaml` too (see section 2 above).
 3. Run `./install/install.sh` (or `.\install\install.ps1` on Windows). Every re-install brings each account back in step with your fork.
 
 Keep notes that only fit your machine in `~/.dryas/docs/dryas-local.md`. The installer never touches that file.

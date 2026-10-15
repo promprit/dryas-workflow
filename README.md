@@ -31,8 +31,6 @@ Dryas turns Claude Code and Codex into a disciplined delivery team. It agrees th
 
 *The agent wasn't asked to stay in scope. It couldn't leave.*
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/ladder-dark.png"><img src="docs/assets/ladder-light.png" alt="The model ladder: fast, standard, strong, frontier. A task climbs only after a failure, and every climb is logged." width="100%"></picture>
-
 The full comparison with installing skills side by side: [Why Dryas](docs/why-dryas.md).
 
 ## The loop
@@ -44,16 +42,28 @@ The full comparison with installing skills side by side: [Why Dryas](docs/why-dr
 - **Judge.** A small judge answers narrow questions (is this command risky? which tier?) so the big model is called less.
 - **Build.** Executors on the `fast` tier do each task in its own git worktree, test first.
 - **Escalate.** A failed task climbs to `standard`, then `strong`. `frontier` only after `strong` fails. Each climb is logged with a reason.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/ladder-dark.png"><img src="docs/assets/ladder-light.png" alt="The model ladder: fast, standard, strong, frontier. A task climbs only after a failure, and every climb is logged." width="100%"></picture>
+
 - **Review.** Fresh reviewers check the diff, and the tests are run, before anything merges.
 - **Ship.** You approve the merge.
 
 ## Install in 60 seconds
 
+macOS, Linux, WSL:
+
 ```
 git clone https://github.com/promprit/dryas-workflow
 cd dryas-workflow
-install/install.sh          # macOS, Linux, WSL
-install\install.ps1         # Windows (PowerShell)
+install/install.sh
+```
+
+Windows (PowerShell):
+
+```
+git clone https://github.com/promprit/dryas-workflow
+cd dryas-workflow
+install\install.ps1
 ```
 
 Then, in Claude Code:
@@ -82,9 +92,9 @@ Underneath: a local judge that needs no key, Dryas memory that remembers what wa
 
 ## Proof: we ship with it
 
-Dryas Studio delivers every project with Dryas, Dryas 2.0 included. Our own logs, 7 to 15 October 2026:
+Dryas Studio delivers every project with Dryas, Dryas 2.0 included. Our own logs, 7 to 14 October 2026:
 
-**1,154 tasks merged · 1,689 executor dispatches · 160 out-of-scope edits blocked**
+**1,036 tasks merged · 1,556 executor dispatches · 150 out-of-scope edits blocked**
 
 Not a benchmark. Just the work.
 

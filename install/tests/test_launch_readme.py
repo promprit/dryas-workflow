@@ -62,6 +62,7 @@ class LaunchReadmeTest(unittest.TestCase):
         for s in ("git clone https://github.com/promprit/dryas-workflow", "install/install.sh", "install\\install.ps1",
                   "/orchestrate", "docs/install.md"):
             self.assertIn(s, t, s)
+        self.assertGreaterEqual(t.count("```"), 6)  # macOS/Linux, Windows and first-command blocks are separate
 
     def test_extras_only_in_credits(self):
         t = readme()
@@ -72,7 +73,7 @@ class LaunchReadmeTest(unittest.TestCase):
 
     def test_proof_numbers(self):
         t = readme().split("## Proof: we ship with it", 1)[1].split("\n## ", 1)[0]
-        for s in ("1,154", "1,689", "160", "Not a benchmark", "docs/assets/flowobserve.jpg", "docs/judge-scorecard.md"):
+        for s in ("1,036", "1,556", "150", "7 to 14 October 2026", "Not a benchmark", "docs/assets/flowobserve.jpg", "docs/judge-scorecard.md"):
             self.assertIn(s, t, s)
 
 
