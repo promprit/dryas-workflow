@@ -140,6 +140,49 @@ class CloudHookTest(unittest.TestCase):
                 os.environ["DRYAS_CLOUD_HOOKS"] = old
         self.assertEqual(mod.ASK["hookSpecificOutput"]["permissionDecision"], "ask")
 
+    # Follow-up: a partial write must not break the pretool JSON, and sys.exit("msg") acts as in Python.
+
+    def run_full(self, *args):
+        e = {"PATH": os.environ.get("PATH", ""), "HOME": self.home, "USERPROFILE": self.home,
+             "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""), "CLAUDE_CODE_REMOTE": "true"}
+        p = subprocess.run([sys.executable, os.path.join(self.jev, "cloud_hook.py")] + list(args), input="{}",
+                           capture_output=True, text=True, env=e, timeout=60)
+        return p.returncode, p.stdout, p.stderr
+
+    def test_partial_output_then_crash_gives_only_ask(self):
+        self.put("chain.py", "import sys\nsys.stdout.write('{\"hookSpecificOutput\": {\"permissionDec')\n"
+                             "print('more')\nraise RuntimeError('boom')\n")
+        rc, out, _ = self.run_full("chain.py", "pretool")
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out), json.loads(json.dumps(self.ask())))
+
+    def ask(self):
+        sys.path.insert(0, self.jev)
+        try:
+            import importlib
+            sys.modules.pop("cloud_hook", None)
+            return importlib.import_module("cloud_hook").ASK
+        finally:
+            sys.path.remove(self.jev)
+            sys.modules.pop("cloud_hook", None)
+
+    def test_output_of_a_good_run_is_written_unchanged(self):
+        self.put("chain.py", "import sys\nsys.stdout.write('{\"a\": 1}')\nprint()\nsys.stdout.write('tail')\n")
+        self.assertEqual(self.run_full("chain.py", "pretool")[:2], (0, '{"a": 1}\ntail'))
+
+    def test_exit_two_keeps_its_output(self):
+        self.put("chain.py", "import sys\nprint('reason')\nsys.stderr.write('blocked')\nsys.exit(2)\n")
+        self.assertEqual(self.run_full("chain.py", "pretool"), (2, "reason\n", "blocked"))
+
+    def test_exit_codes_follow_python(self):
+        for code, rc in (("'bad thing'", 1), ("None", 0), ("0", 0), ("5", 5), ("False", 0), ("True", 1)):
+            self.put("probe.py", "import sys\nprint('out')\nsys.exit(%s)\n" % code)
+            got = self.run_full("probe.py")
+            self.assertEqual(got[:2], (rc, "out\n"), code)
+        self.put("probe.py", "import sys\nsys.exit('bad thing')\n")
+        self.assertEqual(self.run_full("probe.py")[2].strip(), "bad thing")
+        self.assertEqual(self.run_full("probe.py", "pretool")[:2], (1, ""))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,8 +13,10 @@ DRYAS_CLOUD_HOOKS=1 forces it on, DRYAS_CLOUD_HOOKS=0 off.
 
 It is the only place a hook gets these variables: the copy puts no env into .claude/settings.json, where it would
 also reach the plugin's own hooks on a machine with the plugin installed.
-It never fails a tool call: an internal error exits 0, and for the PreToolUse chain it answers "ask".
-The script's own exit code is kept (the plugin runs the same script directly)."""
+It never fails a tool call: an internal error exits 0, drops whatever the script had printed, and for the PreToolUse
+chain answers only "ask". The script's own exit code is kept as the interpreter would give it (the plugin runs the same
+script directly): sys.exit(None) is 0, an int passes through, any other value goes to stderr and exits 1."""
+import io
 import json
 import os
 import runpy
@@ -67,15 +69,31 @@ def main(argv: List[str]) -> int:
         os.makedirs(os.environ["DRYAS_DATA_ROOT"], exist_ok=True)
         sys.argv = [path] + args
         sys.path.insert(0, HERE)
-        runpy.run_path(path, run_name="__main__")
-        return 0
-    except SystemExit as e:
-        return e.code if isinstance(e.code, int) else 0
+        real, buf = sys.stdout, io.StringIO()
+        sys.stdout = buf  # held back: a crash halfway must not leave half a JSON answer
+        try:
+            runpy.run_path(path, run_name="__main__")
+            code = 0
+        except SystemExit as e:
+            code = _exit_code(e.code)
+        finally:
+            sys.stdout = real
+        real.write(buf.getvalue())
+        return code
     except Exception:
         if pretool:
             sys.stdout.write(json.dumps(ASK))
         return 0
 
+
+def _exit_code(code: object) -> int:
+    """What the interpreter itself would exit with for sys.exit(code)."""
+    if code is None:
+        return 0
+    if isinstance(code, int):
+        return code
+    sys.stderr.write("%s\n" % code)
+    return 1
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
