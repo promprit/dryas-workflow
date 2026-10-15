@@ -10,6 +10,8 @@
 
 **Spec:** `docs/specs/2026-10-15-scope-lock-shell-writes-design.md`
 
+**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); **Task 12 (release) runs last**.
+
 ## Global Constraints
 
 - Python stdlib only; type hints in the style of the neighbouring module (`typing.List`, `Dict`, `Optional`). Every file stays under 500 lines.
@@ -132,22 +134,19 @@ if __name__ == "__main__":
 
 ## Task 2: shellwrites — what a shell command writes
 
-Goal: New `claude/jev/shellwrites.py` decides whether a Bash command writes files and which absolute paths it writes, from the parsed command (heredoc bodies and quoted text are data); `prescreen.writes` and its regexes are removed.
+Goal: New `claude/jev/shellwrites.py` decides whether a Bash command writes files and which absolute paths it writes, from the parsed command (heredoc bodies and quoted text are data). `prescreen.writes` stays until Task 3 switches the scope lock over and removes it.
 Scope:
 - claude/jev/shellwrites.py
-- claude/jev/prescreen.py
 - claude/jev/tests/test_shellwrites.py
-- claude/jev/tests/test_gate_prescreen.py
 Done:
 - `python3 -m pytest -q claude/jev/tests/test_shellwrites.py claude/jev/tests/test_gate_prescreen.py` passes
-- `grep -n "_WRITE_\|def writes" claude/jev/prescreen.py` prints nothing
 Failing test first: claude/jev/tests/test_shellwrites.py :: ShellWritesTest.test_old_write_cases
 
 **Interfaces:**
 - Consumes: Task 1's `local_judge.simple_commands`, `head_index`, `base`, `shell_string`, `_Cmd.rops`, `_Cmd.rdyn`; `prescreen._SED_CMD` (kept).
 - Produces: `shellwrites.Analysis(writes: bool, paths: List[str], unknown: bool, rule: str)` (a NamedTuple) and `shellwrites.analyse(cmd: str, cwd: str) -> Analysis`. `paths` are absolute and `posixpath.normpath`-ed, not symlink-resolved. `rule` is the first rule that fired, one of `redirect`, `sed`, `perl`, `dd`, `git`, `rm`, `rmdir`, `unlink`, `shred`, `mkdir`, `touch`, `truncate`, `tee`, `chmod`, `chown`, `chflags`, `cp`, `mv`, `ln`, `install`, `inline_code`, `script`, `package`, `sed_script`, `dynamic_command`, `xargs`, `nested`, `error`, or an archive/copy tool name from `_UNREAD`; `""` when nothing writes.
 
-- [ ] **Step 1: Write the failing test.** Move the `WRITES`, `NOT_WRITES` lists and the `TestWrites` class out of `claude/jev/tests/test_gate_prescreen.py` (delete them there, and delete its now-unused imports if any) into the new `claude/jev/tests/test_shellwrites.py`:
+- [ ] **Step 1: Write the failing test.** Create `claude/jev/tests/test_shellwrites.py` (its `WRITES`/`NOT_WRITES` lists copy the ones in `test_gate_prescreen.py`, which Task 3 deletes):
 
 ```python
 import os
@@ -543,20 +542,22 @@ def _git(args: List[str], st: _State) -> None:
     return st.hit("git", unknown=True)
 ```
 
-  Then in `claude/jev/prescreen.py` delete the `# Shell commands that write...` block (`_WRITE_WORDS`, `_WRITE_GIT`, `_WRITE_PM`, `_WRITE_PATTERNS`, `_WRITE_RX`) and `def writes(cmd)`. Keep `_SED_CMD`, `_sed`, `_writes` and `risky` (the gate still uses them).
-- [ ] **Step 4: Run the tests.** Run the Done commands. Expected: PASS, and the grep prints nothing. If a `test_readable_targets` case fails, fix `shellwrites.py`, not the test: the cases are the spec's readable forms.
-- [ ] **Step 5: Commit** `claude/jev/shellwrites.py claude/jev/prescreen.py claude/jev/tests/test_shellwrites.py claude/jev/tests/test_gate_prescreen.py` as `feat(jev): shellwrites reads what a shell command writes (task 2)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
+- [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS. If a `test_readable_targets` case fails, fix `shellwrites.py`, not the test: the cases are the spec's readable forms.
+- [ ] **Step 5: Commit** `claude/jev/shellwrites.py claude/jev/tests/test_shellwrites.py` as `feat(jev): shellwrites reads what a shell command writes (task 2)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
 
 ## Task 3: Scope lock never asks about shell writes
 
 Goal: During a run, `scope_lock._bash` denies a shell write whose readable target is outside the active tasks' Scope (and outside this session's scratchpad), allows every other write, and never returns "ask"; every scope record gains `kind`, `rule` and `run`.
 Scope:
 - claude/jev/scope_lock.py
+- claude/jev/prescreen.py
 - claude/jev/tests/test_scope_lock.py
 - claude/jev/tests/test_scope_lock_bookkeeping.py
+- claude/jev/tests/test_gate_prescreen.py
 Done:
-- `python3 -m pytest -q claude/jev/tests/test_scope_lock.py claude/jev/tests/test_scope_lock_bookkeeping.py claude/jev/tests/test_chain.py` passes
+- `python3 -m pytest -q claude/jev/tests/test_scope_lock.py claude/jev/tests/test_scope_lock_bookkeeping.py claude/jev/tests/test_gate_prescreen.py claude/jev/tests/test_chain.py` passes
 - `grep -n '"ask"' claude/jev/scope_lock.py` prints nothing
+- `grep -n "_WRITE_\|def writes" claude/jev/prescreen.py` prints nothing
 Failing test first: claude/jev/tests/test_scope_lock.py :: ScopeLockTest.test_bash_never_asks
 
 **Interfaces:**
@@ -631,9 +632,9 @@ Failing test first: claude/jev/tests/test_scope_lock.py :: ScopeLockTest.test_ba
         self.assertIsNone(scope_lock.run(self.bash("ls", agent_id="a1")))
 ```
 
-  In `claude/jev/tests/test_scope_lock_bookkeeping.py`, change any assertion that expects `"ask"` for a Bash command to the new decision (an `.orchestrate` write by an executor → `deny`; anything else → `None` or `deny` per the table in the Goal); read each test before changing it.
+  In `claude/jev/tests/test_scope_lock_bookkeeping.py`, `test_obfuscated_shell_write_never_allowed` keeps its three commands but asserts `"deny"` only (an executor's shell write whose quote-free text names `orchestr`, `active.json` or `approved.json` is denied: the audit cannot see `.orchestrate/`, which git ignores). `test_executor_reads_pass_and_main_thread_unaffected` stays as it is (reads pass). Change any other assertion that expects `"ask"` for a Bash command to the new decision; read each test before changing it. Delete the `WRITES`/`NOT_WRITES` lists and the `TestWrites` class from `claude/jev/tests/test_gate_prescreen.py` (Task 2's `test_shellwrites.py` carries them now).
 - [ ] **Step 2: Run them to see them fail.** Run: `python3 -m pytest -q claude/jev/tests/test_scope_lock.py`. Expected: FAIL, `test_bash_never_asks` sees `'ask' != 'ask'` style failures (`AssertionError: 'ask' == 'ask' : rm x`).
-- [ ] **Step 3: Implement.** In `claude/jev/scope_lock.py`:
+- [ ] **Step 3: Implement.** In `claude/jev/prescreen.py` delete the `# Shell commands that write...` block (`_WRITE_WORDS`, `_WRITE_GIT`, `_WRITE_PM`, `_WRITE_PATTERNS`, `_WRITE_RX`) and `def writes(cmd)`; keep `_SED_CMD`, `_sed`, `_writes` and `risky` (the gate and shellwrites use them). In `claude/jev/scope_lock.py`:
   1. Module docstring: replace the last sentence ("Bash is never denied: ...") with: "Bash: during a run an executor's shell write is denied when a target it names is outside the scope (scratch files in this session's Claude scratchpad excepted); other writes are allowed and audited at task return (scope_audit.py). Nothing here asks the user."
   2. Add `import re` and, after `TOOLS`, `SCRATCH_BASE = ("/private/tmp/claude-%d" % os.getuid()) if hasattr(os, "getuid") else ""`.
   3. `_log_deny` adds `"kind": "deny", "rule": "file", "run": True` to its record.
@@ -674,13 +675,14 @@ def _bash(event: Dict[str, Any], ti: Dict[str, Any], cwd: str) -> Optional[Dict[
     root = find_root(cwd)
     real_root = os.path.realpath(root) if root else ""
     ids = _active_ids(real_root) if root else []
-    if has_agent_id and ".orchestrate" in cmd.lower():
-        _log_bash(ids, "deny", "orchestrate")
-        return _deny("scope lock: executors never write .orchestrate/ (orchestrator bookkeeping)")
     import shellwrites  # only Bash needs the parser; most events are file edits
     a = shellwrites.analyse(cmd, cwd)
     if not a.writes:
-        return None
+        return None  # reads pass, .orchestrate/ included
+    bare = re.sub(r"['\"\\]", "", cmd).lower()  # quotes and backslashes cannot hide the name
+    if has_agent_id and any(k in bare for k in ("orchestr", "active.json", "approved.json")):
+        _log_bash(ids, "deny", "orchestrate")
+        return _deny("scope lock: executors never write .orchestrate/ (orchestrator bookkeeping)")
     for p in a.paths:
         real = os.path.realpath(p)
         if _in_scratchpad(real, event):
@@ -701,7 +703,7 @@ def _deny(reason: str) -> Dict[str, Any]:
 
   5. In `run`, call `_bash(event, ti, str(cwd))` instead of `_bash(ti, str(cwd), "agent_id" in event)`.
 - [ ] **Step 4: Run the tests.** Run the Done commands. Expected: PASS; the grep prints nothing.
-- [ ] **Step 5: Commit** the three Scope files as `fix(scope-lock): never ask about executor shell writes; deny readable out-of-scope targets (task 3)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
+- [ ] **Step 5: Commit** the five Scope files as `fix(scope-lock): never ask about executor shell writes; deny readable out-of-scope targets (task 3)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
 
 ## Task 4: Scope audit at task return
 
@@ -715,7 +717,7 @@ Failing test first: claude/jev/tests/test_scope_audit.py :: ScopeAuditTest.test_
 
 **Interfaces:**
 - Consumes: `planfile.sections`, `planfile.scope`, `planfile.in_scope`; `jevlog.append`.
-- Produces: CLI `scope_audit.py PLAN.md N [--base SHA] [SHA...]` printing `{"ok": bool, "outside": [repo-relative paths], "commits": [shas checked], "error": str (only on error)}`, exit 0 (exit 2 on bad usage). Function `audit(plan: str, task: str, shas: List[str], base: Optional[str], cwd: str) -> Dict[str, Any]`. On `ok: false` it appends a scope.jsonl record `{"task": [N], "tool": "audit", "decision": "violation", "kind": "violation", "rule": "audit", "paths": [...], "run": true}`.
+- Produces: CLI `scope_audit.py PLAN.md N [--base SHA] [SHA...]` printing `{"ok": bool, "outside": [repo-relative paths], "commits": [shas checked], "error": str (only on error)}`, exit 0 (exit 2 on bad usage). Function `audit(plan: str, task: str, shas: List[str], base: Optional[str], cwd: str) -> Dict[str, Any]`. On `ok: false` it appends a scope.jsonl record `{"task": [N], "tool": "audit", "decision": "violation", "kind": "violation", "rule": "audit", "paths": [...], "run": true, "cwd": <worktree root>}` (the orchestrator's shell has no JEV_CWD, so the audit sets `cwd` itself; `run_report.py` filters on it).
 
 - [ ] **Step 1: Write the failing test.** Create `claude/jev/tests/test_scope_audit.py`:
 
@@ -906,7 +908,7 @@ def audit(plan: str, task: str, shas: List[str], base: Optional[str], cwd: str) 
     if outside:
         try:
             jevlog.append("scope", {"task": [task], "tool": "audit", "decision": "violation", "kind": "violation",
-                                    "rule": "audit", "paths": outside, "run": True})
+                                    "rule": "audit", "paths": outside, "run": True, "cwd": root})
         except Exception:
             pass
     return {"ok": not outside, "outside": outside, "commits": shas}
@@ -963,19 +965,14 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import planfile
 
-PLAN = """# Plan
-
-## Risky actions
-- `rm -rf dist` — deletes the build folder; it is rebuilt automatically, nothing of yours is lost.
-- `pnpm db:reset*` — wipes the local test database and refills it with sample data.
-- `git push` no sentence, skipped
-- rm -rf build — no backticks, skipped
-
-## Task 1: a
-Goal: g
-Scope:
-- src/**
-"""
+PLAN = "\n".join([
+    "# Plan", "",
+    "## Risky actions",
+    "- `rm -rf dist` — deletes the build folder; it is rebuilt automatically, nothing of yours is lost.",
+    "- `pnpm db:reset*` — wipes the local test database and refills it with sample data.",
+    "- `git push` no sentence, skipped",
+    "- rm -rf build — no backticks, skipped", "",
+    "## Task 1: a", "Goal: g", "Scope:", "- src/**", ""])
 
 
 class RiskyTest(unittest.TestCase):
@@ -1185,6 +1182,7 @@ Goal: While a run is active, `gate.run` turns every "ask" (from the Jev model or
 Scope:
 - claude/jev/gate.py
 - claude/jev/tests/test_gate_run.py
+- claude/jev/tests/test_gate_task_review.py
 Done:
 - `python3 -m pytest -q claude/jev/tests/test_gate_run.py claude/jev/tests/test_gate.py claude/jev/tests/test_gate_decision.py claude/jev/tests/test_gate_outcome.py claude/jev/tests/test_gate_task_review.py` passes
 Failing test first: claude/jev/tests/test_gate_run.py :: GateRunTest.test_ask_becomes_deny_during_run
@@ -1241,12 +1239,12 @@ class GateRunTest(unittest.TestCase):
             return json.loads(f.readlines()[-1])
 
     def test_ask_outside_run_unchanged(self):
-        self.assertEqual(self.run_bash("rm -rf build")[0], "ask")
+        self.assertEqual(self.run_bash("git clean -fd")[0], "ask")
         self.assertIs(self.last()["run"], False)
 
     def test_ask_becomes_deny_during_run(self):
         self.active(["1"])
-        d, reason = self.run_bash("rm -rf build")
+        d, reason = self.run_bash("git clean -fd")
         self.assertEqual(d, "deny")
         self.assertIn("NEEDS DECISION", reason)
         self.assertNotIn("please confirm", reason)
@@ -1260,8 +1258,8 @@ class GateRunTest(unittest.TestCase):
     def test_orchestrator_approved_allowed(self):
         self.active(["1"])
         with open(os.path.join(self.wt, ".orchestrate", "approved.json"), "w") as f:
-            json.dump({"commands": [{"cmd": "rm -rf build", "task": "1", "reason": "generated"}]}, f)
-        self.assertEqual(self.run_bash("rm -rf build")[0], None)
+            json.dump({"commands": [{"cmd": "git clean -fd", "task": "1", "reason": "generated files only"}]}, f)
+        self.assertEqual(self.run_bash("git clean -fd")[0], None)
         self.assertEqual(self.last()["rule"], "orchestrator")
 
     def test_deny_stays_deny(self):
@@ -1271,12 +1269,12 @@ class GateRunTest(unittest.TestCase):
     def test_malformed_active_json_counts_as_run(self):
         with open(os.path.join(self.wt, ".orchestrate", "active.json"), "w") as f:
             f.write("{nope")
-        self.assertEqual(self.run_bash("rm -rf build")[0], "deny")
+        self.assertEqual(self.run_bash("git clean -fd")[0], "deny")
 
     def test_no_ask_noted_during_run(self):
         self.active(["1"])
         with mock.patch.object(gate.gate_outcome, "note_ask") as note:
-            self.run_bash("rm -rf build")
+            self.run_bash("git clean -fd")
         note.assert_not_called()
 
 
@@ -1321,8 +1319,8 @@ def _unattended(d: Tuple[str, str], tool: str, cmd: str, root: str, cwd: str) ->
 ```
 
      and log with the rule: `jevlog.append("gate", _record(dict(base, rule=run_rule) if run_rule else base, d, a, v, t, local, local_ms))` (keep the fallback `except` branch as it is). The existing `if d[0] == "ask" and tool == "Bash" ...: gate_outcome.note_ask(...)` now runs only outside a run, with no change.
-- [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS. If an older gate test asserted the exact `base` keys, add `"run": False` to its expectation rather than removing the field.
-- [ ] **Step 5: Commit** the two Scope files as `fix(gate): no prompts during a run; planned and orchestrator-approved actions pass (task 6)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
+- [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS. `test_gate_task_review.py` runs with an active task, so its tests that expect `"ask"` now get `"deny"` (a run never asks): change those expectations to `"deny"` and add one assertion per changed test that the reason contains `NEEDS DECISION`; do not deactivate the run, the task-review fields must still be logged during runs. If an older gate test asserted the exact `base` keys, add `"run": False` to its expectation rather than removing the field.
+- [ ] **Step 5: Commit** the three Scope files as `fix(gate): no prompts during a run; planned and orchestrator-approved actions pass (task 6)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
 
 ## Task 7: Preflight — refuse to start a run that could prompt
 
@@ -1506,6 +1504,7 @@ Scope:
 - claude/jev/run_report.py
 - claude/jev/tests/test_tune_scope_split.py
 - claude/jev/tests/test_run_report.py
+- claude/jev/tests/test_tune_tasks.py
 Done:
 - `python3 -m pytest -q claude/jev/tests/test_tune_scope_split.py claude/jev/tests/test_run_report.py claude/jev/tests/test_tune.py claude/jev/tests/test_tune_tasks.py` passes
 Failing test first: claude/jev/tests/test_tune_scope_split.py :: ScopeSplitTest.test_split_counts
@@ -1669,8 +1668,8 @@ if __name__ == "__main__":
     sys.exit(0)
 ```
 
-- [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS. If `test_tune.py` or `test_tune_tasks.py` breaks on `scope_denials`, check which records it writes: records with `decision: "deny"` must still count; do not change those tests' numbers.
-- [ ] **Step 5: Commit** the four Scope files as `feat(tune): count prompts during runs; run report numbers (task 8)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
+- [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS. `test_tune_tasks.py::test_dispatch_counts_ignore_return_records` writes the scope record `{"task": "a"}` with no decision (a 1.x-era deny): give it `"decision": "deny"` so its numbers stay as they are. Do not change any test's expected numbers.
+- [ ] **Step 5: Commit** the five Scope files as `feat(tune): count prompts during runs; run report numbers (task 8)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
 
 ## Task 9: Claude orchestrate, executor and plan instructions
 
@@ -1752,7 +1751,7 @@ if __name__ == "__main__":
   4. SKILL §2.2: after the PLAN.md block add: "If the plan has a `## Risky actions` section, copy it verbatim to the top of `.orchestrate/PLAN.md`, above the first task. The gate reads it there: during the run those commands are allowed without asking anyone (an exact entry, or a prefix ending in `*`)."
   5. SKILL §5.2: the file becomes `{"active": [<ids>], "base": {"<N>": "<sha>"}}`, where the sha is `git rev-parse HEAD` taken just before that task's first dispatch (kept for re-dispatches; §5.6 `git diff --numstat <base>..HEAD` and §6 read it from here).
   6. SKILL §5.3: replace "The dispatch prompt allows the executor to commit its own task: explicit paths, conventional message;" with "The dispatch prompt allows the executor to commit its own task: explicit paths, a conventional message whose subject ends with `(task <N>)`, and the report ends with `COMMITS: <sha>...` or `COMMITS: none`;".
-  7. SKILL §6, first paragraph becomes: "For each report, first run `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/scope_audit.py" .orchestrate/PLAN.md <N> --base <base of N> <COMMITS shas>` in the worktree. `ok: false` means the task is not done: re-dispatch it on the same model with "revert these files: <outside> (`git checkout -- <path>` if tracked, delete if new), then make the change with Edit/Write inside your Scope". That re-run is not a climb; a second audit failure on the task counts as a failure (§7). Then one `jev_judge` call with state `{task_section, executor_report}`:" (the two question bullets stay).
+  7. SKILL §6, first paragraph becomes: "For each report, first run `"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/scope_audit.py" .orchestrate/PLAN.md <N> --base <base of N> <COMMITS shas>` in the worktree. `ok: false` means the task is not done: first add the exact revert commands to `.orchestrate/approved.json` (`git checkout -- <path>` for each tracked file in `outside`; the gate denies discards during a run unless approved), then re-dispatch it on the same model with "revert these files: <outside> (run exactly `git checkout -- <path>` if tracked, delete the file if new), then make the change with Edit/Write inside your Scope". That re-run is not a climb; a second audit failure on the task counts as a failure (§7). Then one `jev_judge` call with state `{task_section, executor_report}`:" (the two question bullets stay).
   8. SKILL §6, add a paragraph after the `SCOPE: need` sentence:
      ```
      `NEEDS DECISION: <command> because <reason>` means the gate denied a risky command during the run, and nobody is asked: you decide. Approve only when the command is needed for the task, stays inside the worktree, and can be undone or only touches generated or test data. To approve, add `{"cmd": "<exact command>", "task": "<N>", "reason": "<one line>"}` to `.orchestrate/approved.json` (`{"commands": [...]}`; create it if missing), call `mcp__plugin_dryas_jev__log_override` (question "run_ask", Jev "ask", yours "allow", the reason), and re-dispatch. Otherwise re-dispatch with a safer way, or make it a `NEEDS USER` item: the task stays not done, its id leaves `active.json`, and the run carries on with the other tasks. Your own risky commands follow the same rule. The gate never lets approved.json cover a push, a deploy or cloud command, or a delete outside the worktree: only an exact entry in the plan's Risky actions can.
@@ -2034,14 +2033,20 @@ def _sandbox(tmp: Path) -> Dict[str, str]:
 
 
 def _one(chain: Path, event: Dict[str, Any], env: Dict[str, str]) -> (str, float):
+    """The chain's decision, with a deny counted as "deny" only when the scope lock gave it ("scope lock:" reason);
+    a gate deny of a risky command is "gate_deny" (a different rung, not a scope verdict). Asks of any stage count."""
     t0 = time.perf_counter()
     r = subprocess.run([sys.executable, "-X", "utf8", str(chain), "pretool"], input=json.dumps(event),
                        capture_output=True, text=True, env=env, timeout=60)
     ms = (time.perf_counter() - t0) * 1000
     try:
-        return json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], ms
+        out = json.loads(r.stdout)["hookSpecificOutput"]
     except (ValueError, KeyError, TypeError):
         return "allow", ms
+    d = out.get("permissionDecision", "allow")
+    if d == "deny" and not str(out.get("permissionDecisionReason", "")).startswith("scope lock"):
+        d = "gate_deny"
+    return d, ms
 
 
 def run(v1_dir: Path, runs: int) -> Dict[str, Dict[str, Any]]:
@@ -2108,3 +2113,103 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run the tests.** Run the Done commands. Expected: the unit test passes; the real run prints the table and `PASS`. Answer the benchmark checklist's questions 4 (errors: every event returned a decision or none) and 5 (runs and range) in your report. If the real run fails, that is a finding about Tasks 2-3 or 6: report it in `UNRESOLVED:` with the table; do not loosen `verdict`.
 - [ ] **Step 5: Commit** the two Scope files as `test(release): compare against Dryas 1.0 before shipping (task 13)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
+
+## Task 14: Framework core — no prompts during a run, no release worse than the last
+
+Goal: The Dryas spec, the injected rules, the workflow doc and the release check carry two rules: nobody is prompted during an `/orchestrate` run, and a release that is worse for the user than the previous one does not ship.
+Scope:
+- spec/dryas-spec-v1.md
+- reference/README.md
+- claude/CLAUDE.md.template
+- docs/workflow.md
+- tools/release_check.py
+- install/tests/test_release_rules.py
+Done:
+- `python3 -m pytest -q install/tests/test_release_rules.py install/tests/test_claude_md_template.py install/tests/test_framework_docs.py install/tests/test_process_wiring.py install/tests/test_owned_core_wiring.py` passes
+- `python3 tools/release_check.py` shows a `better than previous releases` line that is PASS (or SKIP when no older copy is cached), never FAIL
+Failing test first: install/tests/test_release_rules.py :: ReleaseRulesTest.test_spec_rules
+
+**Interfaces:**
+- Consumes: Task 13's `tools/compare_v1.py` (exit 0 PASS, 1 FAIL, 2 no copy; `--v1 DIR`); Task 10's GOV-2 row in `reference/README.md`.
+- Produces: spec rules `GOV-12` and `REL-1` with conformance rows; release_check line `better than previous releases`.
+
+- [ ] **Step 1: Write the failing test.** Create `install/tests/test_release_rules.py`:
+
+```python
+import os
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def read(rel):
+    with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+        return f.read()
+
+
+class ReleaseRulesTest(unittest.TestCase):
+    def test_spec_rules(self):
+        s = read("spec/dryas-spec-v1.md")
+        self.assertIn("**GOV-12** *(Core)*", s)
+        self.assertIn("MUST NOT prompt", s)
+        self.assertIn("**REL-1** *(Core)*", s)
+        self.assertIn("MUST NOT ship", s)
+
+    def test_conformance_rows(self):
+        r = read("reference/README.md")
+        self.assertIn("| GOV-12 |", r)
+        self.assertIn("| REL-1 |", r)
+
+    def test_injected_rules_and_workflow_doc(self):
+        for rel in ("claude/CLAUDE.md.template", "docs/workflow.md"):
+            s = read(rel)
+            self.assertIn("Nobody is prompted during /orchestrate", s, rel)
+            self.assertIn("worse than the last", s, rel)
+
+    def test_release_check_compares(self):
+        s = read("tools/release_check.py")
+        self.assertIn("compare_v1.py", s)
+        self.assertIn("better than previous releases", s)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+- [ ] **Step 2: Run it to see it fail.** Run: `python3 -m pytest -q install/tests/test_release_rules.py`. Expected: FAIL (`'**GOV-12** *(Core)*' not found`).
+- [ ] **Step 3: Implement.**
+  1. `spec/dryas-spec-v1.md` §5, after GOV-11: `- **GOV-12** *(Core)* After a human approves the design and the plan, the harness MUST NOT prompt the human while the run is active. Each hook MUST decide (allow, or deny with a reason the agent can act on) or defer to the orchestrator; what needs the human MUST wait for the end-of-run report.` Add a new section before `## 9. Manifest`, renumbering nothing else by hand (read how the file numbers sections; if numbers are referenced elsewhere, add the section as `## 8a. Release (REL)` instead):
+     ```
+     ## 8a. Release (REL)
+
+     - **REL-1** *(Core)* A release MUST NOT be worse for the user than the release before it. Before shipping, prompts per task, hook latency and cost MUST be compared with the previous release, on logged data and on a replay of real commands through both versions. A release that is worse on any of them MUST NOT ship.
+     ```
+     Add a line to `## 10. Changes` naming GOV-12 and REL-1 (2026-10-16, Dryas 2.3.1).
+  2. `reference/README.md`: add rows in the same table format as their neighbours: `| GOV-12 | met | met | met | During a run hooks never ask: scope lock denies or allows (shellwrites, scope_audit.py), the gate allows planned or orchestrator-approved actions and denies the rest with NEEDS DECISION (runrules.py); preflight.py refuses to start a run that could prompt |` after GOV-11 (on Codex and OpenCode write `met` only if their harness has no permission prompt of its own that Dryas cannot see; otherwise `partial` with that reason), and `| REL-1 | met | met | met | tools/compare_v1.py replays the regression corpus through the previous release and this one; tools/release_check.py runs it; /tune shows prompts per task next to the 1.0 baseline |` in a new `REL` block after the REV rows.
+  3. `claude/CLAUDE.md.template` `# Workflow rules`, after the `Commands:` line, add two lines (keep the whole file under the 5 KB budget `test_claude_md_template.py` checks; shorten your own wording, not existing lines):
+     `- Nobody is prompted during /orchestrate: the user decides in brainstorm and plan; hooks allow or deny with a reason, the orchestrator decides the rest, and what needs the user waits for the end report.`
+     `- Never ship a release worse than the last: compare prompts per task, hook speed and cost with the previous release (Jev logs, /tune, tools/compare_v1.py); worse does not ship.`
+  4. `docs/workflow.md` `## 1. Ground rules (non-negotiable)`: add the same two rules as bullets, in that section's style.
+  5. `tools/release_check.py`: add a function in the style of `scope_lock(rep, ...)`:
+
+```python
+def better_than_previous(rep):
+    """REL-1: replay the corpus through every cached older Dryas release and this checkout (tools/compare_v1.py)."""
+    name = "better than previous releases"
+    cache = Path.home() / ".claude" / "plugins" / "cache" / "dryas-workflow" / "dryas"
+    olds = sorted(d for d in cache.glob("*") if (d / "jev" / "chain.py").is_file() and d.name != VERSION) \
+        if cache.is_dir() else []
+    if not olds:
+        return rep.say("SKIP", name, "no older Dryas copy cached in %s" % cache)
+    bad = []
+    for d in olds:
+        r = subprocess.run([sys.executable, str(Path(__file__).with_name("compare_v1.py")), "--v1", str(d)],
+                           capture_output=True, text=True, timeout=1800)
+        if r.returncode == 1:
+            bad.append("%s: %s" % (d.name, r.stdout.strip().splitlines()[-1]))
+    rep.say("FAIL" if bad else "PASS", name, "; ".join(bad) or "vs " + ", ".join(d.name for d in olds))
+```
+
+     where `VERSION` is the version this checkout ships (read it from `claude/.claude-plugin/plugin.json` at module load, as `json.loads(...)["version"]`, if the module has no such constant yet). Call `better_than_previous(rep)` from `main` once, after the per-account checks.
+- [ ] **Step 4: Run the tests.** Run the Done commands. Expected: PASS; the release_check line is PASS or SKIP. If the template budget test fails, shorten the two new lines; do not raise the budget.
+- [ ] **Step 5: Commit** the Scope files as `docs(spec): GOV-12 no prompts during a run, REL-1 no release worse than the last (task 14)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
