@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -18,7 +19,7 @@ import plugin_setup as ps
 MIN_OPENCODE = (1, 18, 0)
 RECORD = "dryas/install.json"
 MARK = "<!-- dryas-managed -->"
-TIERS = ("fast", "standard", "strong", "frontier")
+TIERS = ps.run_cmd.TIERS
 SKIP_PARTS = ("__pycache__", ".pytest_cache")
 LEGACY_SKILLS = (Path(".claude") / "skills", Path(".agents") / "skills")
 
@@ -73,7 +74,7 @@ def render(rel: str, data: bytes, models: Dict[str, str]) -> bytes:
     if not m:
         return data
     model = models.get(m.group(1), "")
-    text = data.decode("utf-8").replace("model: {{MODEL}}\n", ("model: %s\n" % model) if model else "")
+    text = data.decode("utf-8").replace("model: {{MODEL}}\n", ("model: %s\n" % json.dumps(model)) if model else "")
     return text.encode("utf-8")
 
 
@@ -92,6 +93,11 @@ def _remove(od: Path, rel: str, sha: str) -> bool:
     return True
 
 
+def _clear_pycache(od: Path) -> None:
+    for c in (Path(od) / "dryas").rglob("__pycache__"):
+        shutil.rmtree(str(c), ignore_errors=True)
+
+
 def _legacy_skill_warning(home: Path) -> None:
     names = ("brainstorm", "orchestrate", "worktree", "verify", "plan")
     for d in LEGACY_SKILLS:
@@ -101,7 +107,7 @@ def _legacy_skill_warning(home: Path) -> None:
                   "(the OpenCode ones are named dryas-<name>)" % (home / d, ", ".join(hits)))
 
 
-def setup(repo: Path, od: Path, comps: List[str], tiers: Dict[str, str], yes: bool, dry: bool = False) -> int:
+def setup(repo: Path, od: Path, comps: List[str], tiers: Dict[str, str], dry: bool = False) -> int:
     repo, od, root = Path(repo).resolve(), opencode_dir(str(od)), ps.data_root()
     ver = installed_version()
     if ver is None or ver < MIN_OPENCODE:
@@ -174,6 +180,7 @@ def uninstall(od: Path) -> int:
     rec = ps._load_json(p, {})
     rec = rec if isinstance(rec, dict) else {}
     files = rec.get("files") if isinstance(rec.get("files"), dict) else {}
+    _clear_pycache(od)
     kept = [rel for rel, sha in sorted(files.items()) if not _remove(od, rel, sha)]
     if kept:
         rec.pop("partial", None)
@@ -200,7 +207,7 @@ def rules_ok(od: Path, env: Optional[dict] = None) -> bool:
         return False
 
 
-def verify(od: Path, comps: List[str]) -> int:
+def verify(od: Path) -> int:
     """PASS/FAIL lines for one OpenCode config dir; returns the number of FAILs."""
     od, fails = opencode_dir(str(od)), 0
 

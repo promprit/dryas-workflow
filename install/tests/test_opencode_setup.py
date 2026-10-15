@@ -28,7 +28,7 @@ class OpenCodeSetupTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def setup_(self, tiers=None):
-        return os_.setup(REPO, self.od, ["core", "jev"], tiers or {}, yes=True)
+        return os_.setup(REPO, self.od, ["core", "jev"], tiers or {})
 
     def test_setup_writes_tree_and_record(self):
         self.assertEqual(self.setup_(), 0)
@@ -51,8 +51,8 @@ class OpenCodeSetupTest(unittest.TestCase):
         self.od.mkdir()
         (self.od / "opencode.json").write_text(json.dumps({"model": "p/default"}), encoding="utf-8")
         self.assertEqual(self.setup_({"fast": "p/cheap"}), 0)
-        self.assertIn("model: p/cheap\n", (self.od / "agent/dryas-executor-fast.md").read_text(encoding="utf-8"))
-        self.assertIn("model: p/default\n", (self.od / "agent/dryas-executor-strong.md").read_text(encoding="utf-8"))
+        self.assertIn('model: "p/cheap"\n', (self.od / "agent/dryas-executor-fast.md").read_text(encoding="utf-8"))
+        self.assertIn('model: "p/default"\n', (self.od / "agent/dryas-executor-strong.md").read_text(encoding="utf-8"))
 
     def test_no_model_line_without_any_model(self):
         self.assertEqual(self.setup_(), 0)
@@ -138,7 +138,7 @@ class OpenCodeSetupTest(unittest.TestCase):
         self.assertEqual(self.setup_(), 0)
         self.ver.stop()
         try:
-            self.assertEqual(os_.verify(self.od, ["core", "jev"]), 0)
+            self.assertEqual(os_.verify(self.od), 0)
         finally:
             self.ver.start()
 

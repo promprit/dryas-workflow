@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Sequence
 import platform_util as pu
 
 HERE = Path(__file__).resolve().parent
+TIERS = ("fast", "standard", "strong", "frontier")  # executor tiers; opencode_setup reuses it
 OPTIONAL = ("jev", "memory", "ruflo", "superpowers", "design", "pstack-picks")
 EXTRAS = ("ruflo", "superpowers")  # off unless selected or already installed
 FRESH = ("jev", "memory", "design", "pstack-picks")
@@ -65,7 +66,7 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--claude-dir", default=None)
     ap.add_argument("--codex-dir", default=None)
     ap.add_argument("--opencode-dir", default=None)
-    for t in ("fast", "standard", "strong", "frontier"):
+    for t in TIERS:
         ap.add_argument("--tier-" + t, default=None, metavar="PROVIDER/MODEL")
     ap.add_argument("--openrouter-key", default="")  # explicit only: it reaches the `claude plugin install` argv
     a = ap.parse_args(argv)
@@ -257,7 +258,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     comps = select(a, recorded)
     want_claude, want_codex, want_oc = a.harness in CLAUDE_H, a.harness in CODEX_H, a.harness in OPENCODE_H
     od = ocs.opencode_dir(a.opencode_dir)
-    tiers = {t: getattr(a, "tier_" + t) for t in ("fast", "standard", "strong", "frontier")}
+    tiers = {t: getattr(a, "tier_" + t) for t in TIERS}
     cdx = cps.codex_home(a.codex_dir)
     legacy = cps.legacy_components(cdx)
     no_flags = not (any(_no(a, c) for c in OPTIONAL) or any(getattr(a, "with_" + c) for c in ("ruflo", "superpowers", "design"))
@@ -345,7 +346,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if rc:
             return rc
     if want_oc:
-        rc = ocs.setup(repo, od, comps, tiers, yes=a.yes, dry=a.dry_run)
+        rc = ocs.setup(repo, od, comps, tiers, dry=a.dry_run)
         if rc:
             return rc
     if want_claude:
@@ -368,5 +369,5 @@ def main(argv: Optional[List[str]] = None) -> int:
     if want_codex:
         fails += cps.verify(cdx, codex_comps)
     if want_oc:
-        fails += ocs.verify(od, comps)
+        fails += ocs.verify(od)
     return 1 if fails else 0

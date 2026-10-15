@@ -65,7 +65,7 @@ class Server:
             import opencode_setup
             mm = "mock/m2"
             with mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": str(self.data)}):
-                rc = opencode_setup.setup(REPO, cfg, ["core", "jev"], dict.fromkeys(opencode_setup.TIERS, mm), yes=True)
+                rc = opencode_setup.setup(REPO, cfg, ["core", "jev"], dict.fromkeys(opencode_setup.TIERS, mm))
             if rc:
                 raise RuntimeError("opencode_setup.setup failed (%d)" % rc)
         elif edition is not None:

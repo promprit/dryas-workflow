@@ -161,7 +161,6 @@ def leaks(repo: Path) -> List[str]:
     return out
 
 
-HAND_ALLOW: Dict[str, Dict[str, Set[str]]] = {}
 _OC_PREFIX = re.compile(r"\bjev_(?=(?:" + JEV_TOOLS + r")\b)")
 
 
@@ -170,7 +169,7 @@ def _shared(text: str) -> Set[str]:
 
 
 def hand_drift(repo: Path) -> List[str]:
-    """One line per missing hand-written skill, per shared name only one side names, per stale allowance."""
+    """One line per missing hand-written skill, per shared name only one side names."""
     out = []
     for h in HAND:
         mine = Path(repo) / ("opencode/skill/dryas-%s/SKILL.md" % h)
@@ -181,11 +180,8 @@ def hand_drift(repo: Path) -> List[str]:
         if not claude.is_file():
             continue
         tok = {"claude": _shared(scp._lf(claude)), "opencode": _shared(scp._lf(mine))}
-        allow = HAND_ALLOW.get(h, {})
         for a, b in (("claude", "opencode"), ("opencode", "claude")):
-            only, ok = tok[a] - tok[b], allow.get(a, set())
-            out += ["skill %s: %s names %s but %s does not" % (h, a, t, b) for t in sorted(only - ok)]
-            out += ["skill %s: HAND_ALLOW[%r] lists %s, which no longer differs" % (h, a, t) for t in sorted(ok - only)]
+            out += ["skill %s: %s names %s but %s does not" % (h, a, t, b) for t in sorted(tok[a] - tok[b])]
     return out
 
 
