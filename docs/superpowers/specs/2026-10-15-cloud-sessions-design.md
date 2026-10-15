@@ -31,8 +31,8 @@ Success: after `dryas cloud init` and a commit, a fresh cloud session on that re
 |---|---|
 | `.dryas/` | Runtime only: `jev/` (judge, scope lock, memory, tune; no tests), `pstack/`, `bin/dryas-py`, `VERSION` (Dryas version, commit, files hash), `manifest.json`, `NOTICE`. About 0.6 MB. |
 | `.claude/skills/`, `.claude/agents/`, `.claude/commands/` | Dryas core skills, the `executor` agent, the commands `/orchestrate`, `/wplan`, `/wreview`, `/commit`, `/tune`, `/handoff`, `/dryas-cloud`. |
-| `.claude/settings.json` | Merged, not overwritten: Dryas hooks pointing at `$CLAUDE_PROJECT_DIR/.dryas/...`; `env`: `CLAUDE_PLUGIN_ROOT=$CLAUDE_PROJECT_DIR/.dryas`, `DRYAS_DATA_ROOT=$CLAUDE_PROJECT_DIR/.dryas/state`. |
-| `.mcp.json` | Merged: the `jev` MCP server (judge, log tools, memory tools) run from `.dryas/`. |
+| `.claude/settings.json` | Merged, not overwritten: Dryas hooks pointing at `$CLAUDE_PROJECT_DIR/.dryas/jev/cloud_hook.py`, plus one allow rule. **No Dryas `env` entries** (amended 2026-10-15, approved by Promprit): on a Mac with the plugin installed, a project `env` value would also reach the plugin's own hooks and MCP server. `cloud_hook.py` sets `CLAUDE_PLUGIN_ROOT=<repo>/.dryas` and `DRYAS_DATA_ROOT=<repo>/.dryas/state` before every hook, and that is the only way hooks get them. |
+| `.mcp.json` | Merged: the `jev` MCP server (judge, log tools, memory tools) run from `.dryas/`, with its own `env` block: `CLAUDE_PLUGIN_ROOT` and `DRYAS_DATA_ROOT` under `${CLAUDE_PROJECT_DIR:-.}/.dryas`. |
 | `CLAUDE.md` | A marked Dryas rules block, inserted or replaced between markers; the repo's own text is untouched. |
 | `.gitignore` | Gains `.dryas/state/`. |
 
