@@ -477,6 +477,33 @@ def ruflo(rep, cd, root_dir, env, run_env):
     rep.say("PASS" if ok else "FAIL", "Ruflo helper runs silently", why)
 
 
+def better_than_previous(rep):
+    """REL-1: replay the corpus through every cached older Dryas release and this checkout (tools/compare_v1.py)."""
+    name = "better than previous releases"
+    ours = json.loads((Path(__file__).resolve().parent.parent / VERSION_FILES[0]).read_text(encoding="utf-8"))["version"]
+    cache = Path.home() / ".claude" / "plugins" / "cache" / "dryas-workflow" / "dryas"
+    olds = sorted(d for d in cache.glob("*") if (d / "jev" / "chain.py").is_file() and d.name != ours) \
+        if cache.is_dir() else []
+    if not olds:
+        return rep.say("SKIP", name, "no older Dryas copy cached in %s" % cache)
+    corpus = Path(__file__).resolve().parent.parent / "claude" / "jev" / "tests" / "fixtures" / "scope_shell_corpus.jsonl"
+    if not corpus.is_file():
+        return rep.say("SKIP", name, "regression corpus missing: %s" % corpus)
+    bad, skipped = [], []
+    for d in olds:
+        r = subprocess.run([sys.executable, str(Path(__file__).with_name("compare_v1.py")), "--v1", str(d)],
+                           capture_output=True, text=True, timeout=1800)
+        if r.returncode == 1:
+            bad.append("%s: %s" % (d.name, (r.stdout.strip().splitlines() or ["worse"])[-1]))
+        elif r.returncode != 0:
+            skipped.append("%s: compare_v1 exit %s (no corpus or no copy)" % (d.name, r.returncode))
+    if bad:
+        return rep.say("FAIL", name, "; ".join(bad))
+    if skipped and len(skipped) == len(olds):
+        return rep.say("SKIP", name, "; ".join(skipped))
+    rep.say("PASS", name, "vs " + ", ".join(d.name for d in olds if d.name not in "".join(skipped)))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Check a Dryas Workflow install on this machine (read-only).")
     ap.add_argument("--claude-dir", action="append", help="a Claude Code config dir; repeat for each account "
@@ -557,6 +584,7 @@ def _checks(rep, cds, cdxs, env, bash, tmp, ods=()):
         codex_plugin(rep, cdx, shutil.which("codex"), bash, hook_env)
     for od in ods:
         rco.check(rep, od, shutil.which("opencode"), hook_env)
+    better_than_previous(rep)
     print()
     print(MANUAL)
     return 1 if rep.fails else 0

@@ -68,6 +68,7 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | GOV-9 | met | met | met | `/tune` proposes; human approves each change. OpenCode: `/tune` proposes; human approves |
 | GOV-10 | met | met | met | Only the optional OpenRouter key (needed for `--judge jev` only), from `OPENROUTER_API_KEY` or the plugin option (Claude Code secure storage), never written by Dryas; `redact.py`. OpenCode: same key handling and `redact.py` |
 | GOV-11 | met | met | met | `chain.py` runs `chain.json` stages in order: scope lock, gate, memory, observer. The memory stages run on Claude Code and OpenCode; Codex has none. OpenCode: `dryas.ts` runs the scope lock, gate and memory stages through the chain; `ruflo-pre-bash` and FlowObserve never run there |
+| GOV-12 | met | met | met | During a run hooks never ask: scope lock denies or allows (shellwrites, scope_audit.py), the gate allows planned or orchestrator-approved actions and denies the rest with NEEDS DECISION (runrules.py); preflight.py refuses to start a run that could prompt |
 | EXE-1 | met | met | met | `dryas:worktree`. OpenCode: `dryas-worktree` skill |
 | EXE-2 | met | met | met | `.orchestrate/PLAN.md`, globally git-ignored. OpenCode: same plan file |
 | EXE-3 | met | met | met | `planfile.py section`. OpenCode: `planfile.py section` |
@@ -88,5 +89,6 @@ The bindings are declared in [dryas.yaml](dryas.yaml).
 | REV-4 | met | met | met | `/interrogate` / `$interrogate`. OpenCode: `/interrogate` command |
 | REV-5 | met | met | met | Orchestrate finish step. OpenCode: `dryas-orchestrate` finish step |
 | REV-6 | met | met | met | `/benchmark-checklist`. OpenCode: `dryas-benchmark-checklist` skill |
+| REL-1 | met | met | met | `tools/compare_v1.py` replays the regression corpus through the previous release and this one; `tools/release_check.py` runs it; `/tune` shows prompts per task next to the 1.0 baseline |
 
 Operational detail for all of this is in [docs/workflow.md](../docs/workflow.md).
