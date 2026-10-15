@@ -133,7 +133,7 @@ class GateOutcomeInprocTest(unittest.TestCase):
         self.assertEqual(self.outcomes(), [])
 
     def test_ask_then_ran_logs_once(self):
-        gate.run({"tool_name": "Bash", "tool_use_id": "t7", "tool_input": {"command": "git push --force origin x"}})
+        gate.run({"tool_name": "Bash", "tool_use_id": "t7", "cwd": self.tmp, "tool_input": {"command": "git push --force origin x"}})
         with open(os.path.join(self.logs, "asks_pending.json"), encoding="utf-8") as f:
             self.assertEqual(json.load(f), ["t7"])
         self.post("t7").assert_not_called()
@@ -147,7 +147,7 @@ class GateOutcomeInprocTest(unittest.TestCase):
         self.assertEqual(self.outcomes(), [])
 
     def test_skipped_command_is_not_pending(self):
-        gate.run({"tool_name": "Bash", "tool_use_id": "t9", "tool_input": {"command": "ls"}})
+        gate.run({"tool_name": "Bash", "tool_use_id": "t9", "cwd": self.tmp, "tool_input": {"command": "ls"}})
         self.assertFalse(os.path.exists(os.path.join(self.logs, "asks_pending.json")))
 
     def test_pending_is_bounded(self):

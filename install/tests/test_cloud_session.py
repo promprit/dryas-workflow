@@ -104,7 +104,8 @@ class CloudSessionTest(unittest.TestCase):
             p = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "claude/jev/chain.py"), "pretool"],
                                input=json.dumps(ev), capture_output=True, text=True, env=mac, timeout=60)
             plugin.append(self.decision([p.stdout]))
-        self.assertEqual(cloud, ["deny", None, "ask"])
+        # GOV-12: a run never asks, so the discard is denied, not asked
+        self.assertEqual(cloud, ["deny", None, "deny"])
         self.assertEqual(cloud, plugin)
 
     def test_session_hooks_run_quietly(self):

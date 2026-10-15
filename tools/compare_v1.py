@@ -116,6 +116,9 @@ def main() -> int:
     if not (v1_dir / "jev" / "chain.py").is_file():
         sys.stderr.write("no Dryas 1.0 copy at %s (pass --v1)\n" % v1_dir)
         return 2
+    if not CORPUS.is_file():
+        sys.stderr.write("no regression corpus at %s\n" % CORPUS)
+        return 2
     s = run(v1_dir, max(a.runs, 5))
     print("%-24s %10s %10s" % ("", "Dryas 1.0", "this"))
     for k in ("asks", "denied_expected", "denied_total_expected", "wrong_denies", "p50_ms"):

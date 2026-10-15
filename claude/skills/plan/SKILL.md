@@ -121,7 +121,7 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 4. **Review focus:** for each input class or failure mode the spec implies, is there a task whose tests exercise it? The five uncovered ones most likely to bite a person go in Review Focus, and each line there gets its test added to the owning task. An empty section means you checked and found none, not that you skipped the check.
 5. **Risky actions:** every risky command a task's steps run is listed, each with its plain sentence.
 
-Fix issues inline; no need to re-review, just fix and move on. A spec requirement with no task gets a task. The review is done when the four checks find nothing left to fix.
+Fix issues inline; no need to re-review, just fix and move on. A spec requirement with no task gets a task. The review is done when the five checks find nothing left to fix.
 
 Also review the plan with `${CLAUDE_PLUGIN_ROOT}/skills/plan/plan-reviewer-prompt.md` when it has more than five tasks.
 

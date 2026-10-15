@@ -1,6 +1,10 @@
+import io
 import os
 import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "tools"))
 import compare_v1
@@ -23,6 +27,15 @@ class CompareV1Test(unittest.TestCase):
 
     def test_catches_no_less_than_v1(self):
         self.assertTrue(compare_v1.verdict(summary(denied=20), summary(denied=18)))
+
+    def test_missing_corpus_exits_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "jev"))
+            open(os.path.join(d, "jev", "chain.py"), "w").close()
+            with mock.patch.object(compare_v1, "CORPUS", Path(d) / "missing.jsonl"), \
+                    mock.patch.object(sys, "argv", ["compare_v1.py", "--v1", d]), \
+                    mock.patch.object(sys, "stderr", io.StringIO()):
+                self.assertEqual(compare_v1.main(), 2)
 
 
 if __name__ == "__main__":
