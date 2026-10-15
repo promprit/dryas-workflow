@@ -60,9 +60,18 @@ def _hook_entries(hooks: dict):
 hook_entries = _hook_entries
 
 
-def merge(settings: dict, fragment: dict) -> Tuple[dict, dict, List[str]]:
+def merge(settings: dict, fragment: dict, track_created: bool = False) -> Tuple[dict, dict, List[str]]:
+    """track_created: also record in added["created"] each container ([key, ...] path) merge made, so unmerge
+    prunes only those and a user's own empty container survives."""
     s = copy.deepcopy(settings)
     added = {"env": {}, "allow": [], "deny": [], "hooks": [], "top": {}}
+    created: List[List[str]] = []
+
+    def child(parent: dict, path: List[str], empty):
+        if path[-1] not in parent:
+            parent[path[-1]] = empty
+            created.append(path)
+        return parent[path[-1]]
     conflicts = []
     for k, v in fragment.items():
         if k in ("env", "permissions", "hooks"):
@@ -72,7 +81,7 @@ def merge(settings: dict, fragment: dict) -> Tuple[dict, dict, List[str]]:
             added["top"][k] = v
         elif s[k] != v:
             conflicts.append(k)
-    env = s.setdefault("env", {}) if fragment.get("env") else s.get("env", {})
+    env = child(s, ["env"], {}) if fragment.get("env") else s.get("env", {})
     for k, v in fragment.get("env", {}).items():
         if k not in env:
             env[k] = v
@@ -83,7 +92,7 @@ def merge(settings: dict, fragment: dict) -> Tuple[dict, dict, List[str]]:
         rules = fragment.get("permissions", {}).get(kind, [])
         if not rules:
             continue
-        cur = s.setdefault("permissions", {}).setdefault(kind, [])
+        cur = child(child(s, ["permissions"], {}), ["permissions", kind], [])
         for r in rules:
             if r not in cur:
                 cur.append(r)
@@ -92,13 +101,23 @@ def merge(settings: dict, fragment: dict) -> Tuple[dict, dict, List[str]]:
     for ev, m, h in _hook_entries(fragment.get("hooks", {})):
         if (ev, m, h["command"]) in have:
             continue
-        s.setdefault("hooks", {}).setdefault(ev, []).append({**({"matcher": m} if m is not None else {}), "hooks": [h]})
+        child(child(s, ["hooks"], {}), ["hooks", ev], []).append({**({"matcher": m} if m is not None else {}),
+                                                                   "hooks": [h]})
         added["hooks"].append([ev, m, h["command"]])
+    if track_created:
+        added["created"] = created
     return s, added, conflicts
 
 
 def unmerge(settings: dict, added: dict) -> dict:
+    """Takes out what merge added. Empty containers go when merge recorded creating them (added["created"]); a
+    record without that list (older installs) prunes every container left empty, as before."""
     s = copy.deepcopy(settings)
+    created = added.get("created")
+
+    def prune(parent: dict, path: List[str]) -> None:
+        if path[-1] in parent and not parent[path[-1]] and (created is None or path in created):
+            parent.pop(path[-1])
     for k, v in added.get("top", {}).items():
         if s.get(k) == v:
             s.pop(k)
@@ -106,30 +125,26 @@ def unmerge(settings: dict, added: dict) -> dict:
     for k, v in added.get("env", {}).items():
         if env.get(k) == v:
             env.pop(k)
-    if "env" in s and not s["env"]:
-        s.pop("env")
+    prune(s, ["env"])
     perms = s.get("permissions", {})
     for kind in ("allow", "deny"):
         if kind in perms:
             perms[kind] = [r for r in perms[kind] if r not in added.get(kind, [])]
-            if not perms[kind]:
-                perms.pop(kind)
-    if "permissions" in s and not s["permissions"]:
-        s.pop("permissions")
+            prune(perms, ["permissions", kind])
+    prune(s, ["permissions"])
     drop = {(ev, m, c) for ev, m, c in added.get("hooks", [])}
     hooks = s.get("hooks", {})
     for ev in list(hooks):
         groups = []
         for g in hooks[ev]:
-            g = dict(g, hooks=[h for h in g.get("hooks", []) if (ev, g.get("matcher"), h.get("command")) not in drop])
-            if g["hooks"]:
+            kept = [h for h in g.get("hooks", []) if (ev, g.get("matcher"), h.get("command")) not in drop]
+            if len(kept) == len(g.get("hooks", [])):  # a group of the user's own, even an empty one, stays as is
                 groups.append(g)
-        if groups:
-            hooks[ev] = groups
-        else:
-            hooks.pop(ev)
-    if "hooks" in s and not s["hooks"]:
-        s.pop("hooks")
+            elif kept:
+                groups.append(dict(g, hooks=kept))
+        hooks[ev] = groups
+        prune(hooks, ["hooks", ev])
+    prune(s, ["hooks"])
     return s
 
 

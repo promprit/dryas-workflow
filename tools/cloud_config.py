@@ -25,7 +25,7 @@ ENTRY = '"${DRYAS_PY:-python3}" -X utf8 "$CLAUDE_PROJECT_DIR/.dryas/jev/cloud_ho
 _HOOK = re.compile(r'"\$\{CLAUDE_PLUGIN_ROOT\}/jev/([A-Za-z0-9_]+\.py)"(.*)$')
 SKIP_SCRIPTS = ("rules_inject.py",)  # the CLAUDE.md block carries the rules in a repo copy
 ALLOW = ("mcp__jev",)
-GITIGNORE = (".dryas/state/", ".dryas/**/__pycache__/", ".orchestrate/")
+GITIGNORE = (".dryas/state/", ".dryas/**/__pycache__/", ".claude/skills/**/__pycache__/", ".orchestrate/")
 PROJ = "${CLAUDE_PROJECT_DIR:-.}"
 
 
@@ -73,13 +73,23 @@ def parse(name: str, text: Optional[str]) -> Dict[str, Any]:
     return obj
 
 
-def dump(obj: Dict[str, Any]) -> str:
-    return json.dumps(obj, indent=2) + "\n"
+_INDENT = re.compile(r"\n([ \t]+)\S")
 
 
-def restore(obj: Dict[str, Any], original: Optional[str]) -> Optional[str]:
+def dump(obj: Dict[str, Any], like: Optional[str] = None) -> str:
+    """obj as JSON in the format of the text `like` (the file as it is): its indent (a tab or N spaces, default 2),
+    line ends and final newline; non-ASCII text stays readable."""
+    m = _INDENT.search(like or "")
+    indent = (2 if m is None else "\t" if m.group(1).startswith("\t") else len(m.group(1)))
+    out = json.dumps(obj, indent=indent, ensure_ascii=False)
+    if like is None or like.endswith("\n"):
+        out += "\n"
+    return out.replace("\n", "\r\n") if like and "\r\n" in like else out
+
+
+def restore(obj: Dict[str, Any], original: Optional[str], text: str) -> Optional[str]:
     """Text for obj once Dryas's entries are out: the original bytes when nothing else changed, None when Dryas
-    created the file and nothing is left."""
+    created the file and nothing is left, else obj in the format of the current text."""
     if original is not None:
         try:
             if json.loads(original) == obj:
@@ -88,18 +98,18 @@ def restore(obj: Dict[str, Any], original: Optional[str]) -> Optional[str]:
             pass
     elif not obj:
         return None
-    return dump(obj)
+    return dump(obj, text)
 
 
 def add_settings(text: Optional[str], frag: Dict[str, Any]) -> Tuple[str, Dict[str, Any], List[str]]:
-    new, added, conflicts = sm.merge(parse(".claude/settings.json", text), frag)
-    return dump(new), added, conflicts
+    new, added, conflicts = sm.merge(parse(".claude/settings.json", text), frag, track_created=True)
+    return dump(new, text), added, conflicts
 
 
 def remove_settings(text: Optional[str], added: Dict[str, Any], original: Optional[str]) -> Optional[str]:
     if text is None:
         return None
-    return restore(sm.unmerge(parse(".claude/settings.json", text), added), original)
+    return restore(sm.unmerge(parse(".claude/settings.json", text), added), original, text)
 
 
 def add_mcp(text: Optional[str], owned: Optional[Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
@@ -111,7 +121,7 @@ def add_mcp(text: Optional[str], owned: Optional[Dict[str, Any]]) -> Tuple[str, 
     if cur is not None and cur != mcp_entry() and cur != owned:
         raise CloudError(".mcp.json already has a jev server that Dryas did not write; nothing changed")
     servers["jev"] = mcp_entry()
-    return dump(obj), mcp_entry()
+    return dump(obj, text), mcp_entry()
 
 
 def remove_mcp(text: Optional[str], entry: Optional[Dict[str, Any]], original: Optional[str]) -> Optional[str]:
@@ -123,7 +133,7 @@ def remove_mcp(text: Optional[str], entry: Optional[Dict[str, Any]], original: O
         del servers["jev"]
         if not servers and "mcpServers" not in parse(".mcp.json", original):
             del obj["mcpServers"]
-    return restore(obj, original)
+    return restore(obj, original, text)
 
 
 def _via_file(text: Optional[str], edit: Callable[[Path], None]) -> Optional[str]:

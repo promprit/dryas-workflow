@@ -182,13 +182,71 @@ class EdgeCaseTest(unittest.TestCase):
             for line in cfg.GITIGNORE:
                 self.assertEqual([x.strip() for x in text.splitlines()].count(line), 1, (orig, line))
             self.assertEqual(cfg.remove_gitignore(text, rec), orig, repr(orig))
-        text, rec = cfg.add_gitignore(have + ".dryas/**/__pycache__/\n")
-        self.assertEqual((text, rec["added"]), (have + ".dryas/**/__pycache__/\n", []))
+        full = have + ".dryas/**/__pycache__/\n.claude/skills/**/__pycache__/\n"
+        text, rec = cfg.add_gitignore(full)
+        self.assertEqual((text, rec["added"]), (full, []))
 
     def test_gitignore_removal_keeps_lines_the_user_added_after(self):
         text, rec = cfg.add_gitignore("a\n")
         out = cfg.remove_gitignore(text + "later/\n", rec)
         self.assertEqual(out, "a\nlater/\n")
+
+
+class RoundTripTest(unittest.TestCase):
+    """init/update/remove leave the user's own config content and bytes as they were (interrogate B1, A5, B9, B12)."""
+    FRAG = cfg.fragment(PLUGIN_HOOKS)
+    EMPTY = ('{"hooks": {}}', '{"env": {}}', '{"permissions": {"allow": []}}', '{"permissions": {}}',
+             '{"hooks": {"Stop": []}}', '{"hooks": {"PreToolUse": []}}',
+             '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]}}',
+             '{\n    "hooks": {},\n    "permissions": {\n        "allow": []\n    }\n}')  # 4 spaces, no final newline
+
+    @staticmethod
+    def _update(text, added, orig):
+        """What dryas_cloud update does: take the earlier entries out, then add them again."""
+        return cfg.add_settings(cfg.remove_settings(text, added, orig), RoundTripTest.FRAG)
+
+    def test_empty_user_keys_survive_remove(self):
+        for user in self.EMPTY:
+            text, added, _ = cfg.add_settings(user, self.FRAG)
+            self.assertEqual(cfg.remove_settings(text, added, user), user, user)
+            edited = json.loads(text)
+            edited["later"] = 1  # a user edit after init: removal cannot fall back to the original bytes
+            want = dict(json.loads(user), later=1)
+            self.assertEqual(json.loads(cfg.remove_settings(json.dumps(edited), added, user)), want, user)
+
+    def test_no_drift_after_three_updates(self):
+        for user in self.EMPTY + (USER, None):
+            text, added, _ = cfg.add_settings(user, self.FRAG)
+            first = text
+            for _ in range(3):
+                text, added, _ = self._update(text, added, user)
+                self.assertEqual(text, first, user)
+            self.assertEqual(cfg.remove_settings(text, added, user), user, user)
+
+    def test_removal_after_a_user_edit_keeps_the_files_format(self):
+        user = '{\n    "a": "caf\u00e9"\n}'  # 4 spaces, no final newline, non-ASCII
+        text, added, _ = cfg.add_settings(user, self.FRAG)
+        obj = json.loads(text)
+        obj["b"] = 2
+        out = cfg.remove_settings(cfg.dump(obj, text), added, user)
+        self.assertEqual(out, '{\n    "a": "caf\u00e9",\n    "b": 2\n}')
+
+    def test_dump_keeps_indent_and_readable_text(self):
+        for user, unit in (('{\n    "a": "\u00e9t\u00e9"\n}\n', "    "), ('{\n\t"a": "\u00e9t\u00e9"\n}\n', "\t"),
+                           ('{"a": "\u00e9t\u00e9"}', "  ")):
+            for text in (cfg.add_settings(user, self.FRAG)[0], cfg.add_mcp(user, None)[0]):
+                self.assertIn('"\u00e9t\u00e9"', text)
+                self.assertNotIn("\\u00e9", text)
+                self.assertTrue(text.startswith("{\n" + unit + '"'), (user, text[:20]))
+                self.assertEqual(text.endswith("\n"), user.endswith("\n"), user)
+        text, _, _ = cfg.add_settings(None, self.FRAG)
+        self.assertTrue(text.startswith('{\n  "') and text.endswith("}\n"))
+
+    def test_gitignore_covers_skill_bytecode(self):
+        self.assertIn(".claude/skills/**/__pycache__/", cfg.GITIGNORE)
+        text, rec = cfg.add_gitignore(None)
+        self.assertIn(".claude/skills/**/__pycache__/\n", text)
+        self.assertIsNone(cfg.remove_gitignore(text, rec))
 
 
 if __name__ == "__main__":
