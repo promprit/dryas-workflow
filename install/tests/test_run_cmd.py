@@ -502,7 +502,8 @@ class WrapperTest(unittest.TestCase):
             path += [sysroot + r"\System32", sysroot + r"\System32\WindowsPowerShell\v1.0"]
         else:
             path += ["/usr/bin", "/bin"]
-        base = {k: v for k, v in os.environ.items() if k != "DRYAS_DATA_ROOT" and not k.startswith("JEV_")}
+        base = {k: v for k, v in os.environ.items()
+                if k not in ("DRYAS_DATA_ROOT", "CLAUDE_CONFIG_DIR", "CODEX_HOME") and not k.startswith("JEV_")}
         self.env = dict(base, HOME=str(self.home), USERPROFILE=str(self.home), PATH=os.pathsep.join(path))
 
     def tearDown(self):
@@ -522,9 +523,15 @@ class WrapperTest(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "Windows usually has an 8.3 short name for the space")
     def test_space_in_home_refuses_ruflo(self):
-        p = self.wrapper("--preflight-only")
+        # 2.0: Ruflo is an optional extra, so only an explicit --with-ruflo meets the space check
+        p = self.wrapper("--preflight-only", "--with-ruflo")
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn("--no-ruflo", p.stdout + p.stderr)
+        self.assertIn("--with-ruflo", p.stdout + p.stderr)
+
+    @unittest.skipIf(os.name == "nt", "Windows usually has an 8.3 short name for the space")
+    def test_space_in_home_is_fine_without_ruflo(self):
+        p = self.wrapper("--preflight-only")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
 
 if __name__ == "__main__":
