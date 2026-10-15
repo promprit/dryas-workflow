@@ -9,9 +9,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 RESET = {"command": "git reset --hard", "description": "reset"}
-# The shim's approval code for the RESET call: first 4 hex of SHA-1 over "bash\n" + JSON.stringify(args).
 RESET_CODE = hashlib.sha1(("bash\n" + json.dumps(RESET, separators=(",", ":"))).encode()).hexdigest()[:4]
-SCRIPT = (  # keyword in the latest user message -> tool and arguments; first match wins
+SCRIPT = (
     ("DELEGATE_APPROVE", "task", {"description": "probe", "prompt": "dryas allow %s RESET" % RESET_CODE,
                                   "subagent_type": "dryas-executor-fast"}),
     ("DELEGATE", "task", {"description": "probe", "prompt": "WRITE_OUT", "subagent_type": "dryas-executor-fast"}),
@@ -19,7 +18,7 @@ SCRIPT = (  # keyword in the latest user message -> tool and arguments; first ma
     ("WRITE_ALLOWED", "write", {"filePath": "allowed.txt", "content": "x"}),
     ("dryas allow", "bash", RESET),
     ("RESET", "bash", RESET),
-    ("ECHO", "bash", {"command": "echo hi", "description": "echo"}),
+    ("ECHO", "bash", {"command": "echo hi; sleep 0.5", "description": "echo"}),
     ("LS", "bash", {"command": "ls", "description": "list"}),
     ("MEMSEARCH", "jev_memory_search", {"query": "opencode"}),
 )
