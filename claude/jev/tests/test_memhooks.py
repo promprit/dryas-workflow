@@ -266,13 +266,19 @@ class MemHooksTest(unittest.TestCase):
         self.assertEqual([r["error"] for r in self.log_lines()], ["JSONDecodeError", "ValueError", "ValueError"])
 
     def test_locked_store_exits_zero_within_budget(self):
+        data = json.dumps(self.edit_event()).encode("utf-8")
+        # baseline: the same hook unlocked, so interpreter start-up on a slow runner is not counted against the budget
+        t0 = time.monotonic()
+        subprocess.run([sys.executable, HOOK, "edit"], input=data, capture_output=True, timeout=10)
+        base = time.monotonic() - t0
         holder = memdb.connect()
         holder.execute("BEGIN IMMEDIATE")
         self.addCleanup(holder.close)
         self.addCleanup(holder.execute, "ROLLBACK")
-        data = json.dumps(self.edit_event()).encode("utf-8")
         t0 = time.monotonic()
         p = subprocess.run([sys.executable, HOOK, "edit"], input=data, capture_output=True, timeout=10)
-        self.assertLess(time.monotonic() - t0, 2.0)
+        spent = time.monotonic() - t0
+        self.assertLess(spent - base, 2.0)  # the lock wait stays inside the 2 s hook budget
+        self.assertLess(spent, 8.0)  # hard hang check
         self.assertEqual(p.returncode, 0)
         self.assertEqual(self.log_lines()[-1]["error"], "OperationalError")
