@@ -1,12 +1,12 @@
 {
   "pretool": [
-    {"name": "scope-lock", "harness": ["claude", "codex"], "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/scope_lock.py"], "match": "Bash|Edit|Write|MultiEdit|NotebookEdit", "timeout": 3, "per_file": true, "fail_closed": true},
-    {"name": "jev-gate", "harness": ["claude", "codex"], "component": "jev", "cmd": ["$PY", "-X", "utf8", "$CD/jev/gate.py"], "match": "Bash|Write|Edit|MultiEdit|NotebookEdit", "timeout": 5},
+    {"name": "scope-lock", "harness": ["claude", "codex", "opencode"], "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/scope_lock.py"], "match": "Bash|Edit|Write|MultiEdit|NotebookEdit", "timeout": 3, "per_file": true, "fail_closed": true},
+    {"name": "jev-gate", "harness": ["claude", "codex", "opencode"], "component": "jev", "cmd": ["$PY", "-X", "utf8", "$CD/jev/gate.py"], "match": "Bash|Write|Edit|MultiEdit|NotebookEdit", "timeout": 5},
     {"name": "ruflo-pre-bash", "component": "ruflo", "cmd": ["$PY", "-X", "utf8", "$CD/ruflo/run.py", "helper", "node", "$DRYAS_DATA_ROOT/ruflo/helpers/hook-handler.cjs", "pre-bash"], "requires_path": "$DRYAS_DATA_ROOT", "timeout": 5, "match": "Bash", "observe": true},
     {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["$PY", "-X", "utf8", "-S", "$HOME/.flowobserve/bin/fo_hook.py"], "timeout": 1, "observe": true}
   ],
   "prompt": [
-    {"name": "jev-route", "harness": ["claude", "codex"], "component": "jev", "cmd": ["$PY", "-X", "utf8", "$CD/jev/route.py"], "timeout": 5},
+    {"name": "jev-route", "harness": ["claude", "codex", "opencode"], "component": "jev", "cmd": ["$PY", "-X", "utf8", "$CD/jev/route.py"], "timeout": 5},
     {"name": "context-watch", "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/context_watch.py"], "timeout": 2},
     {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["$PY", "-X", "utf8", "-S", "$HOME/.flowobserve/bin/fo_hook.py"], "timeout": 1, "observe": true}
   ],

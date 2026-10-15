@@ -322,7 +322,7 @@ def main(argv: List[str]) -> int:
     if kind == "pretool":
         jevlog.append("calls", {"tool": str(event.get("tool_name", ""))})
         stages = load_stages("pretool", harness)
-        out = pretool_codex(event, stages) if harness == "codex" else pretool(event, raw, stages)
+        out = pretool_codex(event, stages) if harness in ("codex", "opencode") else pretool(event, raw, stages)
     elif kind == "prompt":
         out = prompt(event, raw, load_stages("prompt", harness))
     elif kind in OBSERVE_KINDS:
