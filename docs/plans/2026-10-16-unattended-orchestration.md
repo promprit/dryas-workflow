@@ -10,7 +10,7 @@
 
 **Spec:** `docs/specs/2026-10-15-scope-lock-shell-writes-design.md`
 
-**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); **Task 12 (release) runs last**.
+**Run order:** Tasks 1→2→3→11→13 are a chain; 5 needs 1-2, 6 needs 5; 4, 7, 8, 9 are independent; 10 after 9; 14 after 10 and 13 (shared files); 15 is independent; **Task 12 (release) runs last**.
 
 ## Global Constraints
 
@@ -2213,3 +2213,75 @@ def better_than_previous(rep):
      where `VERSION` is the version this checkout ships (read it from `claude/.claude-plugin/plugin.json` at module load, as `json.loads(...)["version"]`, if the module has no such constant yet). Call `better_than_previous(rep)` from `main` once, after the per-account checks.
 - [ ] **Step 4: Run the tests.** Run the Done commands. Expected: PASS; the release_check line is PASS or SKIP. If the template budget test fails, shorten the two new lines; do not raise the budget.
 - [ ] **Step 5: Commit** the Scope files as `docs(spec): GOV-12 no prompts during a run, REL-1 no release worse than the last (task 14)` when the dispatch prompt allows it; otherwise report and the orchestrator commits.
+
+## Task 15: Setup keeps this Mac on the repo's version
+
+Goal: `install/install.sh` (plugin_setup.setup) upgrades the installed Dryas plugin when Claude Code still runs an older cached version than the repo ships, and `verify` fails when the installed version and the repo's differ, so a merged release can never sit unused on this Mac again.
+Scope:
+- install/plugin_setup.py
+- install/tests/test_plugin_setup_upgrade.py
+Done:
+- `python3 -m pytest -q install/tests/test_plugin_setup_upgrade.py install/tests/test_plugin_setup.py` passes
+Failing test first: install/tests/test_plugin_setup_upgrade.py :: UpgradeTest.test_stale_install_is_updated
+
+**Interfaces:**
+- Consumes: `plugin_entry(cd)` (the `claude plugin list --json` entry, which carries `version`), `di.run`, `env_prefix`, `MARKET`, `ID`, `REPO`.
+- Produces: `plugin_setup.repo_version(repo: Path) -> str` (from `claude/.claude-plugin/plugin.json`, `""` when unreadable); `plugin_setup.upgrade_if_stale(cd: Path, env: Dict[str, str], repo: Path, entry: Optional[dict]) -> Optional[dict]` (the refreshed entry; `None` when an update command failed); a `verify` line `installed version matches this repo (<version>)`.
+
+- [ ] **Step 1: Write the failing test.** Create `install/tests/test_plugin_setup_upgrade.py`. Read `install/tests/test_plugin_setup.py` first and reuse its `Env` helper and `fakecli` the same way (they fake `claude plugin list --json` and log every `claude` call). Write these tests:
+  - `test_stale_install_is_updated`: the fake plugin list reports `dryas@dryas-workflow` at version `1.0.0` while `repo_version(REPO)` is the repo's version; after `plugin_setup.setup(...)` (call it the way `test_plugin_setup.py` does for a normal setup) the logged calls contain `["claude", "plugin", "marketplace", "update", "dryas-workflow"]` followed by `["claude", "plugin", "update", "dryas@dryas-workflow"]`, in that order, after the install step.
+  - `test_current_install_is_not_updated`: the fake list reports the repo's version; no `marketplace update` or `plugin update` call is logged.
+  - `test_failed_update_stops_setup`: the fake `claude` fails `plugin update` (fakecli `fail=["plugin update"]`); `setup` returns non-zero and prints `error:` with the failing command; `settings.json` is not changed.
+  - `test_verify_flags_version_mismatch`: with the fake list at `1.0.0`, `plugin_setup.verify(...)` output contains `FAIL  installed version matches this repo` and the detail tells the user, in plain words, to run setup again and restart Claude Code; with the repo's version it prints `PASS  installed version matches this repo`.
+  - `test_repo_version_reads_plugin_json`: `plugin_setup.repo_version(REPO)` equals the `version` in `claude/.claude-plugin/plugin.json`; a missing folder gives `""`.
+- [ ] **Step 2: Run it to see it fail.** Run: `python3 -m pytest -q install/tests/test_plugin_setup_upgrade.py`. Expected: FAIL with `AttributeError: module 'plugin_setup' has no attribute 'repo_version'`.
+- [ ] **Step 3: Implement.** In `install/plugin_setup.py`, after `install_path`, add:
+
+```python
+def repo_version(repo: Path) -> str:
+    """The version this checkout ships (claude/.claude-plugin/plugin.json); "" when it cannot be read."""
+    try:
+        data = json.loads((Path(repo) / "claude" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        return str(data.get("version") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def upgrade_if_stale(cd: Path, env: Dict[str, str], repo: Path, entry: Optional[dict]) -> Optional[dict]:
+    """`claude plugin install` keeps an older cached copy of a directory-marketplace plugin, so a merged release is not
+    what Claude Code runs. When the installed version is not the repo's, refresh the marketplace and update the
+    plugin. Returns the refreshed entry, the old one when nothing was stale, None when an update command failed."""
+    want, have = repo_version(repo), (entry or {}).get("version")
+    if not want or not have or have == want:
+        return entry
+    print("note: %s runs Dryas %s, this repo ships %s; updating" % (cd, have, want))
+    for argv in (["claude", "plugin", "marketplace", "update", MARKET], ["claude", "plugin", "update", ID]):
+        print("%s%s" % (env_prefix(cd), " ".join(argv)))
+        rc = di.run(argv, env=env)
+        if rc != 0:
+            print("error: `%s` failed (exit %d); %s not changed" % (" ".join(argv[:4]), rc, cd))
+            return None
+    return plugin_entry(cd)
+```
+
+  In `setup`, right after `entry = plugin_entry(cd)` (the first one, after the dry-run return), add:
+
+```python
+    entry = upgrade_if_stale(cd, env, repo, entry)
+    if entry is None:
+        return 1
+```
+
+  In `verify`, after the "dryas loads without errors" line, add:
+
+```python
+    want, have = repo_version(REPO), (entry or {}).get("version")
+    if want and have:
+        fails += say("PASS" if have == want else "FAIL", "installed version matches this repo (%s)" % want,
+                     "" if have == want else "Claude Code runs %s; run install/install.sh again, then restart "
+                                             "Claude Code" % have)
+```
+
+  In the dry-run branch of `setup` (`if dry:`), print the two update commands too when the installed version is stale (read `plugin_entry(cd)` there; print, do not run).
+- [ ] **Step 4: Run the tests.** Run the Done command. Expected: PASS. Existing `test_plugin_setup.py` cases whose fake list reports an old version now see two extra logged calls: if one asserts the exact call list, add the two update calls to its expectation (they are the fix), do not remove the version from the fake.
+- [ ] **Step 5: Commit** `install/plugin_setup.py install/tests/test_plugin_setup_upgrade.py` (and `install/tests/test_plugin_setup.py` only if Step 4 changed it; then add it to this task's Scope in your report) as `fix(install): setup upgrades a stale plugin copy; verify checks the version (task 15)`, with a pathspec commit.
