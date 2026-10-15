@@ -22,6 +22,7 @@ import thresholds
 import local_judge
 import pathclass
 import providers
+import runrules
 import task_review
 import taskctx
 
@@ -228,6 +229,27 @@ def _local_decision(local: Dict[str, Any]) -> Optional[Tuple[str, str]]:
     return None
 
 
+RUN_DENY = (". Denied during an unattended run, nobody is asked: find a safer way, or end your report with "
+            "`NEEDS DECISION: <exact command> because <reason>` for the orchestrator")
+
+
+def _run_active(loaded: Tuple[Optional[str], Any]) -> bool:
+    """A run is active when active.json exists with a non-empty active list; unreadable counts as active."""
+    root, data = loaded
+    if root is None:
+        return False
+    return not isinstance(data, dict) or bool(data.get("active"))
+
+
+def _unattended(d: Tuple[str, str], tool: str, cmd: str, root: str, cwd: str) -> Tuple[Optional[Tuple[str, str]], str]:
+    """During a run nobody is asked: an ask the plan or the orchestrator already decided is allowed
+    (runrules.covered), any other becomes a deny the executor can report as NEEDS DECISION."""
+    rule = runrules.covered(cmd, root, cwd) if tool == "Bash" else None
+    if rule:
+        return None, rule
+    return ("deny", d[1].replace(" - please confirm", "") + RUN_DENY), "run_deny"
+
+
 def _head(tool: str, ti: Dict[str, Any]) -> Dict[str, Any]:
     if tool != "Bash":
         return {}
@@ -265,7 +287,8 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     ti = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
     cwd = str(event.get("cwd") or "")
     loaded = taskctx.load(cwd)
-    base = dict({"tool": tool}, **_head(tool, ti), **taskctx.context(cwd, loaded),
+    active = _run_active(loaded)
+    base = dict({"tool": tool, "run": active}, **_head(tool, ti), **taskctx.context(cwd, loaded),
                 **({"tool_use_id": str(event["tool_use_id"])[:64]} if isinstance(event.get("tool_use_id"), str) else {}))
     base = dict(base, **_task_review(tool, ti, cwd, loaded))
     if tool != "Bash" and local_file(tool, ti, cwd):
@@ -304,9 +327,12 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
         v = providers.ask(state, QUESTIONS, local, t_all, judge_fn)
         a = v["answers"]
         d = _local_decision(local) if v["provider"] == "local" else decide(a, t)
+        run_rule = ""
+        if d and d[0] == "ask" and active:
+            d, run_rule = _unattended(d, tool, cmd, str(loaded[0]), cwd)
         # Try to log and format decision, but don't let logging failure suppress a computed decision
         try:
-            jevlog.append("gate", _record(base, d, a, v, t, local, local_ms))
+            jevlog.append("gate", _record(dict(base, rule=run_rule) if run_rule else base, d, a, v, t, local, local_ms))
         except Exception:
             try:
                 jevlog.append("gate", dict(base, decision=d[0] if d else "none", error="logging_failed"))
