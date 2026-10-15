@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 2.3.0 - 2026-10-15
 
 ### Added
 - The OpenCode edition at Dryas Full: memory hook stages, context-window warnings, compaction keep and `/handoff` run on OpenCode (`opencode_session.py` turns OpenCode session messages into a transcript for the existing engines).

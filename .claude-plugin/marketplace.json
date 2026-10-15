@@ -12,7 +12,7 @@
       "name": "dryas",
       "source": "./claude",
       "description": "Dryas Workflow for Claude Code: rules, scope lock, Jev chain, agents, commands and skills.",
-      "version": "2.2.0"
+      "version": "2.3.0"
     }
   ]
 }
