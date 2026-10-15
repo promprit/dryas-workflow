@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="_brand.css">
+<script>if (new URLSearchParams(location.search).get("theme") === "dark") document.documentElement.dataset.theme = "dark";</script>
+<style>
+body { width: 1600px; height: 420px; }
+svg { position: absolute; left: 0; top: 0; }
+text { font-family: Archivo, Helvetica, sans-serif; font-weight: 500; letter-spacing: 0.06em; fill: var(--ink); }
+text.t { fill: var(--ink-2); }
+text.m { font-family: "JetBrains Mono", monospace; font-weight: 400; letter-spacing: 0; fill: var(--ink-2); }
+.g { position: absolute; font-size: 16px; transform: translateX(-50%); white-space: nowrap; top: 180px; }
+.node { fill: var(--ground); }
+.gn { stroke: var(--accent-ground); }
+</style></head>
+<body>
+<svg viewBox="0 0 1600 420" width="1600" height="420">
+<text class="t" x="64" y="72" font-size="18">THE DRYAS LOOP</text>
+<g transform="translate(0,50)">
+<path class="line" d="M154 200H1446"/>
+<path class="ink" d="M1020 186C1000 110 820 110 800 186"/>
+<path class="ink" d="M788 168 800 186 813 170"/>
+<text class="m" x="910" y="100" font-size="16" text-anchor="middle">climb a tier, retry</text>
+<circle class="ink node gn" cx="140" cy="200" r="14"/>
+<circle class="ink node" cx="360" cy="200" r="14"/>
+<circle class="ink node" cx="580" cy="200" r="14"/>
+<circle class="ink node" cx="800" cy="200" r="14"/>
+<circle class="ink node" cx="1020" cy="200" r="14"/>
+<circle class="ink node" cx="1240" cy="200" r="14"/>
+<circle class="ink node gn" cx="1460" cy="200" r="14"/>
+<g font-size="20" text-anchor="middle">
+<text x="140" y="260">BRAINSTORM</text><text x="360" y="260">PLAN</text><text x="580" y="260">JUDGE</text><text x="800" y="260">BUILD</text><text x="1020" y="260">ESCALATE</text><text x="1240" y="260">REVIEW</text><text x="1460" y="260">SHIP</text>
+</g>
+</g>
+</svg>
+<span class="gate g" style="left:140px">YOU APPROVE</span>
+<span class="gate g" style="left:1460px">YOU APPROVE</span>
+</body></html>
