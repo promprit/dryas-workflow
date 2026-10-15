@@ -37,6 +37,17 @@ class CompareV1Test(unittest.TestCase):
                     mock.patch.object(sys, "stderr", io.StringIO()):
                 self.assertEqual(compare_v1.main(), 2)
 
+    def _decision_of(self, reason):
+        out = {"hookSpecificOutput": {"permissionDecision": "deny", "permissionDecisionReason": reason}}
+        with tempfile.TemporaryDirectory() as d:
+            fake = Path(d) / "chain.py"
+            fake.write_text("import sys,json;sys.stdin.read();print(json.dumps(%r))" % (out,), encoding="utf-8")
+            return compare_v1._one(fake, {"tool_name": "Bash"}, dict(os.environ))[0]
+
+    def test_one_counts_prefixed_scope_denies(self):
+        self.assertEqual(self._decision_of("[scope-lock] scope lock: x"), "deny")
+        self.assertEqual(self._decision_of("[jev-gate] Jev gate: risky"), "gate_deny")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -63,7 +63,7 @@ def _one(chain: Path, event: Dict[str, Any], env: Dict[str, str]) -> (str, float
     except (ValueError, KeyError, TypeError):
         return "allow", ms
     d = out.get("permissionDecision", "allow")
-    if d == "deny" and not str(out.get("permissionDecisionReason", "")).startswith("scope lock"):
+    if d == "deny" and "scope lock:" not in str(out.get("permissionDecisionReason", "")):
         d = "gate_deny"
     return d, ms
 
