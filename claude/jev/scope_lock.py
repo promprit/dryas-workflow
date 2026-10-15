@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Chain stage 0 on PreToolUse: deny Edit/Write outside the active tasks' Scope globs.
+"""Chain stage 0 on PreToolUse: deny Edit/Write outside the active tasks' Scope globs (this session's Claude scratchpad excepted).
 
 Pure path check, no model call. Active only when a worktree has .orchestrate/active.json
 with a non-empty "active" list. While active it fails closed (unreadable PLAN.md -> deny,
@@ -185,6 +185,8 @@ def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                                            "permissionDecisionReason": "scope lock: %s call has no file path" % tool}}
         return None
     path = os.path.realpath(os.path.join(cwd, str(target)))
+    if _in_scratchpad(path, event):
+        return None
     has_agent_id = "agent_id" in event
     roots = sorted({r for r in (find_root(cwd), find_root(os.path.dirname(path))) if r})
     for root in roots:
