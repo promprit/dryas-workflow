@@ -51,6 +51,7 @@ NOT_COPIED = (
     ("Codex files", "cloud sessions run Claude Code"),
 )
 OWN_EXCLUDED = ("update-my-vault", "fo-iterm", "claude-hud")
+CORE_SKIP = frozenset(("rules_inject.py",))  # the plugin's SessionStart hook; the CLAUDE.md block replaces it
 SKIP_DIRS = frozenset(("tests", "logs", "compact", "__pycache__", ".pytest_cache"))
 TEXT = (".md", ".template")
 MAX_FILE = 5 * 1024 * 1024
@@ -77,7 +78,7 @@ class _Same(dict):
 def _walk(base: Path) -> Iterator[Tuple[str, Path]]:
     for p in sorted(base.rglob("*")):
         rel = p.relative_to(base)
-        if p.is_file() and not set(rel.parts[:-1]) & SKIP_DIRS and p.suffix != ".pyc" and p.name != ".gitignore":
+        if p.is_file() and not p.is_symlink() and not set(rel.parts[:-1]) & SKIP_DIRS and p.suffix != ".pyc" and p.name != ".gitignore":
             yield rel.as_posix(), p
 
 
@@ -125,6 +126,8 @@ def core(repo: Path, nm: ct.Names, ver: str, persist_memory: bool) -> Dict[str, 
         out[rel] = entry(data, f.relative_to(repo).as_posix(), "dryas", ver, "MIT", lic, notice, _exec(f))
 
     for rel, f in _walk(repo / "claude/jev"):
+        if rel in CORE_SKIP:
+            continue
         put(".dryas/jev/" + rel, f, render.chain_bytes(f, list(COMPS), _Same()) if rel == "chain.json" else None)
     for rel, f in _walk(repo / "claude/pstack"):
         put(".dryas/pstack/" + rel, f, lic=PSTACK_LICENCE,
@@ -287,6 +290,18 @@ def design(repo: Path, claude_dir: Path, nm: ct.Names, skipped: List[Tuple[str, 
     return out
 
 
+def _binaries(src: Path) -> List[str]:
+    bad: List[str] = []
+    for rel, f in _walk(src):
+        try:
+            f.read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            bad.append(rel)
+        except OSError:
+            continue
+    return bad
+
+
 def _secret_lines(src: Path) -> List[str]:
     hits: List[str] = []
     for rel, f in _walk(src):
@@ -307,8 +322,8 @@ def own(claude_dir: Path, wanted: List[str], confirmed: List[str], nm: ct.Names,
         if not _OWN_NAME.match(name):
             skipped.append((name, "not a skill folder name"))
             continue
-        if name in OWN_EXCLUDED:
-            skipped.append((name, "excluded: " + reasons[name]))
+        if name.lower() in OWN_EXCLUDED:
+            skipped.append((name, "excluded: " + reasons[name.lower()]))
             continue
         if not (src / "SKILL.md").is_file():
             skipped.append((name, "no skills/%s/SKILL.md in the Claude config dir" % name))
@@ -320,6 +335,11 @@ def own(claude_dir: Path, wanted: List[str], confirmed: List[str], nm: ct.Names,
         if hits and name not in confirmed:
             skipped.append((name, "secret-shaped text at %s; review it, then pass --confirm-own %s"
                             % (", ".join(hits[:5]), name)))
+            continue
+        blobs = _binaries(src)
+        if blobs and name not in confirmed:
+            skipped.append((name, "binary file %s cannot be scanned; review it, then pass --confirm-own %s"
+                            % (", ".join(blobs[:5]), name)))
             continue
         files, why = _skill_files(src, ".claude/skills/" + nm.name(name), lambda t: t)
         if why:

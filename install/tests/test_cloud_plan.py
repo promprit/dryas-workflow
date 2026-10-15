@@ -249,3 +249,52 @@ class AddedGapsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HardeningTest(unittest.TestCase):
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(self.base), True)
+        self.cd = self.base / "cfg"
+
+    def _build(self, name, confirm=False):
+        return cp.build(ROOT, dict(OPTS, own=[name], confirm_own=[name] if confirm else []), self.cd)
+
+    def test_symlink_in_own_skill_is_skipped(self):
+        p = fx.own_skill(self.cd, "linky", "---\nname: linky\n---\nx\n")
+        secret = self.base / "secret.txt"
+        secret.write_text("outside the skill\n")
+        try:
+            os.symlink(str(secret), str(p.parent / "leak.txt"))
+        except (OSError, NotImplementedError):
+            self.skipTest("no symlinks here")
+        plan = self._build("linky")
+        self.assertFalse(any("leak.txt" in r for r in plan["files"]))
+        self.assertIn(".claude/skills/linky/SKILL.md", plan["files"])
+        self.assertFalse(any(b"outside the skill" in e["data"] for e in plan["files"].values()))
+
+    def test_excluded_names_match_case_insensitively(self):
+        fx.own_skill(self.cd, "Update-My-Vault", "---\nname: Update-My-Vault\n---\nx\n")
+        plan = self._build("Update-My-Vault")
+        self.assertFalse(any("ault" in r for r in plan["files"]))
+        self.assertEqual([w for w, _ in plan["skipped"]], ["Update-My-Vault"])
+
+    def test_binary_file_in_own_skill_needs_confirmation(self):
+        p = fx.own_skill(self.cd, "bin", "---\nname: bin\n---\nx\n")
+        (p.parent / "blob.dat").write_bytes(b"\xff\xfe\x00\x80binary")
+        plan = self._build("bin")
+        self.assertFalse(any(r.startswith(".claude/skills/bin/") for r in plan["files"]))
+        (what, why), = plan["skipped"]
+        self.assertEqual(what, "bin")
+        self.assertIn("blob.dat", why)
+        self.assertIn("--confirm-own bin", why)
+        plan = self._build("bin", confirm=True)
+        self.assertIn(".claude/skills/bin/blob.dat", plan["files"])
+
+    def test_core_ships_no_unused_scripts(self):
+        files = cp.build(ROOT, OPTS, self.cd)["files"]
+        self.assertNotIn(".dryas/jev/rules_inject.py", files)
+
+    def test_cloud_text_shares_the_home_state_pattern(self):
+        import cloud_text as ct
+        self.assertIs(ct.HOME_STATE, cc.HOME_STATE)

@@ -13,15 +13,15 @@ from pathlib import Path
 from typing import Dict, Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
-for _d in (ROOT / "tools", ROOT / "install"):
+for _d in (ROOT / "tools", ROOT / "install", ROOT / "claude" / "jev"):
     if str(_d) not in sys.path:
         sys.path.insert(0, str(_d))
+from cloud_check import HOME_STATE  # noqa: E402
 import render  # noqa: E402  (gate_blocks: <!-- pstack-picks --> blocks)
 from sync_codex_plugin import harness_blocks  # noqa: E402
 
 PLUGIN = "${CLAUDE_PLUGIN_ROOT}"
 _SUB = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}/(skills|agents|commands)/([A-Za-z0-9_-]+)")
-_HOME_STATE = re.compile(r"~/\.dryas(?![\w-])")
 LEAD = ("Dryas {version} runs from this repo's `.dryas/` folder, a pinned copy made by `dryas cloud` (`/{check}` "
         "verifies it). Its skills, commands and executor agent are project files under `.claude/`, its state is in "
         "`.dryas/state/` (git-ignored), and the judge is local unless this environment opted into Jev.")
@@ -50,7 +50,7 @@ def rewrite(text: str, names: Names, comps: Iterable[str]) -> str:
     text = _SUB.sub(lambda m: ".claude/%s/%s" % (m.group(1), names.name(m.group(2))), text)
     text = text.replace(PLUGIN, ".dryas")
     text = text.replace("~/.dryas/docs/", ".dryas/docs/")
-    text = _HOME_STATE.sub(".dryas/state", text)
+    text = HOME_STATE.sub(".dryas/state", text)
     text = text.replace("mcp__plugin_dryas_jev", "mcp__jev")
     if names.plugin_names is not None:
         text = names.plugin_names.sub(lambda m: names.name(m.group(1)), text)
