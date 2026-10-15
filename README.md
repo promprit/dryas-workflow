@@ -116,6 +116,10 @@ install/install.sh --harness codex --codex-dir ~/.codex-work  # once more for ea
 
 Codex 0.162.1 or newer. Setup adds the plugin to that Codex home, then lists the Dryas hooks and asks before it trusts them (`--yes` answers yes); untrusted hooks do not run. Codex reaches Dryas memory through the MCP tools; the memory hooks run on Claude Code only. For the Jev judge, set `OPENROUTER_API_KEY` in the shell Codex runs in; without it the local judge decides. Codex runs a copy of the plugin, so re-run setup for each Codex home after `git pull`. `codex plugin marketplace add promprit/dryas-workflow` on its own is not enough: the hooks stay untrusted and setup does not run. Details: [docs/install.md](docs/install.md#codex-plugin-plus-setup).
 
+### Cloud sessions
+
+claude.ai/code cloud sessions do not install plugins, so `claude/bin/dryas cloud init --repo <repo>` (or `install/install.sh --repo <repo>`) commits a pinned, version-stamped copy of the Dryas core into that repo (`.dryas/`, `.claude/`, `.mcp.json`, the rules block). A cloud session on the repo then runs the workflow with the local judge, no key and no network; Jev is a per-environment opt-in (`DRYAS_JUDGE=jev` plus an `OPENROUTER_API_KEY` secret). Every run is a dry run until `--yes`; `dryas cloud check | update | remove` keep it in step. Details: [docs/cloud-sessions.md](docs/cloud-sessions.md).
+
 Details, flags and troubleshooting: [docs/install.md](docs/install.md).
 
 ## Works with
@@ -124,6 +128,7 @@ Details, flags and troubleshooting: [docs/install.md](docs/install.md).
 | --- | --- |
 | Claude Code | Plugin `dryas@dryas-workflow` |
 | Codex | Plugin `dryas@dryas-workflow` (`install/install.sh --harness codex`) |
+| Claude Code cloud sessions (claude.ai/code) | A pinned copy of the Dryas core committed to the repo (`dryas cloud init`) |
 | Pi, OpenCode, Roo, Cursor | Later |
 
 Several accounts side by side (for example in T3 Code) share one `~/.dryas`. Details: [docs/harnesses.md](docs/harnesses.md).

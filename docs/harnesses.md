@@ -4,6 +4,7 @@
 | --- | --- |
 | Claude Code | Supported: plugin `dryas@dryas-workflow` |
 | Codex | Supported: plugin `dryas@dryas-workflow` |
+| Claude Code cloud sessions | Supported: a pinned copy of the core committed to the repo (`dryas cloud init`) |
 | Pi, OpenCode, Roo, Cursor | Later |
 
 
@@ -20,6 +21,10 @@ Codex gets: the rules, injected at session start by a SessionStart hook (Codex p
 The memory hook stages are not wired for Codex in 2.0, so `mem-session-start` is Claude Code only, like every other memory stage: Codex reaches Dryas memory through the MCP tools and writes to it only when the agent calls `memory_store`. That is the line between memory-tool parity and the hook-driven recording that Claude Code adds.
 
 Claude Code only: context-window warnings, compaction keep/restore, `/handoff`, the memory stages (`mem-edit`, `mem-task`, `mem-session-start`, `mem-session-end`) and `gate-outcome`, the Ruflo hooks (extra), the `dryas:executor` agent and the fast → standard → strong → frontier ladder on Claude Code models, FlowObserve, the read-only executor review panel (scope lock with an empty Scope). In Codex, use its own sub-agents and the models configured there (see the tier table in [workflow.md §3](workflow.md)): `fast` tier first, a higher tier on failure, every step logged with `log_escalation`.
+
+## Claude Code cloud sessions
+
+Supported through a committed copy, not the plugin: claude.ai/code cloud sessions load only what the repo commits (`.claude/` skills, agents, commands and settings hooks, `.mcp.json`, `CLAUDE.md`) and never install plugins. `dryas cloud init` writes a pinned, version-stamped copy of the Dryas core into the repo; the session then runs the workflow with the local judge and no key (Jev only by an explicit per-environment opt-in). Mac-only pieces (FlowObserve, `/handoff` restore across machines, the account settings) do not apply. Setup, drift checks and removal: [cloud-sessions.md](cloud-sessions.md).
 
 ## Several accounts (T3 Code, personal and team)
 
