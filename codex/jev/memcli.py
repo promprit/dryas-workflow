@@ -36,7 +36,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     co = sub.add_parser("consolidate", help="dedupe, graph and patterns, outside a hook")
     co.add_argument("--ns")
     co.add_argument("--wait", type=float, default=0, help="seconds to wait for a running consolidation")
-    a = ap.parse_args(argv)
+    argv = sys.argv[1:] if argv is None else list(argv)
+    a = ap.parse_args(argv[1:] if argv[:1] == ["memory"] else argv)  # dryas.cmd forwards its whole line
     if a.cmd == "consolidate":
         root = os.path.dirname(os.path.abspath(a.db or memdb.db_path()))  # one lock per store
         os.makedirs(root, exist_ok=True)
