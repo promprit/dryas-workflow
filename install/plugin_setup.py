@@ -70,6 +70,32 @@ def install_path(cd: Path) -> Optional[str]:
     return _root(cd, plugin_entry(cd))
 
 
+def repo_version(repo: Path) -> str:
+    """The version this checkout ships (claude/.claude-plugin/plugin.json); "" when it cannot be read."""
+    try:
+        data = json.loads((Path(repo) / "claude" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        return str(data.get("version") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def upgrade_if_stale(cd: Path, env: Dict[str, str], repo: Path, entry: Optional[dict]) -> Optional[dict]:
+    """`claude plugin install` keeps an older cached copy of a directory-marketplace plugin, so a merged release is not
+    what Claude Code runs. When the installed version is not the repo's, refresh the marketplace and update the
+    plugin. Returns the refreshed entry, the old one when nothing was stale, None when an update command failed."""
+    want, have = repo_version(repo), (entry or {}).get("version")
+    if not want or not have or have == want:
+        return entry
+    print("note: %s runs Dryas %s, this repo ships %s; updating" % (cd, have, want))
+    for argv in (["claude", "plugin", "marketplace", "update", MARKET], ["claude", "plugin", "update", ID]):
+        print("%s%s" % (env_prefix(cd), " ".join(argv)))
+        rc = di.run(argv, env=env)
+        if rc != 0:
+            print("error: `%s` failed (exit %d); %s not changed" % (" ".join(argv[:4]), rc, cd))
+            return None
+    return plugin_entry(cd)
+
+
 def _root(cd: Path, entry: Optional[dict]) -> Optional[str]:
     if entry is not None:
         return entry.get("readFromFolder") or entry.get("installPath") or None
@@ -352,9 +378,15 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
             print("error: `%s` failed (exit %d); %s not changed" % (" ".join(shown[:4]), rc, cd))
             return rc
     if dry:
+        have = (plugin_entry(cd) or {}).get("version")
+        if have and repo_version(repo) not in ("", have):
+            for argv in (["claude", "plugin", "marketplace", "update", MARKET], ["claude", "plugin", "update", ID]):
+                print("%s%s" % (env_prefix(cd), " ".join(argv)))
         repair_stale_jev(cd, env, dry)
         return 0
-    entry = plugin_entry(cd)
+    entry = upgrade_if_stale(cd, env, repo, plugin_entry(cd))
+    if entry is None:
+        return 1
     # an earlier install whose dependency never resolved: re-installing dryas does not retry it, so install it here
     deps = [d.get("dependency") for d in (entry or {}).get("errorDetails") or []
             if isinstance(d, dict) and d.get("type") == "dependency-unsatisfied" and d.get("dependency")]
@@ -429,6 +461,11 @@ def verify(cd: Path, comps: List[str]) -> int:
     errs = load_errors(entry) if root else []
     if root:
         fails += say("FAIL" if errs else "PASS", "dryas loads without errors", "; ".join(errs))
+    want, have = repo_version(REPO), (entry or {}).get("version")
+    if want and have:
+        fails += say("PASS" if have == want else "FAIL", "installed version matches this repo (%s)" % want,
+                     "" if have == want else "Claude Code runs %s; run install/install.sh again, then restart "
+                                             "Claude Code" % have)
     if not root:
         print("verify: %d failed" % fails)
         return fails
