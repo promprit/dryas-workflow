@@ -144,7 +144,7 @@ class MemoryFixTest(unittest.TestCase):
         rows = [dict(stage="consolidate", ns="alpha", ok=False, ts=_ts(now - 30 + i)) for i in range(3)]
         line = rules_inject.consolidate_warning(rows, now)
         self.assertIn("consolidation failed 3 times for alpha", line)
-        self.assertIn("`%s memory consolidate --ns alpha`" % os.path.join(paths.plugin_root(), "bin", "dryas"), line)
+        self.assertIn("`%s memory consolidate --ns alpha`" % rules_inject.wrapper(), line)
         self.assertIn("memory.jsonl", line)
 
     def test_a_later_success_silences_the_failure_warning(self):
@@ -181,7 +181,7 @@ class MemoryFixTest(unittest.TestCase):
         now = time.time()
         rows = [dict(stage="session-end", error="ConsolidateSkipped", ts=_ts(now - 30 + i)) for i in range(3)]
         line = rules_inject.consolidate_warning(rows, now)
-        self.assertIn("`%s memory consolidate`" % os.path.join(paths.plugin_root(), "bin", "dryas"), line)
+        self.assertIn("`%s memory consolidate`" % rules_inject.wrapper(), line)
 
     def test_windows_names_the_cmd_wrapper(self):
         now = time.time()
