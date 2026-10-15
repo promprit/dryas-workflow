@@ -47,7 +47,7 @@ MANUAL = """Manual checks (needs the app open):
   6. Run /tune and /handoff once in each account; both must run without a permission prompt.
   7. Codex: type $dryas:orchestrate in the TUI and note the syntax that works (record it in docs/install.md if it
      differs). On Windows also: steps 3 and 7, and codex mcp list shows jev.
-  8. OpenCode (each config dir): run /orchestrate on a tiny task in a scratch repo; ask it to edit a file outside the Scope: it must be denied. Ask for a destructive command (git reset --hard): OpenCode must ask you first."""
+  8. OpenCode (each config dir): run /orchestrate on a tiny task in a scratch repo; ask it to edit a file outside the Scope: it must be denied. Ask for a destructive command (git reset --hard): it must be blocked with a `dryas allow <code>` message; typing that code allows it once."""
 
 
 class Report:

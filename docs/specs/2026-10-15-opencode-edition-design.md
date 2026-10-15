@@ -89,7 +89,7 @@ Each hook builds a Claude-shaped hook event and pipes it to `${DRYAS_PY} -X utf8
 
 **State** (in memory per OpenCode process): `session → {agent, parentID, contextLimit, lastUsage}`, filled from `session.created`, `chat.params` and `message.updated`. A child session's events carry `agent_id = <sessionID>` and `agent_type = <agent name>`, so the scope lock's `"agent_id" in event` check works unchanged. Every event carries `session_id` and `cwd`.
 
-**Tool names and arguments:** `bash→Bash {command}`, `write→Write {file_path, content}`, `edit→Edit {file_path, old_string, new_string}`, `multiedit→MultiEdit {file_path, edits}`, `patch`/`apply_patch→apply_patch {command: <patch text>}` (split per file by the chain). Other tools are not sent to the chain.
+**Tool names and arguments:** `bash→Bash {command}`, `write→Write {file_path, content}`, `edit→Edit {file_path, old_string, new_string}`, `apply_patch→apply_patch {command: <patch text>}` (split per file by the chain). Other tools are not sent to the chain.
 
 | OpenCode hook | Chain call | Mapping | Step |
 |---|---|---|---|
@@ -105,7 +105,7 @@ Each hook builds a Claude-shaped hook event and pipes it to `${DRYAS_PY} -X utf8
 | event `session.deleted`, plugin `dispose` | `session-end` | best effort (section 8) | 2 |
 | `experimental.session.compacting` | `compact_keep.py`, then `precompact` | keep output pushed to `output.context` | 2 |
 
-Gating calls (`pretool`, `prompt`) are awaited with Claude Code's timeouts (20 s, 15 s). Observe-only calls are started and not awaited. A chain crash or timeout lets the call proceed, as a failing Claude Code hook does; the unreadable-patch deny is the one fail-closed case.
+Gating calls (`pretool`, `prompt`) are awaited with Claude Code's timeouts (20 s, 15 s). Observe-only calls are started and not awaited. A chain crash or timeout lets the call proceed when no task is active, as a failing Claude Code hook does. While a task is active (an `active.json` in an `.orchestrate` folder up the tree), a chain that cannot run blocks gated tools (fail closed); with no active task it lets them through. An unknown session (its parent lookup failed) is treated the same way: while a task is active it blocks gated tools until the lookup succeeds, otherwise it passes. The unreadable-patch deny is also fail-closed.
 
 **Executors:** `/orchestrate` on OpenCode dispatches `dryas-executor-<tier>` subagents through the `task` tool, starting at `fast`, moving up per the ladder and logging each step with `log_escalation`. The rendered orchestrate skill's opencode block says so.
 
@@ -129,7 +129,7 @@ Setup writes a copy (re-run after `git pull`, as with Codex):
 - Warns on Dryas skills visible from `~/.claude/skills`, and on a flat tier map.
 - `~/.dryas/accounts.json` gains `opencode_dirs`; `--purge` clears `~/.dryas` only when no Claude, Codex or OpenCode install is left.
 - `--uninstall` removes the files listed in `install.json` whose hashes still match; edited files are kept and named.
-- `tools/release_check.py`: an OpenCode check for the version floor, file hashes against `install.json`, `opencode debug config` showing the plugin and the `jev` server, and a flat tier map (warning only).
+- `tools/release_check.py`: an OpenCode check for the version floor, file hashes against `install.json`, `opencode mcp list` showing `jev` connected (the plugin's config hook adds it, so this confirms the plugin loaded), and a flat tier map (warning only).
 
 ## 7. Tests, CI, docs
 
