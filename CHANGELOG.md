@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-## 2.2.0 - unreleased
+## 2.2.0 - 2026-10-15
 
 ### Added
 - The OpenCode edition (core): `opencode/plugin/dryas.ts`, skills, commands and executor agents, with the `jev` MCP server. Memory hook stages, context warnings, compaction keep/restore and `/handoff` come in plan 2.
@@ -11,6 +11,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - `tools/sync_opencode.py`, which generates the OpenCode files from the Claude Code sources.
 - An OpenCode check in `tools/release_check.py` (`--opencode-dir`) and OpenCode CI jobs.
 - An OC column in the conformance table (`reference/README.md`).
+
+### Changed
+- The scope lock no longer asks about the orchestrator's own shell writes in Claude Code and OpenCode (it asked for every write-like shell command while a task was active); executors still get the ask, Codex still asks for every write, and executors are told to write files with Edit or Write.
 
 ## 2.0.1 - 2026-10-15
 
