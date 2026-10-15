@@ -11,7 +11,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Set, Union
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sync_codex_plugin as scp  # noqa: E402
@@ -160,6 +160,35 @@ def leaks(repo: Path) -> List[str]:
     return out
 
 
+# shared names (sync_codex_plugin.SHARED) only one side may name: {skill: {"claude": {...}, "opencode": {...}}}
+HAND_ALLOW: Dict[str, Dict[str, Set[str]]] = {}
+_OC_PREFIX = re.compile(r"\bjev_(?=(?:" + JEV_TOOLS + r")\b)")
+
+
+def _shared(text: str) -> Set[str]:
+    return set(scp.SHARED.findall(_OC_PREFIX.sub("", scp._MCP.sub("", text))))
+
+
+def hand_drift(repo: Path) -> List[str]:
+    """One line per missing hand-written skill, per shared name only one side names, per stale allowance."""
+    out = []
+    for h in HAND:
+        mine = Path(repo) / ("opencode/skill/dryas-%s/SKILL.md" % h)
+        if not mine.is_file():
+            out.append("missing opencode/skill/dryas-%s/SKILL.md (hand-written)" % h)
+            continue
+        claude = Path(repo) / "claude/skills" / h / "SKILL.md"
+        if not claude.is_file():
+            continue
+        tok = {"claude": _shared(scp._lf(claude)), "opencode": _shared(scp._lf(mine))}
+        allow = HAND_ALLOW.get(h, {})
+        for a, b in (("claude", "opencode"), ("opencode", "claude")):
+            only, ok = tok[a] - tok[b], allow.get(a, set())
+            out += ["skill %s: %s names %s but %s does not" % (h, a, t, b) for t in sorted(only - ok)]
+            out += ["skill %s: HAND_ALLOW[%r] lists %s, which no longer differs" % (h, a, t) for t in sorted(ok - only)]
+    return out
+
+
 def sync(repo: Path) -> List[str]:
     want, changed = plan(repo), []
     for line in drift(repo):
@@ -183,7 +212,7 @@ def run(repo: Path, check: bool) -> int:
         for rel in sync(repo):
             print("synced " + rel)
         return 0
-    bad = drift(repo) + leaks(repo)
+    bad = drift(repo) + leaks(repo) + hand_drift(repo)
     for line in bad:
         print(line)
     if bad:
