@@ -59,6 +59,7 @@ class Server:
                                       stdout=subprocess.PIPE, universal_newlines=True)
         mport = int(self._mock.stdout.readline())
         cfg = self.tmp / "xdg/config/opencode"
+        self.cfg = cfg
         self.data = self.tmp / "dryas-data"
         self.data.mkdir()
         if install and edition == REPO / "opencode":
