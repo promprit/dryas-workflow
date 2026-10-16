@@ -2446,3 +2446,24 @@ Behaviour (tests first, set-up as in test_runrules.py with approved `rm -rf buil
 6. The existing tests keep passing (`rm -rf build` alone and `pnpm build && rm -rf dist` stay covered).
 
 - [ ] Steps: write the tests, see them fail, implement, run the Done command, commit with a pathspec as `fix(jev): approvals cover only the approved command in place (task 20)`.
+
+## Task 21: Audit walk skips dependency folders; the orchestrator records approved.json's sha
+
+Goal: The ignored-file audit never walks dependency or cache folders (no slowdown in big repos, no false violation from a `.env.example` shipped in a package), and the orchestrate skills record `approved_sha` and pass `--approved-sha` so a forged approval file fails the task.
+Scope:
+- claude/jev/scope_audit.py
+- claude/jev/tests/test_scope_audit_bypass.py
+- claude/skills/orchestrate/SKILL.md
+- codex/skills/orchestrate/SKILL.md
+- opencode/skill/dryas-orchestrate/SKILL.md
+- install/tests/test_unattended_docs.py
+- install/tests/fixtures/pre_pstack/**
+Done:
+- `python3 -m pytest -q claude/jev/tests/test_scope_audit_bypass.py claude/jev/tests/test_scope_audit.py install/tests/test_unattended_docs.py install/tests/test_unattended_docs_editions.py install/tests/test_task_review_docs.py install/tests/test_pstack_loop.py` passes
+Failing test first: claude/jev/tests/test_scope_audit_bypass.py :: AuditBypassTest.test_dependency_dirs_are_not_walked
+
+1. scope_audit: when walking an ignored directory, skip any directory named `node_modules`, `.venv`, `venv`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.tox`, `dist`, `build`, `target`, `.next`, `.git` (test: an ignored `node_modules/pkg/.env.example` is not outside; an ignored `.env` at the root still is).
+2. Make the bypass test class stop re-running the 10 base audit tests (share set-up through a mixin or helper instead of subclassing the test class).
+3. The three orchestrate skills, §6 `NEEDS DECISION` paragraph: after writing `.orchestrate/approved.json`, run the audit (or `scope_audit.py` with no shas) and keep its `approved_sha`; pass `--approved-sha <it>` on every later audit; before the first approval pass the sha of the empty file shown in the first audit output. A mismatch means someone other than you changed the approvals: treat the task as failed, restore your version, and report it in the end report. Add a pin for `--approved-sha` to `install/tests/test_unattended_docs.py`. If `install/tests/test_pstack_loop.py` then needs its pstack-off fixtures re-rendered, re-render them (they are in install/tests/fixtures/pre_pstack/, add them to your report).
+
+- [ ] Steps: tests first, see them fail, implement, run Done, pathspec commit `fix(jev): audit skips dependency dirs; orchestrator pins approved.json (task 21)`.
