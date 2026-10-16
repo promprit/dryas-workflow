@@ -65,6 +65,10 @@ A `## Global Constraints` section: the spec's project-wide requirements (version
 
 A `## Review Focus` section: the five input classes or failure modes the spec implies but no task's tests exercise that are most likely to bite a person using this software, one line each, naming the input or condition and the behavior a reasonable person would expect, most likely first. The spec is a vision document: it says what the software must do, not everything it will meet, and its silence on an input is not permission for that input to break the program. Write the list here, once, with the spec in front of you. Then, for each line, add the test that pins it to the task that owns the code, in that task's own step style.
 
+## Risky actions
+
+If a task must run a command the gate would judge risky (deleting generated folders, resetting a test database, a force push the design calls for), list it in a `## Risky actions` section after Review Focus, one bullet each: - `<exact command, or a prefix ending in *>` — <one plain sentence: what it does, what could be lost, why the plan needs it>. Write the sentence for someone who does not code. Approving the plan approves these, so the run never stops to ask. No such command: leave the section out.
+
 ## Task format
 
 Each task begins exactly as `.orchestrate/PLAN.md` expects; this command cuts it out for the executor:
@@ -104,8 +108,9 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 2. **Placeholder scan:** search the plan for the patterns in "No placeholders". Fix them.
 3. **Type consistency:** do the types, signatures and property names in later tasks match those defined earlier? `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
 4. **Review focus:** for each input class or failure mode the spec implies, is there a task whose tests exercise it? The five uncovered ones most likely to bite a person go in Review Focus, and each line there gets its test added to the owning task. An empty section means you checked and found none, not that you skipped the check.
+5. **Risky actions:** every risky command a task's steps run is listed, each with its plain sentence.
 
-Fix issues inline; no need to re-review, just fix and move on. A spec requirement with no task gets a task. The review is done when the four checks find nothing left to fix.
+Fix issues inline; no need to re-review, just fix and move on. A spec requirement with no task gets a task. The review is done when the five checks find nothing left to fix.
 
 Also review the plan with `<dryas-root>/../skill/dryas-plan/plan-reviewer-prompt.md` when it has more than five tasks.
 

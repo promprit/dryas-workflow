@@ -6,7 +6,6 @@ import json
 import math
 import os
 import re
-import tempfile
 import sys
 from typing import Any, Dict, Optional
 
@@ -223,6 +222,7 @@ def set_value(dotted: str, value: Any) -> None:
     for k in keys[:-1]:
         node = node.setdefault(k, {})
     node[keys[-1]] = value
+    import tempfile  # lazy: only a write needs it
     p = path()
     os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p) or ".", prefix=".thresholds-")

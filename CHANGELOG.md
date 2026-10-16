@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## 2.3.1 - 2026-10-16
+
+Approve the plan, walk away: `/orchestrate` no longer stops to ask you about routine file changes or risky commands during a run. Shell edits outside a task's files are blocked or sent back; risky commands are decided by the plan, the judge or the orchestrator, and only what cannot be undone outside the project waits for you in the end report. Before starting, `/orchestrate` checks that the session cannot stop to ask, and it ends with one plain-language report and one notification. 2.3.1 asks you less than 1.0 did, catches more, and is faster.
+
+Measured against Dryas 1.0 (`tools/compare_v1.py`, 176 real executor commands, 5 alternating runs): prompts 0 vs 0; out-of-scope shell writes blocked 24 of 24 vs 0 of 24; in-scope work wrongly blocked 0 vs 0; median hook time per tool call 53.5 ms vs 67.2 ms. From the Jev logs, 2.x before this release asked 2.43 times per task (1.0: 0.04).
+
+### Fixed
+- Executor shell writes no longer prompt during a run (`shellwrites.py`, parser-based, replaces `prescreen.writes`): readable targets outside the task's scope are denied, everything else is checked at task return (`scope_audit.py`). Heredoc bodies, arrow functions and commit messages are no longer read as writes.
+- The Jev gate never asks during a run: an ask becomes an allow when the plan's `## Risky actions` or the orchestrator's `.orchestrate/approved.json` covers it (`runrules.py`, with a fixed human-only list), otherwise a deny the executor reports as `NEEDS DECISION`.
+- Hooks are faster than 1.0: the scope lock runs inside the chain process, and the gate no longer loads the network client to check for a key.
+- Setup upgrades a stale cached plugin copy, and verify fails when the installed version differs from the repo's.
+- Edit and Write may use the session's own scratchpad during a run.
+
+### Added
+- `preflight.py` (a run will not start in a permission mode that can prompt), `run_report.py` (end-of-run numbers), `/tune` prompt counts next to the 1.0 baseline, `tools/compare_v1.py` (release gate, run by `tools/release_check.py`).
+- Spec rules GOV-12 (no prompts during a run) and REL-1 (no release worse than the last).
+
 ## 2.3.0 - 2026-10-15
 
 ### Added

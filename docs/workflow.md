@@ -20,6 +20,8 @@ Last updated: 2026-10-05.
 - **Ask you before any install, move, delete or overwrite.** That includes any change to a Claude config dir's `settings.json` or `~/.zshrc`. Show a dry-run or diff first.
   - Settings edits go through `Dev/_tools/settings_merge.py`: dry-run by default, `--apply` makes a backup first.
 - Never use `--dangerously-skip-permissions`.
+- **Nobody is prompted during /orchestrate.** You decide in brainstorm and plan. After that, hooks allow or deny with a reason the agent can act on, the orchestrator decides the rest, and anything that needs you waits for the end-of-run report.
+- **Never ship a release worse than the last.** Compare prompts per task, hook speed and cost with the previous release (Jev logs, `/tune`, `tools/compare_v1.py`); if it is worse on any, it does not ship.
 - **`CLAUDE.md` files:**
   - Merge into `Dev/CLAUDE.md`; never overwrite it.
   - Dryas does not write `~/.claude/CLAUDE.md`; it is yours.

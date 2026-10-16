@@ -56,6 +56,7 @@ Rules marked *(Core)* below are Core. All others are Full.
 - **GOV-9** Threshold changes MUST be proposed and approved by a human, never applied automatically.
 - **GOV-10** *(Core)* Credentials MUST live only in the environment, never in files, configs, logs or tests. Data sent to a judge MUST be redacted and MUST NOT include file contents.
 - **GOV-11** Hooks for one event SHOULD run in a fixed order: scope lock, gate, memory, observers. A deny MUST beat an ask. A crashing stage MUST NOT block.
+- **GOV-12** *(Core)* After a human approves the design and the plan, the harness MUST NOT prompt the human while the run is active. Each hook MUST decide (allow, or deny with a reason the agent can act on) or defer to the orchestrator; what needs the human MUST wait for the end-of-run report.
 
 ## 6. Execution (EXE)
 
@@ -96,6 +97,10 @@ Other harnesses (Pi, OpenCode, Roo, Cursor): to be decided.
 - **REV-4** Architectural or contested changes SHOULD get an adversarial review by two models below the top tier, with a lead verdict.
 - **REV-5** *(Core)* Merge MUST come after review and verification.
 - **REV-6** Measured performance claims SHOULD be vetted against a benchmark checklist before they are reported.
+
+## 8a. Release (REL)
+
+- **REL-1** *(Core)* A release MUST NOT be worse for the user than the release before it. Before shipping, prompts per task, hook latency and cost MUST be compared with the previous release, on logged data and on a replay of real commands through both versions. A release that is worse on any of them MUST NOT ship.
 
 ## 9. Manifest
 
@@ -175,3 +180,4 @@ The manifest for this repository's editions is [reference/dryas.yaml](../referen
 | Version | Date | Change |
 | --- | --- | --- |
 | 0.1 draft | 2026-10-06 | First draft, extracted from the reference implementation. |
+| 0.2 draft | 2026-10-16 | Added GOV-12 (no prompts during a run) and REL-1 (no release worse than the last), Dryas 2.3.1. |

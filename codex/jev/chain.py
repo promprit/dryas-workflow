@@ -6,6 +6,7 @@ after a deny only observe stages run. UserPromptSubmit: additionalContext is con
 Any failure of a stage is skipped, except a "fail_closed" stage while a task is active
 (.orchestrate/active.json): its timeout, crash or unparseable output becomes a deny.
 The chain itself always exits 0.
+A stage with `inproc` runs in this process (only the known `scope_lock`); its `cmd` stays for tools that run stages one by one.
 """
 import json
 import os
@@ -176,6 +177,19 @@ def pretool(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Op
                 continue
             if decision == "deny":
                 continue
+            if st.get("inproc") == "scope_lock":  # pure path check: no process start per tool call
+                try:
+                    import scope_lock
+                    hso = ((scope_lock.run(event) or {}).get("hookSpecificOutput") or {})
+                    d, r = hso.get("permissionDecision"), str(hso.get("permissionDecisionReason", ""))
+                except Exception as e:
+                    fc = _fail_closed(st, event, "failed in process (%s)" % type(e).__name__)
+                    if fc is None:
+                        continue
+                    d, r = fc
+                if d in RANK and RANK[d] > RANK.get(decision or "", 0):
+                    decision, reason = d, "[%s] %s" % (st.get("name", "?"), r)
+                continue
             code, out, err = _run(st, raw)
             if code is None or code not in (0, 2):
                 fc = _fail_closed(st, event, "timed out or failed to run" if code is None else "exited %d" % code)
@@ -320,7 +334,11 @@ def main(argv: List[str]) -> int:
         if isinstance(v, str) and v:
             os.environ[env] = v  # inherited by every stage subprocess; read by jevlog.append
     if kind == "pretool":
-        jevlog.append("calls", {"tool": str(event.get("tool_name", ""))})
+        rec = {"tool": str(event.get("tool_name", ""))}
+        mode = event.get("permission_mode")  # Claude Code: default, acceptEdits, plan, auto, bypassPermissions
+        if isinstance(mode, str) and mode:
+            rec["permission_mode"] = mode[:32]
+        jevlog.append("calls", rec)
         stages = load_stages("pretool", harness)
         out = pretool_codex(event, stages) if harness in ("codex", "opencode") else pretool(event, raw, stages)
     elif kind == "prompt":

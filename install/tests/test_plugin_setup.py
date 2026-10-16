@@ -8,7 +8,7 @@ import fakecli
 import plugin_setup as ps
 
 REPO = HERE.parents[1]
-INSTALLED = {"version": 2, "plugins": {"dryas@dryas-workflow": [{"scope": "user", "installPath": "", "version": "1.0.0"}]}}
+INSTALLED = {"version": 2, "plugins": {"dryas@dryas-workflow": [{"scope": "user", "installPath": "", "version": ps.repo_version(REPO)}]}}  # current, so setup/verify see no stale copy
 
 
 def _patch_env(tc, values, clear=False):

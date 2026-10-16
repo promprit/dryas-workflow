@@ -15,7 +15,7 @@ Default: the diff from the merge-base with the default branch to HEAD, plus unco
 
 ## 2. Intent
 
-Write one paragraph stating the intent, from the approved design or spec, the PLAN.md goals and the commit messages. If you are unsure of the intent, ask the user before going on.
+Write one paragraph stating the intent, from the approved design or spec, the PLAN.md goals and the commit messages. If you are unsure of the intent, ask the user before going on; during /orchestrate, take the intent from the approved spec and plan instead, because nobody is asked during a run.
 
 ## 3. Reviewers
 

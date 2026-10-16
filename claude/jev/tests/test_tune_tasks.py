@@ -316,7 +316,7 @@ class ReturnPhaseTest(unittest.TestCase):
     def test_dispatch_counts_ignore_return_records(self):
         dsp = [d("a", "haiku"), d("a", "haiku", phase="return", tokens=10), d("b", "sonnet", phase="return", tokens=5)]
         self.assertEqual(sorted(tt.rows([], dsp, [], [])), ["a"])
-        dl = tune.delivery(dsp, [{"task": "a"}], [], [], [])
+        dl = tune.delivery(dsp, [{"task": "a", "decision": "deny"}], [], [], [])
         self.assertEqual((dl["tasks_dispatched"], dl["haiku_tasks"], dl["scope_per_task"]), (1, 1, 1.0))
 
 
