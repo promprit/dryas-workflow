@@ -116,7 +116,7 @@ Known limit (stated in GOV-2): inline code that writes outside the worktree, oth
 
 Rung 4 is not left to the orchestrator's judgement alone: a deterministic `HUMAN_ONLY` list in `gate.py` (for example `git push`, deploy and cloud CLIs such as `vercel`, `fly`, `terraform apply`, `gh release`, and any delete or write whose readable target is outside the worktree and the scratchpad) can never be allowed by `approved.json`. Only the plan's `Risky actions`, which the user approved, can allow those, and only by an exact entry (no prefix).
 
-Every rung is logged (`rule`: `planned`, `judge`, `orchestrator`, `user`), so `/tune` shows how often each rung decides and the orchestrator's approvals can be calibrated like any other Jev decision.
+Every rung is visible in the logs: the gate record carries `run: true` and `rule` `planned`, `orchestrator` or `run_deny`; a judge decision is the existing gate record (`decision` `none`) with `run: true`; a `NEEDS USER` item is in the orchestrator's end report. `/tune` counts prompts during runs; the orchestrator's approvals are logged with `log_override` and calibrated like any other Jev decision.
 
 
 **Planned risky actions.** The plan (`docs/plans/...`) gets an optional section before the first task:
@@ -156,6 +156,16 @@ The user may not read code. Everything this design shows the user is written so 
 - **End report**: leads with outcomes in plain words ("3 of 4 parts are done; the payment part is waiting for you because it needs to delete the test database"). Numbers, paths and commits come after, under a "Details" heading.
 - **Notification**: one sentence, plain words.
 - The brainstorm and plan questions already follow this (one decision per question, a recommended answer); `/wplan` checks the Risky actions sentences in its self-review.
+
+### H2. As built (added during the run)
+
+- **Speed (REL-1).** The scope lock runs inside the chain process (`chain.json` stage `inproc: scope_lock`), the gate loads `runrules` and `tempfile` only when needed, and the key check reads the environment without loading the network client. Measured with `tools/compare_v1.py`: about 54 ms per tool call against Dryas 1.0's 67 ms.
+- **Setup keeps the Mac current.** `install.sh` upgrades a stale cached plugin copy; `verify` fails when the installed version differs from the repo's.
+- **Scratchpad for file tools.** Edit/Write may use the session's own scratchpad during a run, so executors need no shell writes for scratch files.
+- **Audit additions (code review).** The audit also lists sensitive git-ignored files (`.env*`, `.orchestrate/` other than the orchestrator's own files; dependency and cache folders are not walked), checks every commit in `base..HEAD` against the union Scope, and fails when `.orchestrate/approved.json` changed since the orchestrator recorded its sha (`--approved-sha`). The parser also reads pipe-to-shell, `find -delete/-exec`, output-file options and `git config`.
+- **Approvals cover only the approved command in place.** No coverage when the command changes directory, redirects to a file, pipes into a shell or writes outside the worktree; git global options are skipped before the human-only check. A readable target in the scratchpad also counts as outside the worktree for human-only purposes (stricter than section D, intended).
+- **Preflight key.** The orchestrator's own shell carries no session id, so preflight matches the newest `calls.jsonl` record by working directory within 120 s; two sessions in one worktree are already excluded by GOV-3.
+- **Commit rule.** Executors share the index: they commit with a pathspec and never `--amend`; the orchestrator approves the exact `git checkout --` revert commands before sending a task back.
 
 ### H. Framework core rules
 
