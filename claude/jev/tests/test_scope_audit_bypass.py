@@ -11,7 +11,20 @@ import scope_audit
 import test_scope_audit
 
 
-class AuditBypassTest(test_scope_audit.ScopeAuditTest):
+class AuditBypassTest(unittest.TestCase):
+    # share the base set-up and helpers without re-running the base tests
+    setUp, git, write, commit, audit = (getattr(test_scope_audit.ScopeAuditTest, n)
+                                        for n in ("setUp", "git", "write", "commit", "audit"))
+
+    def test_dependency_dirs_are_not_walked(self):
+        with open(os.path.join(self.wt, ".git", "info", "exclude"), "a") as f:
+            f.write(".env*\nnode_modules/\n")
+        self.write("node_modules/pkg/.env.example")
+        self.assertTrue(self.audit("1", [])["ok"])
+        self.write(".env")
+        r = self.audit("1", [])
+        self.assertEqual((r["ok"], r["outside"]), (False, [".env"]))
+
     def cli(self, *args):
         p = subprocess.run([sys.executable, scope_audit.__file__, ".orchestrate/PLAN.md", *args], cwd=self.wt,
                            capture_output=True, text=True)

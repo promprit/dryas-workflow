@@ -36,6 +36,10 @@ import planfile
 APPROVED = ".orchestrate/approved.json"
 _OWN = {".orchestrate/PLAN.md", ".orchestrate/active.json", APPROVED}  # the orchestrator's own files
 
+_SKIP_DIRS = {"node_modules", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".tox", "dist",
+              "build", "target", ".next", ".git"}  # dependency and cache folders: never walked
+
+
 def _git(args: List[str], cwd: str) -> str:
     return subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True, check=True, timeout=20).stdout
 
@@ -82,7 +86,10 @@ def _ignored_paths(root: str) -> List[str]:
         if not p.endswith("/"):
             out.append(p)
             continue
-        for d, _, files in os.walk(os.path.join(root, p)):  # a whole ignored directory is listed once
+        if _SKIP_DIRS.intersection(p.split("/")):
+            continue
+        for d, dirs, files in os.walk(os.path.join(root, p)):  # a whole ignored directory is listed once
+            dirs[:] = [x for x in dirs if x not in _SKIP_DIRS]
             out += [os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/") for f in files]
     return [p for p in out if _sensitive(p)]
 

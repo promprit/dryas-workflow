@@ -17,6 +17,13 @@ class UnattendedDocsTest(unittest.TestCase):
                        '"base"', "nobody is asked"):
             self.assertIn(needle, s, needle)
 
+    def test_orchestrate_pins_approved_json(self):
+        for rel in ("claude/skills/orchestrate/SKILL.md", "codex/skills/orchestrate/SKILL.md",
+                    "opencode/skill/dryas-orchestrate/SKILL.md"):
+            s = read(rel)
+            for needle in ("--approved-sha", "approved_sha"):
+                self.assertIn(needle, s, "%s: %s" % (rel, needle))
+
     def test_orchestrate_tools_allow_the_new_scripts(self):
         for rel in ("claude/skills/orchestrate/SKILL.md", "claude/commands/orchestrate.md"):
             head = read(rel).split("\n---", 1)[0]
