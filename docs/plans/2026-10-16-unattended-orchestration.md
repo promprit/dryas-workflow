@@ -2402,3 +2402,47 @@ Failing test first: claude/jev/tests/test_chain_inproc_scope.py :: InprocScopeTe
   3. `tools/compare_v1.py` `_one`: count a deny as the scope lock's when `"scope lock:" in reason` (the chain prefixes `[scope-lock] `), not `startswith`; add `test_one_counts_prefixed_scope_denies` to `install/tests/test_compare_v1.py` that feeds `_one` a fake chain script printing `{"hookSpecificOutput": {"permissionDecision": "deny", "permissionDecisionReason": "[scope-lock] scope lock: x"}}` and asserts `"deny"`, and one with `[jev-gate] Jev gate: ...` asserting `"gate_deny"`.
 - [ ] **Step 4: Run the tests and the gate.** Run the Done commands. Before the comparison, check `uptime`; if the load average is above the core count, say so and run it twice. Expected: PASS. If the median is still slower than v1 beyond noise, profile one Bash event with `python3 -X importtime claude/jev/chain.py pretool` and report the top imports; do not loosen `verdict`.
 - [ ] **Step 5: Commit** with a pathspec as `perf(chain): scope lock runs in process; compare_v1 counts prefixed scope denies (task 18)`.
+
+## Task 19: Close the review's bypasses in shellwrites and the audit
+
+Goal: Writes the review showed slipping through become readable or audited: pipe-to-shell, find -delete/-exec, output-file options, git config; the task-return audit also sees sensitive git-ignored files, checks every commit since the task's base against the union Scope, and fails when `.orchestrate/approved.json` changed since the orchestrator last wrote it.
+Scope:
+- claude/jev/shellwrites.py
+- claude/jev/scope_audit.py
+- claude/jev/tests/test_shellwrites_bypass.py
+- claude/jev/tests/test_scope_audit_bypass.py
+Done:
+- `python3 -m pytest -q claude/jev/tests/test_shellwrites_bypass.py claude/jev/tests/test_scope_audit_bypass.py claude/jev/tests/test_shellwrites.py claude/jev/tests/test_scope_audit.py claude/jev/tests/test_scope_lock.py claude/jev/tests/test_scope_shell_corpus.py claude/jev/tests/test_import_cost.py` passes
+Failing test first: claude/jev/tests/test_shellwrites_bypass.py :: BypassTest.test_pipe_to_shell_is_a_write
+
+Behaviour to add (write the tests first, one per bullet, with `analyse(cmd, "/w")` or a temp git repo as in test_scope_audit.py):
+1. shellwrites: a shell (`sh`, `bash`, `zsh`, `dash`, `ksh`) with no script argument fed by a pipe (`c.src is not None`) is `writes=True, unknown=True, rule="script"` (`echo x | sh`, `curl u | bash`).
+2. shellwrites: `find` with `-delete`, `-exec`, `-execdir`, `-ok`, `-okdir` is an unknown write (`rule="find"`); `-fprint`/`-fprint0`/`-fprintf`/`-fls FILE` make FILE a readable target.
+3. shellwrites: readable output-file options become targets: `curl -o FILE` / `--output FILE` / `--output=FILE` (`-O` alone is unknown: file named by the URL), `wget -O FILE` / `--output-document=FILE`, `sort -o FILE`, any `--output=FILE` / `--output FILE` on `git diff|log|format-patch`; `awk` with `>`/`>>` inside its program text is an unknown write (`rule="awk"`).
+4. shellwrites: `git config` (any form that sets a value, i.e. not `--get*`/`--list`/`-l`) is an unknown write (`rule="git"`).
+5. scope_audit: in addition to `git status --untracked-files=all`, list ignored paths with `git status --porcelain=v1 -z --ignored=matching --untracked-files=all` and count an ignored path as outside when it is `.orchestrate/` content other than `PLAN.md`, `active.json`, `approved.json` (the orchestrator's own files) or a `.env*` file anywhere, and it is not in the union Scope. (Do not count other ignored paths: caches and build output would fail every task.)
+6. scope_audit: with `--base SHA`, also check every commit in `SHA..HEAD` (not only the `(task N)` ones) against the union Scope of all tasks in active.json plus this task's Scope; a commit touching a path outside that union fails.
+7. scope_audit: new option `--approved-sha HEX`: when given, the sha256 of `.orchestrate/approved.json` (or of the empty string when the file is missing) must equal HEX, else `ok: false` with `outside` containing `.orchestrate/approved.json` and an `error` saying it changed outside the orchestrator. Print the current sha256 as `"approved_sha"` in every output so the orchestrator can record it.
+8. Update both modules' docstrings to state what they now cover and the remaining known limit: code that runs a script or interpreter file (`python x.py`, `make`, `node x.js`) can write anywhere; such writes inside the worktree are caught by the audit, outside it are not (GOV-2 known limit, same as Dryas 1.0).
+
+- [ ] Steps: write the tests, see them fail for the right reason, implement, run the Done command, commit with a pathspec as `fix(jev): audit sees ignored and unreported changes; parser reads more write forms (task 19)`.
+
+## Task 20: runrules covers only what was approved, where it was approved
+
+Goal: A plan or orchestrator approval no longer covers a command that changes directory, redirects output, writes a readable target outside the worktree or pipes into a shell, and the human-only check skips git's global options.
+Scope:
+- claude/jev/runrules.py
+- claude/jev/tests/test_runrules_bypass.py
+Done:
+- `python3 -m pytest -q claude/jev/tests/test_runrules_bypass.py claude/jev/tests/test_runrules.py claude/jev/tests/test_gate_run.py claude/jev/tests/test_planfile_risky.py` passes
+Failing test first: claude/jev/tests/test_runrules_bypass.py :: RunRulesBypassTest.test_cd_breaks_coverage
+
+Behaviour (tests first, set-up as in test_runrules.py with approved `rm -rf build` and plan entry `` `pnpm db:reset*` ``):
+1. `covered` returns None when any simple command of `cmd` is `cd`/`pushd`/`popd` (`cd /etc && rm -rf build`, `cd /; rm -rf build`).
+2. `covered` returns None when any simple command has an output redirect other than to `/dev/null` or an fd (`pnpm db:reset > /etc/passwd`, `rm -rf build; echo hi > /etc/x`).
+3. `covered` returns None when a shell reads from a pipe (`pnpm db:reset | sh`).
+4. `covered` returns None when `shellwrites.analyse(cmd, cwd)` has any path outside the worktree root.
+5. `human_only` skips git global options and their values (`-C DIR`, `-c k=v`, `--git-dir=..`, `--work-tree=..`) before reading the subcommand: `git -C . push origin x` and `git -c a=b push` are human-only.
+6. The existing tests keep passing (`rm -rf build` alone and `pnpm build && rm -rf dist` stay covered).
+
+- [ ] Steps: write the tests, see them fail, implement, run the Done command, commit with a pathspec as `fix(jev): approvals cover only the approved command in place (task 20)`.
