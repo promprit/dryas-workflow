@@ -28,6 +28,27 @@ HUMAN_ONLY_HEADS = {"vercel", "netlify", "fly", "flyctl", "heroku", "firebase", 
 HUMAN_ONLY_SUBS = {"git": {"push"}, "gh": {"release", "repo", "secret", "workflow", "pr"}}
 
 
+_GIT_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--super-prefix"}
+_OUT_OPS = {">", ">>", ">|", "&>", "&>>", "<>", ">&"}
+
+
+def _escapes(cmd: str, root: str, cwd: str) -> bool:
+    """True when the command changes directory, redirects output, pipes into a shell or writes outside the worktree:
+    an approval for one command does not cover it."""
+    for c in lj.simple_commands(cmd):
+        for op, word in zip(c.rops, c.redirs):
+            if op in _OUT_OPS and word != "/dev/null" and not (op == ">&" and (word.isdigit() or word == "-")):
+                return True
+        h, _ = lj.head_index(c.words)
+        if h < len(c.words) and lj.base(c.words[h]) in ("cd", "pushd", "popd"):
+            return True
+        if c.src is not None and h < len(c.words) and lj.base(c.words[h]) in lj._SHELLS:
+            return True
+    real_root = os.path.realpath(root)
+    return any(not (os.path.realpath(p) + os.sep).startswith(real_root + os.sep)
+               for p in shellwrites.analyse(cmd, cwd).paths)
+
+
 def _read(path: str) -> Any:
     try:
         with open(path, encoding="utf-8") as f:
@@ -48,7 +69,13 @@ def human_only(words: List[str], root: str, cwd: str) -> bool:
     h, _ = lj.head_index(words)
     if h >= len(words):
         return False
-    name, rest = lj.base(words[h]), [w for w in words[h + 1:] if not w.startswith("-")]
+    name, args = lj.base(words[h]), words[h + 1:]
+    if name == "git":  # skip git's global options (and their separate values) before the subcommand
+        i = 0
+        while i < len(args) and args[i].startswith("-"):
+            i += 2 if args[i] in _GIT_VALUE_OPTS else 1
+        args = args[i:]
+    rest = [w for w in args if not w.startswith("-")]
     if name in HUMAN_ONLY_HEADS or (rest and rest[0] in HUMAN_ONLY_SUBS.get(name, ())):
         return True
     a = shellwrites.analyse(" ".join(shlex.quote(w) for w in words), cwd)
@@ -58,6 +85,8 @@ def human_only(words: List[str], root: str, cwd: str) -> bool:
 
 def covered(cmd: str, root: str, cwd: str) -> Optional[str]:
     try:
+        if _escapes(cmd, root, cwd):
+            return None
         entries = planfile.risky(_read(os.path.join(root, ".orchestrate", "PLAN.md")))
         try:
             approved = [str(c.get("cmd", "")) for c in json.loads(_read(os.path.join(root, ".orchestrate",
