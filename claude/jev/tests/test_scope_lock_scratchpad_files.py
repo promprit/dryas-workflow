@@ -12,6 +12,7 @@ PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 SID = "sess-abcdef12"
 
 
+@unittest.skipIf(os.name == "nt", "Claude's scratchpad is a POSIX path (SCRATCH_BASE is empty on Windows)")
 class ScratchpadFilesTest(unittest.TestCase):
     def setUp(self):
         self.wt = os.path.realpath(tempfile.mkdtemp())

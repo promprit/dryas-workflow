@@ -16,7 +16,7 @@ class RunRulesTest(unittest.TestCase):
     def setUp(self):
         self.wt = os.path.realpath(tempfile.mkdtemp())
         os.makedirs(os.path.join(self.wt, ".orchestrate"))
-        with open(os.path.join(self.wt, ".orchestrate", "PLAN.md"), "w") as f:
+        with open(os.path.join(self.wt, ".orchestrate", "PLAN.md"), "w", encoding="utf-8") as f:
             f.write(PLAN)
 
     def approve(self, *cmds):
@@ -51,6 +51,12 @@ class RunRulesTest(unittest.TestCase):
         self.assertIsNone(self.cov("terraform apply"))
         self.assertIsNone(self.cov("vercel deploy --prod"))         # plan prefix cannot cover a human-only action
         self.assertEqual(self.cov("git push origin feat/x"), "planned")  # an exact plan entry can
+
+    def test_plan_not_in_utf8_covers_nothing(self):
+        # e.g. a PLAN.md saved in a Windows code page: no crash, nothing pre-approved
+        with open(os.path.join(self.wt, ".orchestrate", "PLAN.md"), "wb") as f:
+            f.write(PLAN.encode("utf-8").replace("\u2014".encode("utf-8"), b"\x97"))
+        self.assertIsNone(self.cov("rm -rf dist"))
 
     def test_unreadable_files_cover_nothing(self):
         with open(os.path.join(self.wt, ".orchestrate", "approved.json"), "w") as f:

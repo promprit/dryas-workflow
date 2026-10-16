@@ -53,7 +53,7 @@ def _read(path: str) -> Any:
     try:
         with open(path, encoding="utf-8") as f:
             return f.read()
-    except OSError:
+    except (OSError, ValueError):  # unreadable or not UTF-8: covers nothing
         return ""
 
 

@@ -130,6 +130,14 @@ class ScopeLockTest(unittest.TestCase):
             self.assertIsNone(scope_lock.run(self.bash("python3 -c 'x'")))
             self.assertIsNone(scope_lock.run(self.bash("echo x > .orchestrate/approved.json")))
 
+    def test_path_on_another_drive_is_outside_not_a_crash(self):
+        # Windows: os.path.relpath raises ValueError when the path and the worktree are on different drives
+        with mock.patch.object(scope_lock.os.path, "relpath", side_effect=ValueError("path is on mount 'D:'")):
+            out = scope_lock.run(self.bash("echo x > /tmp/elsewhere-x", agent_id="a1"))
+        self.assertEqual(self.decision(out), "deny")
+        self.assertIn("outside worktree", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+    @unittest.skipIf(os.name == "nt", "Claude's scratchpad is a POSIX path (SCRATCH_BASE is empty on Windows)")
     def test_bash_scratchpad_of_this_session_only(self):
         base = os.path.realpath(tempfile.mkdtemp())
         pad = os.path.join(base, "-enc-dir", self.SID, "scratchpad")

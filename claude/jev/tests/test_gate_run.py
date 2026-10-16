@@ -26,7 +26,7 @@ class GateRunTest(unittest.TestCase):
         self.wt = os.path.realpath(os.path.join(self.tmp, "wt"))
         os.makedirs(os.path.join(self.wt, ".git"))
         os.makedirs(os.path.join(self.wt, ".orchestrate"))
-        with open(os.path.join(self.wt, ".orchestrate", "PLAN.md"), "w") as f:
+        with open(os.path.join(self.wt, ".orchestrate", "PLAN.md"), "w", encoding="utf-8") as f:
             f.write(PLAN)
 
     def active(self, ids):
