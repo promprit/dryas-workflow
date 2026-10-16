@@ -19,6 +19,9 @@ class ImportCostTest(unittest.TestCase):
     def test_gate_does_not_load_runrules(self):
         self.assertFalse(loaded("import gate", "runrules"))
 
+    def test_gate_does_not_load_tempfile(self):
+        self.assertFalse(loaded("import gate", "tempfile"))
+
     def test_sed_patterns_do_not_drift(self):
         import prescreen
         import shellwrites
