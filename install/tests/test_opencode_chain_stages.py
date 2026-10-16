@@ -49,8 +49,13 @@ class ObserveEventTest(unittest.TestCase):
         self.proj = os.path.join(self.tmp, "proj")
         os.makedirs(self.proj)
         subprocess.run(["git", "init", "-q", self.proj], check=True)
-        self.env = dict(os.environ, DRYAS_DATA_ROOT=os.path.join(self.tmp, "data"),
-                        JEV_CHAIN_LOCAL=os.path.join(self.tmp, "none.json"))
+        # Slow CI runners (Windows, Python 3.9) can miss the memory stages' 2 s limit; the test is about which
+        # stages the events reach, so give them room through chain.local.json's per-stage timeout override.
+        local = os.path.join(self.tmp, "chain.local.json")
+        with open(local, "w", encoding="utf-8") as f:
+            json.dump({"stages": {kind: {name: {"timeout": 30}} for kind, name in (
+                ("session-start", "mem-session-start"), ("post", "mem-edit"), ("session-end", "mem-session-end"))}}, f)
+        self.env = dict(os.environ, DRYAS_DATA_ROOT=os.path.join(self.tmp, "data"), JEV_CHAIN_LOCAL=local)
 
     def run_chain(self, kind, event):
         subprocess.run([sys.executable, "-X", "utf8", str(REPO / "claude/jev/chain.py"), kind, "--harness", "opencode"],
