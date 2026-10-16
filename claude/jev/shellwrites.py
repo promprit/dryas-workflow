@@ -6,12 +6,18 @@ quoted text (commit messages, inline code) are data, never commands. It returns 
   writes  - something in it writes, moves or deletes files, or runs code that may (inline code, scripts)
   paths   - absolute paths the readable forms write: sed -i, perl -i, output redirects, tee, dd of=, the
             destination of cp/mv/ln/install, the operands of rm/rmdir/unlink/shred/mkdir/touch/truncate and
-            chmod/chown/chflags, and git checkout -- / git restore paths. `cd <literal>` is followed.
-  unknown - some write could not be read (inline interpreter code, scripts, $VAR, $(...), globs, ~, xargs, a cd to
-            an unknown place, archives, package installs, other git writes)
+            chmod/chown/chflags, git checkout -- / git restore paths, find -fprint/-fprint0/-fprintf/-fls FILE,
+            curl -o/--output, wget -O/--output-document, sort -o and git diff|log|format-patch --output FILE.
+            `cd <literal>` is followed.
+  unknown - some write could not be read (inline interpreter code, scripts, a shell fed by a pipe, $VAR, $(...),
+            globs, ~, xargs, a cd to an unknown place, archives, package installs, find -delete/-exec/-execdir/
+            -ok/-okdir, curl -O, awk with > in its program, git config that sets a value, other git writes)
   rule    - the first rule that fired, for the scope log ("" when nothing writes)
 Pure, stdlib only, never raises: a parse error or a command over local_judge.MAX_CHARS is Analysis(True, [], True,
 "error").
+Known limit (GOV-2, same as Dryas 1.0): code that runs a script or interpreter file (`python x.py`, `make`,
+`node x.js`) can write anywhere and is not flagged here; such writes inside the worktree are caught by the
+task-return audit (scope_audit.py), writes outside it are not.
 """
 import os
 import posixpath
@@ -48,6 +54,15 @@ _PM_WRITE = {"install", "add", "remove", "uninstall", "update", "upgrade", "i", 
 _INTERP = re.compile(r"(?:python|pypy|node|nodejs|deno|bun|ruby|perl|php)[\d.]*\Z")
 _INLINE = {"-c", "-e", "-E", "-r", "-"}
 _SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+_FIND_RUN = {"-delete", "-exec", "-execdir", "-ok", "-okdir"}
+_FIND_OUT = {"-fprint", "-fprint0", "-fprintf", "-fls"}
+# command -> (short letter, long option naming the output file, options that write a file named by the URL,
+# short letters whose value follows them, so a bundle stops there)
+_OUT_OPT = {"curl": ("o", "--output", {"-O", "--remote-name", "--remote-name-all"}, "AbcCdDeEFHKmrTuUwxXyYzQPt"),
+            "wget": ("O", "--output-document", set(), "aABDeiIlnoPQRtTUwXY"),
+            "sort": ("o", "--output", set(), "kStT"), "git": ("", "--output", set(), "")}
+_GIT_OUT = {"diff", "log", "format-patch"}  # git diff|log|format-patch --output FILE
+_AWK = {"awk", "gawk", "mawk", "nawk"}
 
 
 class Analysis(NamedTuple):
@@ -126,6 +141,8 @@ def _command(c, words: List[str], st: _State, depth: int) -> None:
             return _walk(inner, st, depth + 1)
         if any(not x.startswith("-") for x in args):
             return st.hit("script", unknown=True)
+        if c.src is not None:
+            return st.hit("script", unknown=True)  # echo ... | sh: the script comes from the pipe
         for body in c.here:
             _walk(body, st, depth + 1)
         return None
@@ -155,6 +172,12 @@ def _command(c, words: List[str], st: _State, depth: int) -> None:
         return None
     if name in _UNREAD:
         return st.hit(name, unknown=True)
+    if name == "find":
+        return _find(args, st)
+    if name in ("curl", "wget", "sort"):
+        return _out_opt(name, args, st)
+    if name in _AWK:
+        return _awk(args, st)
     ops = _operands(name, args)
     if name in _ALL_OPERANDS:
         targets = ops
@@ -191,6 +214,68 @@ def _target_dir(args: List[str]) -> Optional[str]:
             return args[i + 1]
         if x.startswith("--target-directory="):
             return x.split("=", 1)[1]
+    return None
+
+
+def _out_target(word: str, st: _State, rule: str) -> None:
+    if word != "-":  # "-" is stdout
+        st.target(word, False, rule)
+
+
+def _find(args: List[str], st: _State) -> None:
+    for i, x in enumerate(args):
+        if x in _FIND_RUN:
+            return st.hit("find", unknown=True)
+        if x in _FIND_OUT:
+            _out_target(args[i + 1] if i + 1 < len(args) else "", st, "find")
+    return None
+
+
+def _out_opt(name: str, args: List[str], st: _State) -> None:
+    """curl -o FILE, wget -O FILE, sort -o FILE and their long forms (also bundled: curl -sSLo FILE)."""
+    letter, long, remote, valued = _OUT_OPT[name]
+    i = 0
+    while i < len(args):
+        x = args[i]
+        i += 1
+        if x == "--":
+            break
+        if x in remote:
+            return st.hit(name, unknown=True)
+        if x == long:
+            _out_target(args[i] if i < len(args) else "", st, name)
+            i += 1
+        elif x.startswith(long + "="):
+            _out_target(x.split("=", 1)[1], st, name)
+        elif _short(x):
+            for k, ch in enumerate(x[1:], 1):
+                if "-" + ch in remote:
+                    return st.hit(name, unknown=True)
+                if ch == letter or ch in valued:
+                    value = x[k + 1:]
+                    if not value:
+                        value, i = (args[i] if i < len(args) else ""), i + 1
+                    if ch == letter:
+                        _out_target(value, st, name)
+                    break
+    return None
+
+
+def _awk(args: List[str], st: _State) -> None:
+    """awk 'PROGRAM' FILES: a > or >> in PROGRAM writes a file the program names."""
+    i = 0
+    while i < len(args):
+        x = args[i]
+        i += 1
+        if x in ("-f", "--file"):
+            return None  # program file: not read here
+        if x in ("-F", "-v"):
+            i += 1
+        elif x == "--" or not x.startswith("-") or x == "-":
+            prog = args[i] if x == "--" and i < len(args) else x
+            if ">" in prog:
+                st.hit("awk", unknown=True)
+            return None
     return None
 
 
@@ -269,9 +354,18 @@ def _git(args: List[str], st: _State) -> None:
         x = args[i]
         other_dir = other_dir or x in ("-C", "--git-dir", "--work-tree") or x.startswith(("--git-dir=", "--work-tree="))
         i += 2 if x in ("-C", "-c", "--git-dir", "--work-tree") else 1
-    if i >= len(args) or args[i] not in _GIT_WRITE:
+    if i >= len(args):
         return None
     sub, rest = args[i], args[i + 1:]
+    if sub in _GIT_OUT:
+        return _out_opt("git", rest, st)
+    if sub == "config":
+        reads = [x for x in rest if x.startswith("--get") or x in ("--list", "-l")]
+        if not reads and rest[:1] not in (["get"], ["list"]):
+            st.hit("git", unknown=True)
+        return None
+    if sub not in _GIT_WRITE:
+        return None
     if not other_dir and (sub == "restore" or (sub == "checkout" and "--" in rest)):
         paths = rest[rest.index("--") + 1:] if "--" in rest else _operands("git-restore", rest)
         if paths:
