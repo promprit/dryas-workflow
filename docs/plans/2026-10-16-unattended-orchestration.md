@@ -1905,6 +1905,10 @@ Scope:
 - claude/jev/jev_mcp.py
 - CHANGELOG.md
 - docs/specs/2026-10-15-scope-lock-shell-writes-design.md
+- codex/.codex-plugin/plugin.json
+- install/tests/test_unattended_docs_editions.py
+- install/tests/test_launch_pitch_docs.py
+- README.md
 Done:
 - `python3 tools/sync_codex_plugin.py --check` exits 0
 - `python3 -m pytest -q claude/jev/tests install/tests claude/ruflo/tests` passes
