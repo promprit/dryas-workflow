@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## 2.3.2 - 2026-10-16
+
+Windows fix for 2.3.1. On Windows, a shell write to a file on another drive than the project (for example `D:\tmp` while the project is on `C:`) crashed the scope lock instead of being blocked; it is now denied as outside the project, like any other out-of-scope write. macOS and Linux behave exactly as in 2.3.1.
+
+### Fixed
+- `scope_lock.check`: a path on another drive is outside the worktree (deny), not a crash.
+- `runrules`: a plan file that is not UTF-8 approves nothing instead of raising.
+- Tests: plan fixtures are written as UTF-8, the session-scratchpad tests are POSIX-only, and the out-of-scope deny test checks the file name rather than its POSIX spelling. CI is green on macOS, Linux and Windows.
+
 ## 2.3.1 - 2026-10-16
 
 Approve the plan, walk away: `/orchestrate` no longer stops to ask you about routine file changes or risky commands during a run. Shell edits outside a task's files are blocked or sent back; risky commands are decided by the plan, the judge or the orchestrator, and only what cannot be undone outside the project waits for you in the end report. Before starting, `/orchestrate` checks that the session cannot stop to ask, and it ends with one plain-language report and one notification. 2.3.1 asks you less than 1.0 did, catches more, and is faster.
