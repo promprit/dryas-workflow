@@ -15,7 +15,7 @@ class RunRulesBypassTest(unittest.TestCase):
     def setUp(self):
         self.wt = os.path.realpath(tempfile.mkdtemp())
         os.makedirs(os.path.join(self.wt, ".orchestrate"))
-        with open(os.path.join(self.wt, ".orchestrate", "PLAN.md"), "w") as f:
+        with open(os.path.join(self.wt, ".orchestrate", "PLAN.md"), "w", encoding="utf-8") as f:
             f.write(PLAN)
         with open(os.path.join(self.wt, ".orchestrate", "approved.json"), "w") as f:
             json.dump({"commands": [{"cmd": "rm -rf build", "task": "1", "reason": "r"}]}, f)

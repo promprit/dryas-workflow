@@ -60,7 +60,10 @@ def check(root: str, path: str, has_agent_id: bool = False) -> Optional[str]:
             return "scope lock: unusable .orchestrate/active.json or PLAN.md in %s (FileNotFoundError)" % root
     except Exception as e:
         return "scope lock: unusable .orchestrate/active.json or PLAN.md in %s (%s)" % (root, type(e).__name__)
-    rel = os.path.relpath(path, root)
+    try:
+        rel = os.path.relpath(path, root)
+    except ValueError:  # Windows: path and worktree on different drives
+        rel = os.pardir
     if rel == os.pardir or rel.startswith(os.pardir + os.sep):
         return "scope lock: %s is outside worktree %s while tasks %s are active" % (path, root, ",".join(map(str, active)))
     # Bookkeeping: .orchestrate/ (PLAN.md, active.json with its task review set) belongs to the main session
