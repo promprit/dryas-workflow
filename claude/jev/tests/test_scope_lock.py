@@ -103,7 +103,7 @@ class ScopeLockTest(unittest.TestCase):
             out = scope_lock.run(self.bash(cmd, agent_id="a1"))
             self.assertEqual(self.decision(out), "deny", cmd)
             reason = out["hookSpecificOutput"]["permissionDecisionReason"]
-            self.assertIn(path, reason)
+            self.assertIn(path.split("/")[-1], reason)  # Windows resolves /tmp/x to D:\\tmp\\x
             self.assertIn("Edit/Write inside your Scope", reason)
         self.assertTrue(all(r["kind"] == "deny" for r in self.scope_records()))
 
