@@ -2354,6 +2354,8 @@ Scope:
 - claude/jev/thresholds.py
 - claude/jev/jevlog.py
 - claude/jev/tests/test_gate_run.py
+- claude/jev/providers.py
+- claude/jev/jev_client.py
 - tools/compare_v1.py
 - install/tests/test_compare_v1.py
 Done:
