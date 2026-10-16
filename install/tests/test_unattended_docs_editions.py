@@ -17,8 +17,10 @@ class EditionsDocsTest(unittest.TestCase):
                            ".orchestrate/approved.json", "NEEDS USER", "jev/run_report.py", "nobody is asked"):
                 self.assertIn(needle, s, "%s: %s" % (rel, needle))
 
-    def test_opencode_command_mentions_unattended(self):
-        self.assertIn("nobody is asked", read("opencode/command/orchestrate.md"))
+    def test_opencode_command_loads_the_unattended_skill(self):
+        # The command is rendered by tools/sync_opencode.py and only loads the skill; the skill carries the rule.
+        self.assertIn("dryas-orchestrate", read("opencode/command/orchestrate.md"))
+        self.assertIn("nobody is asked", read("opencode/skill/dryas-orchestrate/SKILL.md"))
 
     def test_gov2_row(self):
         row = [l for l in read("reference/README.md").splitlines() if l.startswith("| GOV-2 |")][0]

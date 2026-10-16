@@ -8,7 +8,6 @@ running this file reads the event from stdin. Observe-only: prints nothing, neve
 import json
 import os
 import sys
-import tempfile
 from typing import Any, List
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -33,6 +32,7 @@ def _read() -> List[str]:
 
 
 def _write(ids: List[str]) -> None:
+    import tempfile  # lazy: only an ask is recorded here
     d = jevlog.log_dir()
     os.makedirs(d, mode=0o700, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=d, prefix=".asks_pending-")

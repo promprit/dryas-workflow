@@ -99,14 +99,22 @@ def _num(v: Any) -> Optional[float]:
     return float(v) if v == v and v >= 0 else None
 
 
+V1_PROMPTS_PER_TASK = 0.04  # Dryas 1.0 era, 2026-10-02..15 13:00: 45 prompts over 1202 tasks (Jev logs)
+
+
 def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
-             review: List[Any], merge: List[Any]) -> Dict[str, Any]:
+             review: List[Any], merge: List[Any], gate: Any = ()) -> Dict[str, Any]:
     dispatch = [r for r in dispatch if isinstance(r, dict)]
     review = [r for r in review if isinstance(r, dict)]
     merge = [r for r in merge if isinstance(r, dict) and r.get("task") is not None]
     first_tier = {t: v["start"] for t, v in tune_tasks.tiers(dispatch).items()}
     n = len(first_tier)
-    denials = sum(1 for r in scope if isinstance(r, dict))
+    scope = [r for r in scope if isinstance(r, dict)]
+    denials = sum(1 for r in scope if r.get("decision") == "deny")
+    asks = sum(1 for r in scope if r.get("decision") == "ask")
+    violations = sum(1 for r in scope if r.get("kind") == "violation")
+    run_prompts = sum(1 for r in list(scope) + [g for g in gate if isinstance(g, dict)]
+                      if r.get("run") is True and r.get("decision") == "ask")
     climbs = _steps(esc, "opus", "sonnet")["count"]
     # ESC-M3: fast-started = attempt-1 dispatch on `haiku`. Skip-ups start on `sonnet` at attempt 1,
     # so their `haiku`->`sonnet` records are not counted.
@@ -132,6 +140,7 @@ def delivery(dispatch: List[Any], scope: List[Any], esc: List[Dict[str, Any]],
     return {
         "tasks_dispatched": n,
         "scope_denials": denials,
+        "scope_asks": asks, "scope_violations": violations, "run_prompts": run_prompts,
         "scope_per_task": round(denials / n, 4) if n else None,
         "climb_rate": round(climbs / cheap_n, 4) if cheap_n else None,
         "haiku_tasks": len(haiku_tasks),
@@ -227,7 +236,7 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
         "opus_escalations": _steps(esc, "opus", "sonnet"),
         "fable": _steps(esc, "fable", "opus"),
         "fable_without_opus": _steps(esc, "fable", "opus", skipped=True),
-        "delivery": delivery(dispatch, scope, esc, review, merge),
+        "delivery": delivery(dispatch, scope, esc, review, merge, gate=gate),
         "memory": tune_memory.summary(read("memory", log_dir)),
         "judge": {"disagreements": tune_judge.disagreements(gate),
                   "approved": tune_judge.approved_asks(gate, read("outcomes", log_dir))},
@@ -311,6 +320,8 @@ def render(rep: Dict[str, Any], props: List[Dict[str, Any]]) -> str:
     delivery_lines = [
         "- Tasks dispatched: %d" % d["tasks_dispatched"],
         "- Scope-lock denials per task (healthy 0-1): %s (%d denials)" % (na(d["scope_per_task"]), d["scope_denials"]),
+        "- Prompts during runs (target 0): %d (scope asks %d, violations %d; v1 baseline %.2f prompts per task)" % (
+            d["run_prompts"], d["scope_asks"], d["scope_violations"], V1_PROMPTS_PER_TASK),
         "- Sonnet->Opus climb rate (healthy under 20%%): %s" % ("n/a" if d["climb_rate"] is None else "%.0f%%" % (d["climb_rate"] * 100)),
         "- Haiku share of first dispatches: %s (%d Haiku-started tasks)" % (
             "n/a" if d["haiku_share"] is None else "%.0f%%" % (d["haiku_share"] * 100), d["haiku_tasks"]),

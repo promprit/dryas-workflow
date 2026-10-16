@@ -54,13 +54,16 @@ ARG_JUDGED_HEADS = frozenset(_SHELLS | _SQL_CLIENTS | _POWERSHELL | set(_WRAPPER
 
 class _Cmd:
     """One simple command: words (quotes removed), which words held $( or a backtick, redirection targets,
-    heredoc and here-string texts fed to its stdin, and the simple command it is piped from."""
-    __slots__ = ("words", "dyn", "redirs", "here", "src")
+    heredoc and here-string texts fed to its stdin, and the simple command it is piped from.
+    Redirect operators (`rops`) and whether each target held $( or a backtick (`rdyn`) parallel `redirs`."""
+    __slots__ = ("words", "dyn", "redirs", "rops", "rdyn", "here", "src")
 
     def __init__(self, src: "Optional[_Cmd]" = None) -> None:
         self.words: List[str] = []
         self.dyn: List[bool] = []
         self.redirs: List[str] = []
+        self.rops: List[str] = []
+        self.rdyn: List[bool] = []
         self.here: List[str] = []
         self.src = src
 
@@ -74,6 +77,7 @@ def _scan(s: str) -> List[_Cmd]:
     have = dyn = redir = False  # word started (even if empty), word holds $( or `, word is a redirect target
     quote = ""
     hkind = ""  # "<<", "<<-" or "<<<" while the redirect target is a heredoc delimiter or here-string
+    rop = ""  # operator of the redirect being read
     pending: List[Tuple[str, bool, _Cmd]] = []  # heredocs whose body starts after the current line
     arith = 0  # open "((" frames: (( )) and $(( )) arithmetic, where << is a shift
     n, i = len(s), 0
@@ -84,6 +88,8 @@ def _scan(s: str) -> List[_Cmd]:
             word = "".join(cur)
             if redir:
                 cmd.redirs.append(word)
+                cmd.rops.append(rop)
+                cmd.rdyn.append(dyn)
                 if hkind == "<<<":
                     cmd.here.append(word)
                 elif hkind:
@@ -103,14 +109,14 @@ def _scan(s: str) -> List[_Cmd]:
         cmd = _Cmd(cmd if pipe else None)
 
     def push_sub(kind: str) -> None:
-        nonlocal cmd, cur, have, dyn, redir, quote
-        stack.append((kind, (cmd, cur, redir, quote)))
+        nonlocal cmd, cur, have, dyn, redir, quote, rop
+        stack.append((kind, (cmd, cur, redir, quote, rop)))
         cmd, cur, have, dyn, redir, quote = _Cmd(), [], False, False, False, ""
 
     def pop_sub() -> None:
-        nonlocal cmd, cur, have, dyn, redir, quote
+        nonlocal cmd, cur, have, dyn, redir, quote, rop
         end_cmd()
-        _, (cmd, cur, redir, quote) = stack.pop()
+        _, (cmd, cur, redir, quote, rop) = stack.pop()
         have = dyn = True
 
     while i < n:
@@ -179,7 +185,8 @@ def _scan(s: str) -> List[_Cmd]:
         elif c == "&" and nxt == ">":
             end_word()
             redir = True
-            i += 2 if s[i + 2:i + 3] == ">" else 1
+            rop = "&>>" if s[i + 2:i + 3] == ">" else "&>"
+            i += 2 if rop == "&>>" else 1
         elif c == "&":
             end_cmd()
             i += nxt == "&"
@@ -215,6 +222,7 @@ def _scan(s: str) -> List[_Cmd]:
                 op = s[start:i + 1]
                 if op == "<<" and s[i + 1:i + 2] == "-":
                     op, i = "<<-", i + 1
+                rop = op
                 hkind = op if op == "<<<" or (op in ("<<", "<<-") and not arith) else ""
         else:
             cur.append(c)
@@ -296,6 +304,18 @@ def _shell_string(args: List[str]) -> Optional[str]:
         elif a != "--":
             return a if has_c else None
     return None
+
+
+def simple_commands(text: str) -> List[_Cmd]:
+    """Public parse of `text` into simple commands (see _scan) for shellwrites. Raises ValueError over MAX_CHARS."""
+    if len(text) > MAX_CHARS:
+        raise ValueError("command longer than %d characters" % MAX_CHARS)
+    return _scan(text)
+
+
+head_index = _head
+base = _base
+shell_string = _shell_string
 
 
 def _judge(cmd: _Cmd, depth: int, hits: List[Optional[str]]) -> None:

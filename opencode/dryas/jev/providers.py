@@ -13,15 +13,27 @@ from typing import Any, Callable, Dict, Optional, Tuple
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
-def _has_key() -> bool:
-    from jev_client import api_key  # lazy: the ssl/http import is paid only when a judge is needed
-    return bool(api_key())
+KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY")
 
 
 def _cloud_without_jev() -> bool:
     """A cloud session that did not opt into Jev: no OpenRouter call, whatever key the environment holds."""
     remote = os.environ.get("CLAUDE_CODE_REMOTE", "").strip().lower() == "true"
     return remote and os.environ.get("DRYAS_JUDGE", "").strip().lower() != "jev"
+
+
+def env_key() -> str:
+    if _cloud_without_jev():
+        return ""
+    for name in KEY_VARS:
+        v = os.environ.get(name, "").strip()
+        if v and not v.startswith("${"):
+            return v
+    return ""
+
+
+def _has_key() -> bool:
+    return bool(env_key())
 
 
 def resolve(th: Dict[str, Any], injected: bool) -> Tuple[str, str]:
