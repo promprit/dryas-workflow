@@ -198,7 +198,7 @@ class RunTest(unittest.TestCase):
         self.assertEqual(snap(), before)
         self.assertRegex(out, r"Imported [1-9]")
 
-    @unittest.skipUnless(PLUG.is_dir() and NODE, "ruflo plugin not installed")
+    @unittest.skipUnless(PLUG.is_dir() and NODE and shutil.which("ruflo"), "ruflo plugin not installed")
     def test_e2e_mcp_store_lands_in_cache(self):
         r2 = self.t / "e2erepo"
         r2.mkdir()
