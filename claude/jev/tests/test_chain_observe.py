@@ -204,6 +204,12 @@ class BridgeStageTest(unittest.TestCase):
         self.assertEqual(hso["hookEventName"], "UserPromptSubmit")
         self.assertIn("ping", hso["additionalContext"])
 
+    def test_prompt_inproc_without_context_prints_nothing(self):
+        stage = {k: v for k, v in BRIDGE_STAGE.items() if k != "context"}
+        p, _ = run_chain("prompt", self.ev("UserPromptSubmit", prompt="hi"), self.config("prompt", [stage]),
+                         env_extra=self.env)
+        self.assertEqual(p.stdout, "")
+
     def test_codex_harness_skips_stage(self):
         p, _ = run_chain("prompt", self.ev("UserPromptSubmit", prompt="hi"), self.config("prompt", [BRIDGE_STAGE]),
                          harness="codex", env_extra=self.env)

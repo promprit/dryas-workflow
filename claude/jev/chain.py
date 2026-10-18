@@ -7,8 +7,8 @@ Any failure of a stage is skipped, except a "fail_closed" stage while a task is 
 (.orchestrate/active.json): its timeout, crash or unparseable output becomes a deny.
 The chain itself always exits 0.
 A stage with `inproc` runs in this process (only the known modules: `scope_lock`, `gate_outcome`, `bridge_deliver`);
-its `cmd` stays for tools that run stages one by one. Only `bridge_deliver` returns text: in `prompt` it joins the
-additionalContext, and in `post` a stage marked `"context": true` prints it as PostToolUse additionalContext.
+its `cmd` stays for tools that run stages one by one. Only `bridge_deliver` returns text: in `prompt` and `post` a
+stage marked `"context": true` adds it as additionalContext (UserPromptSubmit / PostToolUse).
 """
 import json
 import os
@@ -276,7 +276,7 @@ def prompt(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Opt
                 continue
             if "inproc" in st:
                 ctx = _inproc(st, event)
-                if ctx:
+                if ctx and st.get("context") is True:
                     parts.append(ctx)  # text only: an inproc stage can never block
                 continue
             code, out, err = _run(st, raw)
