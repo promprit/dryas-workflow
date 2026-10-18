@@ -4,7 +4,7 @@ allowed-tools: Bash("${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/
 disable-model-invocation: true
 ---
 
-Run this command with the Bash tool exactly as written, then show its one-line output to the user:
+Only if the arguments are empty or contain nothing but letters, digits, spaces and hyphens, run this command with the Bash tool exactly as written, then show its one-line output to the user. Otherwise run nothing and reply: "/handoff takes no argument, or move."
 
 ```
 "${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/handoff.py" save --cwd "$PWD" --mode '$ARGUMENTS'

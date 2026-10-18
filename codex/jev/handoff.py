@@ -225,9 +225,9 @@ def run(cwd: str, transcript: Optional[str] = None, judge_fn=judge, deadline_s: 
 
 
 def main(argv: List[str]) -> int:
-    ap = argparse.ArgumentParser(prog="handoff.py")
+    ap = argparse.ArgumentParser(prog="handoff.py", allow_abbrev=False)
     sub = ap.add_subparsers(dest="cmd")
-    s = sub.add_parser("save")
+    s = sub.add_parser("save", allow_abbrev=False)
     s.add_argument("--cwd", required=True)
     s.add_argument("--transcript")
     s.add_argument("--move", action="store_true")
