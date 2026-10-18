@@ -41,6 +41,8 @@ def events(cwd: str) -> List[Dict[str, Any]]:
     out = [dict(base, hook_event_name="UserPromptSubmit", prompt=p, _kind="prompt") for p in PROMPTS]
     out += [dict(base, hook_event_name="PostToolUse", tool_name=t, tool_input=ti, tool_response={}, _kind="post")
             for t, ti in POSTS]
+    out.append(dict(base, hook_event_name="PostToolUseFailure", tool_name="Bash",
+                    tool_input={"command": "false"}, tool_response={}, _kind="post"))
     return out
 
 

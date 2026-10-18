@@ -24,6 +24,9 @@ class CompareReleaseTest(unittest.TestCase):
         self.assertTrue(all(e["session_id"] == cr.SID for e in evs))
         self.assertNotIn("/Users/", json.dumps(evs))
 
+    def test_events_cover_post_failure(self):
+        self.assertTrue(any(e["hook_event_name"] == "PostToolUseFailure" for e in cr.events("/sandbox")))
+
     def test_self_comparison_runs_clean(self):
         s = cr.run(REPO / "claude", 1)  # one run per side: about 30 hook processes
         self.assertEqual((s["new"]["asks"], s["new"]["blocks"]), (0, 0))

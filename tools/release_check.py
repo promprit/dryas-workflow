@@ -521,6 +521,8 @@ def better_than_previous(rep):
                             capture_output=True, text=True, timeout=1800)
         if r2.returncode == 1:
             bad.append("%s hooks: %s" % (d.name, (r2.stdout.strip().splitlines() or ["worse"])[-1]))
+        elif r2.returncode != 0:
+            skipped.append("%s hooks: compare_release exit %s (no copy or no chain)" % (d.name, r2.returncode))
     if bad:
         return rep.say("FAIL", name, "; ".join(bad))
     if skipped and len(skipped) == len(olds):

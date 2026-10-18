@@ -269,6 +269,26 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertNotIn("WARN  stub config", out)
 
+    def test_skipped_hook_comparison_is_reported(self):
+        old = self.tmp / "h" / ".claude" / "plugins" / "cache" / "dryas-workflow" / "dryas" / "0.0.1"
+        (old / "jev").mkdir(parents=True)
+        (old / "jev" / "chain.py").write_text("", encoding="utf-8")
+        calls = []
+
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 2 if "compare_release.py" in cmd[1] else 0, "", "")
+
+        class Rep:
+            def say(self, status, name, detail=""):
+                self.got = (status, name, detail)
+
+        rep = Rep()
+        with mock.patch.object(release_check.Path, "home", return_value=self.tmp / "h"), \
+                mock.patch.object(release_check.subprocess, "run", fake_run):
+            release_check.better_than_previous(rep)
+        self.assertIn("compare_release exit 2", rep.got[2])
+
     def test_help(self):
         with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(io.StringIO()):
             release_check.main(["--help"])
