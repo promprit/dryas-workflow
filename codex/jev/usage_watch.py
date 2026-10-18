@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -21,20 +22,36 @@ BUDGET_S = 0.3
 STEP = 0.05
 DEFAULT_SWITCH = 0.9
 MAX_SID = 64
+LABEL_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
 
 
 def fetch_json(url: str, timeout: float) -> Optional[Dict[str, Any]]:
-    """GET a local JSON object within `timeout` seconds, never through a proxy; None on any problem."""
+    """GET a local JSON object within `timeout` seconds in total, never through a proxy; None on any problem.
+    The request runs in a daemon thread, so a server that drip-feeds bytes cannot hold the prompt past the budget."""
+    box: List[Optional[Dict[str, Any]]] = [None]
+
+    def get() -> None:
+        try:
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(url, timeout=max(timeout, 0.01)) as r:
+                v = json.loads(r.read(65536).decode("utf-8"))
+            box[0] = v if isinstance(v, dict) else None
+        except Exception:
+            pass
     try:
-        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(url, timeout=max(timeout, 0.01)) as r:
-            v = json.loads(r.read(65536).decode("utf-8"))
-        return v if isinstance(v, dict) else None
+        t = threading.Thread(target=get, daemon=True)
+        t.start()
+        t.join(max(timeout, 0.01))
+        return None if t.is_alive() else box[0]
     except Exception:
         return None
 
 
 def _num(v: Any) -> Optional[float]:
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _label_ok(v: Any) -> bool:
+    return isinstance(v, str) and LABEL_RE.fullmatch(v) is not None
 
 
 def _pct(x: float) -> str:
@@ -55,7 +72,7 @@ def _assess(mine: Dict[str, Any], doc: Dict[str, Any]) -> Optional[Tuple[str, fl
     rows = [a for a in rows if isinstance(a, dict)] if isinstance(rows, list) else []
     me = next((a for a in rows if isinstance(mine.get("dir"), str) and a.get("dir") == mine["dir"]), None) \
         or next((a for a in rows if isinstance(mine.get("label"), str) and a.get("label") == mine["label"]), None)
-    if me is None or not isinstance(me.get("label"), str):
+    if me is None or not _label_ok(me.get("label")):
         return None
     vals = [(v, w) for v, w in ((_num(me.get("fiveHour")), "5h"), (_num(me.get("sevenDay")), "week")) if v is not None]
     if not vals:
@@ -65,7 +82,7 @@ def _assess(mine: Dict[str, Any], doc: Dict[str, Any]) -> Optional[Tuple[str, fl
     def near(a: Dict[str, Any]) -> bool:
         return any(v is not None and v >= at for v in (_num(a.get("fiveHour")), _num(a.get("sevenDay"))))
 
-    calm: List[Dict[str, Any]] = sorted((a for a in rows if a is not me and isinstance(a.get("label"), str)
+    calm: List[Dict[str, Any]] = sorted((a for a in rows if a is not me and _label_ok(a.get("label"))
                                          and _num(a.get("fiveHour")) is not None and not near(a)),
                                         key=lambda a: _num(a.get("fiveHour")))
     return me["label"], use, which, at, (calm[0] if calm else None)
