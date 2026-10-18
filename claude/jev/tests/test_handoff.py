@@ -1,4 +1,6 @@
+import io
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -7,9 +9,11 @@ import time
 import unittest
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "tests"))
 import handoff
+import handoff_paths
 import handoff_restore
 from jev_client import JevUnavailable
 from tx_helpers import assistant, tool_result, tool_use, user, write_jsonl
@@ -406,6 +410,252 @@ class RestoreTest(HandoffBase):
     def test_cli_never_raises(self):
         p = subprocess.run([sys.executable, os.path.join(HERE, "handoff_restore.py")], input="garbage", capture_output=True, text=True)
         self.assertEqual(p.returncode, 0)
+
+
+class StartupRestoreTest(HandoffBase):
+    def save(self, move):
+        write_jsonl(self.tp, [user("u")])
+        handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=move)
+        import handoff_paths
+        return handoff_paths.move_path(self.cwd) if move else handoff.handoff_path(self.cwd)
+
+    def test_startup_restores_move_handoff(self):
+        p = self.save(move=True)
+        out = handoff_restore.run({"cwd": self.cwd, "source": "startup"})
+        self.assertIn("## Always kept", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(p))
+
+    def test_startup_ignores_plain_handoff(self):
+        p = self.save(move=False)
+        self.assertIsNone(handoff_restore.run({"cwd": self.cwd, "source": "startup"}))
+        self.assertTrue(os.path.exists(p))
+
+    def test_clear_unchanged(self):
+        for move in (False, True):
+            p = self.save(move=move)
+            self.assertIsNotNone(handoff_restore.run({"cwd": self.cwd, "source": "clear"}))
+            self.assertFalse(os.path.exists(p))
+
+    def test_resume_and_compact_ignored(self):
+        p = self.save(move=True)
+        for src in ("resume", "compact"):
+            self.assertIsNone(handoff_restore.run({"cwd": self.cwd, "source": src}))
+        self.assertTrue(os.path.exists(p))
+
+    def test_startup_stale_move_ignored(self):
+        p = self.save(move=True)
+        t = time.time() - 1900
+        os.utime(p, (t, t))
+        self.assertIsNone(handoff_restore.run({"cwd": self.cwd, "source": "startup"}))
+
+
+class MoveTest(HandoffBase):
+    def test_move_header_round_trips(self):
+        write_jsonl(self.tp, [user("u")])
+        out = handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=True)
+        import handoff_paths
+        with open(handoff_paths.move_path(self.cwd), encoding="utf-8") as f:
+            first = f.readline()
+        self.assertRegex(first, r" move=1 -->$")
+        from handoff_paths import parse_header
+        self.assertIs(parse_header(first)["move"], True)
+        self.assertIn("for another account", out)
+        self.assertIn("/exit", out)
+        self.assertNotIn("/clear", out)
+
+    def test_plain_save_has_no_move(self):
+        write_jsonl(self.tp, [user("u")])
+        out = handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True))
+        with open(handoff.handoff_path(self.cwd), encoding="utf-8") as f:
+            first = f.readline()
+        self.assertNotIn("move=", first)
+        self.assertIn("Now run /clear.", out)
+
+    def test_old_header_has_no_move(self):
+        from handoff_paths import parse_header
+        meta = parse_header("<!-- handoff cwd=/x session=s time=2026-10-01T00:00:00+0700 kept=1 total=2 -->")
+        self.assertEqual(meta, {"cwd": "/x", "session": "s", "time": "2026-10-01T00:00:00+0700", "move": False})
+
+    def test_cli_move_flag(self):
+        from unittest import mock
+        with mock.patch.object(handoff, "run", return_value="ok") as r:
+            self.assertEqual(handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--move"]), 0)
+        r.assert_called_once_with(self.cwd, None, move=True)
+        with mock.patch.object(handoff, "run", return_value="ok") as r:
+            handoff.main(["handoff.py", "save", "--cwd", self.cwd])
+        r.assert_called_once_with(self.cwd, None, move=False)
+
+
+class MoveFolderTest(HandoffBase):
+    def git(self, repo, *args):
+        subprocess.run(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                       check=True, capture_output=True)
+
+    def make_repo(self):
+        repo = os.path.join(self.tmp, "repo")
+        wt = os.path.join(self.tmp, "wt")
+        os.makedirs(repo)
+        self.git(repo, "init")
+        self.git(repo, "commit", "--allow-empty", "-m", "init")
+        self.git(repo, "worktree", "add", wt, "-b", "side")
+        return repo, wt
+
+    def move_save(self, cwd):
+        write_jsonl(self.tp, [user("u")])
+        handoff.run(cwd, self.tp, judge_keeping(lambda t: True), move=True)
+        import handoff_paths
+        return handoff_paths.move_path(cwd)
+
+    @unittest.skipUnless(shutil.which("git"), "git needed")
+    def test_other_worktree_startup_does_not_take_move_handoff(self):
+        repo, wt = self.make_repo()
+        p = self.move_save(repo)
+        self.assertTrue(os.path.exists(p))
+        self.assertIsNone(handoff_restore.run({"cwd": wt, "source": "startup"}))
+        self.assertTrue(os.path.exists(p))
+        out = handoff_restore.run({"cwd": repo, "source": "startup"})
+        self.assertIn("## Always kept", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(p))
+
+    @unittest.skipUnless(shutil.which("git"), "git needed")
+    def test_two_folders_keep_separate_move_handoffs(self):
+        repo, wt = self.make_repo()
+        p1, p2 = self.move_save(repo), self.move_save(wt)
+        self.assertNotEqual(p1, p2)
+        self.assertTrue(os.path.exists(p1) and os.path.exists(p2))
+        self.assertIsNotNone(handoff_restore.run({"cwd": repo, "source": "startup"}))
+        self.assertFalse(os.path.exists(p1))
+        self.assertTrue(os.path.exists(p2))
+        self.assertIsNotNone(handoff_restore.run({"cwd": wt, "source": "startup"}))
+        self.assertFalse(os.path.exists(p2))
+
+    def test_startup_without_move_file_spawns_no_git(self):
+        from unittest import mock
+        import handoff_paths
+        with mock.patch.object(handoff_paths.subprocess, "run") as run:
+            self.assertIsNone(handoff_restore.run({"cwd": self.cwd, "source": "startup"}))
+        self.assertEqual(run.call_count, 0)
+
+    def test_move_token_in_cwd_is_not_move(self):
+        from handoff_paths import parse_header
+        self.assertIs(parse_header("<!-- handoff cwd=/x/a move=1 b session=s time=t kept=1 total=2 -->")["move"], False)
+        self.assertIs(parse_header("<!-- handoff cwd=/x/a session=s time=t kept=1 total=2 move=1 -->")["move"], True)
+
+    def test_clear_after_move_restores(self):
+        p = self.move_save(self.cwd)
+        self.assertIsNotNone(handoff_restore.run({"cwd": self.cwd, "source": "clear"}))
+        self.assertFalse(os.path.exists(p))
+
+
+class FallThroughTest(HandoffBase):
+    def save(self, text, move):
+        import handoff_paths
+        write_jsonl(self.tp, [user(text)])
+        handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=move)
+        return handoff_paths.move_path(self.cwd) if move else handoff.handoff_path(self.cwd)
+
+    def restored(self, source):
+        out = handoff_restore.run({"cwd": self.cwd, "source": source})
+        return out["hookSpecificOutput"]["additionalContext"] if out else None
+
+    def test_clear_skips_stale_plain_for_fresh_move(self):
+        plain = self.save("PLAINTEXT", move=False)
+        t = time.time() - 1900
+        os.utime(plain, (t, t))
+        mv = self.save("MOVETEXT", move=True)
+        ctx = self.restored("clear")
+        self.assertIsNotNone(ctx)
+        self.assertIn("MOVETEXT", ctx)
+        self.assertNotIn("PLAINTEXT", ctx)
+        self.assertFalse(os.path.exists(mv))
+
+    def test_clear_skips_mismatched_plain_for_fresh_move(self):
+        os.makedirs(self.hdir, exist_ok=True)
+        with open(handoff.handoff_path(self.cwd), "w", encoding="utf-8") as f:
+            f.write("<!-- handoff cwd=%s session=s time=t kept=1 total=1 -->\n"
+                    "## Always kept\nPLAINTEXT\n" % os.path.join(self.tmp, "elsewhere"))
+        mv = self.save("MOVETEXT", move=True)
+        ctx = self.restored("clear")
+        self.assertIsNotNone(ctx)
+        self.assertIn("MOVETEXT", ctx)
+        self.assertNotIn("PLAINTEXT", ctx)
+        self.assertFalse(os.path.exists(mv))
+
+    def test_clear_prefers_usable_plain(self):
+        plain = self.save("PLAINTEXT", move=False)
+        mv = self.save("MOVETEXT", move=True)
+        ctx = self.restored("clear")
+        self.assertIn("PLAINTEXT", ctx)
+        self.assertNotIn("MOVETEXT", ctx)
+        self.assertFalse(os.path.exists(plain))
+        self.assertTrue(os.path.exists(mv))
+
+    def test_startup_deletes_expired_move_file(self):
+        mv = self.save("MOVETEXT", move=True)
+        t = time.time() - 1900
+        os.utime(mv, (t, t))
+        self.assertIsNone(self.restored("startup"))
+        self.assertFalse(os.path.exists(mv))
+
+
+class ModeTest(HandoffBase):
+    def test_mode_decides_move(self):
+        from unittest import mock
+        for mode, move in (("move", True), (" Move ", True), ("--move", True), ("", False)):
+            with self.subTest(mode=mode), mock.patch.object(handoff, "run", return_value="ok") as r:
+                self.assertEqual(handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--mode", mode]), 0)
+                r.assert_called_once_with(self.cwd, None, move=move)
+
+    def test_unknown_mode_saves_nothing(self):
+        from unittest import mock
+        out = io.StringIO()
+        with mock.patch.object(handoff, "run") as r, mock.patch("sys.stdout", out):
+            handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--mode", "now please"])
+        r.assert_not_called()
+        self.assertIn("unknown argument", out.getvalue())
+        self.assertIn("Nothing saved", out.getvalue())
+
+    def test_command_passes_arguments_through(self):
+        with open(os.path.join(REPO, "claude", "commands", "handoff.md"), encoding="utf-8") as f:
+            md = f.read()
+        self.assertIn("save --cwd \"$PWD\" --mode '$ARGUMENTS'", md)
+        self.assertNotIn("If the arguments are", md)
+
+    def test_command_guards_unsafe_arguments(self):
+        with open(os.path.join(REPO, "claude", "commands", "handoff.md"), encoding="utf-8") as f:
+            md = f.read()
+        self.assertIn("contain nothing but letters, digits, spaces and hyphens", md)
+        self.assertIn('"/handoff takes no argument, or move."', md)
+        self.assertEqual(md.count("--mode '$ARGUMENTS'"), 1)
+
+    def test_abbreviated_flag_is_not_expanded(self):
+        from unittest import mock
+        with mock.patch.object(handoff, "run", return_value="ok") as r:
+            handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--mode", "--mov"])
+        r.assert_not_called()
+
+
+class UnreadableTest(HandoffBase):
+    def save_move(self):
+        write_jsonl(self.tp, [user("MOVETEXT")])
+        handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=True)
+        return handoff_paths.move_path(self.cwd)
+
+    def test_clear_skips_undecodable_plain_for_fresh_move(self):
+        mp = self.save_move()
+        plain = handoff.handoff_path(self.cwd)
+        with open(plain, "wb") as f:
+            f.write(b"<!-- handoff \xff\xfe not utf-8 -->\n")
+        out = handoff_restore.run({"cwd": self.cwd, "source": "clear"})
+        self.assertIn("MOVETEXT", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(mp))
+
+    def test_clear_skips_unopenable_plain_for_fresh_move(self):
+        mp = self.save_move()
+        os.makedirs(handoff.handoff_path(self.cwd))  # stat works, open fails
+        out = handoff_restore.run({"cwd": self.cwd, "source": "clear"})
+        self.assertIn("MOVETEXT", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(mp))
 
 
 if __name__ == "__main__":
