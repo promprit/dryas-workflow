@@ -225,22 +225,27 @@ def run(cwd: str, transcript: Optional[str] = None, judge_fn=judge, deadline_s: 
 
 
 def main(argv: List[str]) -> int:
-    ap = argparse.ArgumentParser(prog="handoff.py")
+    ap = argparse.ArgumentParser(prog="handoff.py", allow_abbrev=False)
     sub = ap.add_subparsers(dest="cmd")
-    s = sub.add_parser("save")
+    s = sub.add_parser("save", allow_abbrev=False)
     s.add_argument("--cwd", required=True)
     s.add_argument("--transcript")
     s.add_argument("--move", action="store_true")
+    s.add_argument("--mode", nargs="?", const="move", default="")
     try:
         args = ap.parse_args(argv[1:])
     except SystemExit:
-        print("Handoff: usage: handoff.py save --cwd <dir> [--transcript <path>] [--move]")
+        print("Handoff: usage: handoff.py save --cwd <dir> [--transcript <path>] [--move] [--mode move]")
         return 0
     if args.cmd != "save":
-        print("Handoff: usage: handoff.py save --cwd <dir> [--transcript <path>] [--move]")
+        print("Handoff: usage: handoff.py save --cwd <dir> [--transcript <path>] [--move] [--mode move]")
+        return 0
+    mode = args.mode.strip().lower()
+    if mode not in ("", "move", "--move"):
+        print("Handoff: unknown argument %r; use /handoff or /handoff move. Nothing saved." % args.mode[:40])
         return 0
     try:
-        print(run(args.cwd, args.transcript, move=args.move))
+        print(run(args.cwd, args.transcript, move=args.move or bool(mode)))
     except Exception as e:
         print("Handoff failed (%s); nothing saved." % type(e).__name__)
     return 0

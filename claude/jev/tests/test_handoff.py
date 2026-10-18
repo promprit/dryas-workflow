@@ -1,3 +1,4 @@
+import io
 import os
 import shutil
 import stat
@@ -8,9 +9,11 @@ import time
 import unittest
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "tests"))
 import handoff
+import handoff_paths
 import handoff_restore
 from jev_client import JevUnavailable
 from tx_helpers import assistant, tool_result, tool_use, user, write_jsonl
@@ -593,6 +596,66 @@ class FallThroughTest(HandoffBase):
         os.utime(mv, (t, t))
         self.assertIsNone(self.restored("startup"))
         self.assertFalse(os.path.exists(mv))
+
+
+class ModeTest(HandoffBase):
+    def test_mode_decides_move(self):
+        from unittest import mock
+        for mode, move in (("move", True), (" Move ", True), ("--move", True), ("", False)):
+            with self.subTest(mode=mode), mock.patch.object(handoff, "run", return_value="ok") as r:
+                self.assertEqual(handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--mode", mode]), 0)
+                r.assert_called_once_with(self.cwd, None, move=move)
+
+    def test_unknown_mode_saves_nothing(self):
+        from unittest import mock
+        out = io.StringIO()
+        with mock.patch.object(handoff, "run") as r, mock.patch("sys.stdout", out):
+            handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--mode", "now please"])
+        r.assert_not_called()
+        self.assertIn("unknown argument", out.getvalue())
+        self.assertIn("Nothing saved", out.getvalue())
+
+    def test_command_passes_arguments_through(self):
+        with open(os.path.join(REPO, "claude", "commands", "handoff.md"), encoding="utf-8") as f:
+            md = f.read()
+        self.assertIn("save --cwd \"$PWD\" --mode '$ARGUMENTS'", md)
+        self.assertNotIn("If the arguments are", md)
+
+    def test_command_guards_unsafe_arguments(self):
+        with open(os.path.join(REPO, "claude", "commands", "handoff.md"), encoding="utf-8") as f:
+            md = f.read()
+        self.assertIn("contain nothing but letters, digits, spaces and hyphens", md)
+        self.assertIn('"/handoff takes no argument, or move."', md)
+        self.assertEqual(md.count("--mode '$ARGUMENTS'"), 1)
+
+    def test_abbreviated_flag_is_not_expanded(self):
+        from unittest import mock
+        with mock.patch.object(handoff, "run", return_value="ok") as r:
+            handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--mode", "--mov"])
+        r.assert_not_called()
+
+
+class UnreadableTest(HandoffBase):
+    def save_move(self):
+        write_jsonl(self.tp, [user("MOVETEXT")])
+        handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=True)
+        return handoff_paths.move_path(self.cwd)
+
+    def test_clear_skips_undecodable_plain_for_fresh_move(self):
+        mp = self.save_move()
+        plain = handoff.handoff_path(self.cwd)
+        with open(plain, "wb") as f:
+            f.write(b"<!-- handoff \xff\xfe not utf-8 -->\n")
+        out = handoff_restore.run({"cwd": self.cwd, "source": "clear"})
+        self.assertIn("MOVETEXT", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(mp))
+
+    def test_clear_skips_unopenable_plain_for_fresh_move(self):
+        mp = self.save_move()
+        os.makedirs(handoff.handoff_path(self.cwd))  # stat works, open fails
+        out = handoff_restore.run({"cwd": self.cwd, "source": "clear"})
+        self.assertIn("MOVETEXT", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(mp))
 
 
 if __name__ == "__main__":

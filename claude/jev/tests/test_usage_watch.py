@@ -3,6 +3,7 @@ import socket
 import stat
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -149,6 +150,52 @@ class WatchTest(unittest.TestCase):
             self.assertLess(time.monotonic() - t, 0.4)
         finally:
             s.close()
+
+    def serve_once(self, body, delay):
+        """A one-shot local HTTP server that sends `body` one byte every `delay` seconds."""
+        s = socket.socket()
+        s.bind(("127.0.0.1", 0))
+        s.listen(1)
+        stop = threading.Event()
+
+        def serve():
+            try:
+                c, _ = s.accept()
+                c.recv(1024)
+                c.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n")
+                for ch in body:
+                    if stop.is_set():
+                        break
+                    c.sendall(bytes([ch]))
+                    if delay:
+                        time.sleep(delay)
+                c.close()
+            except OSError:
+                pass
+        threading.Thread(target=serve, daemon=True).start()
+        self.addCleanup(s.close)
+        self.addCleanup(stop.set)
+        return "http://127.0.0.1:%d/api/usage" % s.getsockname()[1]
+
+    def test_drip_feeding_server_is_cut_at_budget(self):
+        url = self.serve_once(b'{"accounts": [], "switchAt": 0.9}', 0.05)  # ~1.7 s in total, each byte < 0.3 s
+        t = time.monotonic()
+        self.assertIsNone(usage_watch.fetch_json(url, 0.3))
+        self.assertLess(time.monotonic() - t, 0.4)
+
+    def test_fast_server_returns_the_object(self):
+        url = self.serve_once(b'{"accounts": [], "switchAt": 0.9}', 0)
+        self.assertEqual(usage_watch.fetch_json(url, 0.3), {"accounts": [], "switchAt": 0.9})
+
+    def test_invalid_calm_label_is_skipped(self):
+        line = usage_watch.run(self.ev(), server(acct("team", 0.95), acct("x y", 0.01), acct("a" * 33, 0.02),
+                                                 acct("ok\n", 0.03), acct("good-1", 0.2)))
+        self.assertIn("good-1 has room (5h 20%)", line)
+        for bad in ("x y", "a" * 33, "ok\n"):
+            self.assertNotIn(bad, line)
+
+    def test_invalid_own_label_is_silent(self):
+        self.assertIsNone(usage_watch.run(self.ev(), server(acct("te am", 0.95), acct("team2", 0.1), me="te am")))
 
 
 if __name__ == "__main__":

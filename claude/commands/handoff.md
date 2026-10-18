@@ -4,19 +4,10 @@ allowed-tools: Bash("${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/
 disable-model-invocation: true
 ---
 
-Run exactly one of these commands with the Bash tool, then show its one-line output to the user.
-If the arguments are `move`, run:
+Only if the arguments are empty or contain nothing but letters, digits, spaces and hyphens, run this command with the Bash tool exactly as written, then show its one-line output to the user. Otherwise run nothing and reply: "/handoff takes no argument, or move."
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/handoff.py" save --cwd "$PWD" --move
+"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/handoff.py" save --cwd "$PWD" --mode '$ARGUMENTS'
 ```
 
-Otherwise run:
-
-```
-"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/handoff.py" save --cwd "$PWD"
-```
-
-Arguments: $ARGUMENTS
-
-After a plain save, tell the user to type `/clear` (Claude cannot run `/clear` itself). After a move, tell the user to type `/exit` and start the new session as the output says. Do nothing else.
+If the output says the handoff was saved for another account, tell the user to type `/exit` and start the new session as the output says. If it says a handoff was saved, tell the user to type `/clear` (Claude cannot run `/clear` itself). Otherwise only show the output. Do nothing else.
