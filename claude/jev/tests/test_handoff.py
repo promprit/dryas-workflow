@@ -408,6 +408,42 @@ class RestoreTest(HandoffBase):
         self.assertEqual(p.returncode, 0)
 
 
+class StartupRestoreTest(HandoffBase):
+    def save(self, move):
+        write_jsonl(self.tp, [user("u")])
+        handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=move)
+        return handoff.handoff_path(self.cwd)
+
+    def test_startup_restores_move_handoff(self):
+        p = self.save(move=True)
+        out = handoff_restore.run({"cwd": self.cwd, "source": "startup"})
+        self.assertIn("## Always kept", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(p))
+
+    def test_startup_ignores_plain_handoff(self):
+        p = self.save(move=False)
+        self.assertIsNone(handoff_restore.run({"cwd": self.cwd, "source": "startup"}))
+        self.assertTrue(os.path.exists(p))
+
+    def test_clear_unchanged(self):
+        for move in (False, True):
+            p = self.save(move=move)
+            self.assertIsNotNone(handoff_restore.run({"cwd": self.cwd, "source": "clear"}))
+            self.assertFalse(os.path.exists(p))
+
+    def test_resume_and_compact_ignored(self):
+        p = self.save(move=True)
+        for src in ("resume", "compact"):
+            self.assertIsNone(handoff_restore.run({"cwd": self.cwd, "source": src}))
+        self.assertTrue(os.path.exists(p))
+
+    def test_startup_stale_move_ignored(self):
+        p = self.save(move=True)
+        t = time.time() - 1900
+        os.utime(p, (t, t))
+        self.assertIsNone(handoff_restore.run({"cwd": self.cwd, "source": "startup"}))
+
+
 class MoveTest(HandoffBase):
     def test_move_header_round_trips(self):
         write_jsonl(self.tp, [user("u")])
