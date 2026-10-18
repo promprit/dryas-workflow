@@ -1,4 +1,5 @@
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -478,6 +479,67 @@ class MoveTest(HandoffBase):
         with mock.patch.object(handoff, "run", return_value="ok") as r:
             handoff.main(["handoff.py", "save", "--cwd", self.cwd])
         r.assert_called_once_with(self.cwd, None, move=False)
+
+
+class MoveFolderTest(HandoffBase):
+    def git(self, repo, *args):
+        subprocess.run(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", *args],
+                       check=True, capture_output=True)
+
+    def make_repo(self):
+        repo = os.path.join(self.tmp, "repo")
+        wt = os.path.join(self.tmp, "wt")
+        os.makedirs(repo)
+        self.git(repo, "init")
+        self.git(repo, "commit", "--allow-empty", "-m", "init")
+        self.git(repo, "worktree", "add", wt, "-b", "side")
+        return repo, wt
+
+    def move_save(self, cwd):
+        write_jsonl(self.tp, [user("u")])
+        handoff.run(cwd, self.tp, judge_keeping(lambda t: True), move=True)
+        import handoff_paths
+        return handoff_paths.move_path(cwd)
+
+    @unittest.skipUnless(shutil.which("git"), "git needed")
+    def test_other_worktree_startup_does_not_take_move_handoff(self):
+        repo, wt = self.make_repo()
+        p = self.move_save(repo)
+        self.assertTrue(os.path.exists(p))
+        self.assertIsNone(handoff_restore.run({"cwd": wt, "source": "startup"}))
+        self.assertTrue(os.path.exists(p))
+        out = handoff_restore.run({"cwd": repo, "source": "startup"})
+        self.assertIn("## Always kept", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(p))
+
+    @unittest.skipUnless(shutil.which("git"), "git needed")
+    def test_two_folders_keep_separate_move_handoffs(self):
+        repo, wt = self.make_repo()
+        p1, p2 = self.move_save(repo), self.move_save(wt)
+        self.assertNotEqual(p1, p2)
+        self.assertTrue(os.path.exists(p1) and os.path.exists(p2))
+        self.assertIsNotNone(handoff_restore.run({"cwd": repo, "source": "startup"}))
+        self.assertFalse(os.path.exists(p1))
+        self.assertTrue(os.path.exists(p2))
+        self.assertIsNotNone(handoff_restore.run({"cwd": wt, "source": "startup"}))
+        self.assertFalse(os.path.exists(p2))
+
+    def test_startup_without_move_file_spawns_no_git(self):
+        from unittest import mock
+        import handoff_paths
+        with mock.patch.object(handoff_paths.subprocess, "run") as run:
+            self.assertIsNone(handoff_restore.run({"cwd": self.cwd, "source": "startup"}))
+        self.assertEqual(run.call_count, 0)
+
+    def test_move_token_in_cwd_is_not_move(self):
+        from handoff_paths import parse_header
+        self.assertIs(parse_header("<!-- handoff cwd=/x/a move=1 b session=s time=t kept=1 total=2 -->")["move"], False)
+        self.assertIs(parse_header("<!-- handoff cwd=/x/a session=s time=t kept=1 total=2 move=1 -->")["move"], True)
+
+    def test_clear_after_move_restores(self):
+        p = self.move_save(self.cwd)
+        self.assertIsNotNone(handoff_restore.run({"cwd": self.cwd, "source": "clear"}))
+        self.assertFalse(os.path.exists(p))
 
 
 if __name__ == "__main__":
