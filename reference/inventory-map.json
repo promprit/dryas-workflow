@@ -12,6 +12,7 @@
   "allowed_tool:claude:skill/orchestrate:Skill(superpowers:using-git-worktrees)": "allowed_tool:claude:skill/orchestrate:Skill(dryas:worktree)",
   "allowed_tool:claude:skill/orchestrate:Skill(superpowers:verification-before-completion)": "allowed_tool:claude:skill/orchestrate:Skill(dryas:verify)",
   "plugin_dep:claude:superpowers": "extra:superpowers",
+  "plugin_hook:claude:SessionStart:clear:handoff_restore.py": "plugin_hook:claude:SessionStart:clear|startup:handoff_restore.py",
   "skill_ref:claude:superpowers:brainstorming": "skill:claude:brainstorm",
   "skill_ref:claude:superpowers:receiving-code-review": "skill:claude:review-receive",
   "skill_ref:claude:superpowers:requesting-code-review": "skill:claude:review-request",
