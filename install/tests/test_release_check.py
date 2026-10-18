@@ -289,6 +289,33 @@ class ReleaseCheckTest(unittest.TestCase):
             release_check.better_than_previous(rep)
         self.assertIn("compare_release exit 2", rep.got[2])
 
+    def _compare(self, rc_v1, rc_rel):
+        old = self.tmp / "h" / ".claude" / "plugins" / "cache" / "dryas-workflow" / "dryas" / "0.0.1"
+        (old / "jev").mkdir(parents=True)
+        (old / "jev" / "chain.py").write_text("", encoding="utf-8")
+
+        def fake_run(cmd, **kw):
+            return subprocess.CompletedProcess(cmd, rc_rel if "compare_release.py" in cmd[1] else rc_v1, "", "")
+
+        class Rep:
+            def say(self, status, name, detail=""):
+                self.got = (status, name, detail)
+
+        rep = Rep()
+        with mock.patch.object(release_check.Path, "home", return_value=self.tmp / "h"), \
+                mock.patch.object(release_check.subprocess, "run", fake_run):
+            release_check.better_than_previous(rep)
+        return rep.got
+
+    def test_both_comparisons_skipped_is_skip_not_pass(self):
+        self.assertEqual(self._compare(2, 2)[0], "SKIP")
+
+    def test_one_real_comparison_passes_and_names_copy(self):
+        status, _, detail = self._compare(2, 0)
+        self.assertEqual(status, "PASS")
+        self.assertIn("vs 0.0.1", detail)
+        self.assertIn("skipped:", detail)
+
     def test_help(self):
         with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(io.StringIO()):
             release_check.main(["--help"])

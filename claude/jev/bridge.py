@@ -32,7 +32,8 @@ TOOLS = [
     {"name": "send_message",
      "description": ("Leave a message for a session on any account. to: its name or a sessionId prefix of 8+ "
                      "characters. The recipient sees it at its next prompt or Bash/Write/Edit call, not while idle. "
-                     "At most 8 KB; secrets are redacted. reply_to: the id of the message you answer."),
+                     "At most 8 KB; secrets are redacted. reply_to: the id of the message you answer. "
+                     "A message waiting when the recipient runs /clear is not delivered (its session id changes)."),
      "inputSchema": {"type": "object", "properties": {"to": {"type": "string"}, "text": {"type": "string"},
                                                       "reply_to": {"type": "string"}},
                      "required": ["to", "text"]}},
@@ -114,6 +115,7 @@ def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     alive, _ = bp.live(sessions)
     peer, err = bp.resolve(to, sessions, bp.pool(alive, me), {s["sessionId"] for s in alive})
     if err or peer is None:
+        # pool() already excludes the caller, so this runs only when nothing else matched.
         if to == me["name"] or (len(to) >= 8 and me["sessionId"].startswith(to.lower())):
             return _refuse("that is this session")
         return _refuse(err or "no peer", **{"from": me["sessionId"]})

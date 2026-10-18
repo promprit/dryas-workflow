@@ -84,6 +84,10 @@ def pid_running(pid: int) -> bool:
     if os.name == "nt":  # os.kill would terminate the process on Windows
         import ctypes
         k = ctypes.windll.kernel32
+        k.OpenProcess.restype = ctypes.c_void_p
+        k.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+        k.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        k.CloseHandle.argtypes = [ctypes.c_void_p]
         h = k.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not h:
             return False

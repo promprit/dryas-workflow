@@ -21,7 +21,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import compare_v1
@@ -111,15 +111,30 @@ def run(old_dir: Path, runs: int, seeded: bool = False) -> Dict[str, Dict[str, A
         shutil.rmtree(str(tmp), ignore_errors=True)
 
 
+def default_old(cache: Path, ours: str) -> Optional[Path]:
+    """The newest cached release under cache that has jev/chain.py and is not this checkout's version."""
+    found = []
+    for d in cache.glob("*") if cache.is_dir() else []:
+        try:
+            key = tuple(int(x) for x in d.name.split("."))
+        except ValueError:
+            continue
+        if d.name != ours and (d / "jev" / "chain.py").is_file():
+            found.append((key, d))
+    return max(found)[1] if found else None
+
+
 def main() -> int:
     cd = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
     p = argparse.ArgumentParser()
-    p.add_argument("--old", default=str(cd / "plugins" / "cache" / "dryas-workflow" / "dryas" / "2.3.2"))
+    ours = json.loads((REPO / "claude" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
+    newest = default_old(cd / "plugins" / "cache" / "dryas-workflow" / "dryas", ours)
+    p.add_argument("--old", default=str(newest) if newest else "")
     p.add_argument("--runs", type=int, default=6)
     a = p.parse_args()
     old = Path(a.old)
     if not (old / "jev" / "chain.py").is_file():
-        sys.stderr.write("no old Dryas copy at %s (pass --old)\n" % old)
+        sys.stderr.write("no old Dryas copy at %s (pass --old)\n" % (a.old or "the plugin cache"))
         return 2
     s = run(old, max(a.runs, 4))
     print("%-12s %12s %12s" % ("", old.name, "this"))

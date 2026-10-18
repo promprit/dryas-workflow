@@ -102,6 +102,13 @@ class DeliverTest(unittest.TestCase):
         for i in range(5):
             self.assertEqual(joined.count("id m-%012x," % i), 1)
 
+    def test_oversized_file_goes_to_bad(self):
+        self.put(1, raw=json.dumps(msg(1, text="x" * 70000)))
+        with mock.patch.object(bd, "_load", side_effect=AssertionError("read")):
+            self.assertEqual(bd.deliver(self.ev()), "")
+        self.assertEqual(len(os.listdir(os.path.join(self.box, "bad"))), 1)
+        self.assertEqual(self.log()[-1]["event"], "bad")
+
     def test_bad_file_moved_to_bad(self):
         self.put(1, raw="{not json")
         self.assertEqual(bd.deliver(self.ev()), "")

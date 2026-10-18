@@ -509,25 +509,30 @@ def better_than_previous(rep):
     corpus = Path(__file__).resolve().parent.parent / "claude" / "jev" / "tests" / "fixtures" / "scope_shell_corpus.jsonl"
     if not corpus.is_file():
         return rep.say("SKIP", name, "regression corpus missing: %s" % corpus)
-    bad, skipped = [], []
+    bad, skipped, ran = [], [], []
     for d in olds:
+        did = False
         r = subprocess.run([sys.executable, str(Path(__file__).with_name("compare_v1.py")), "--v1", str(d)],
                            capture_output=True, text=True, timeout=1800)
+        did = did or r.returncode in (0, 1)
         if r.returncode == 1:
             bad.append("%s: %s" % (d.name, (r.stdout.strip().splitlines() or ["worse"])[-1]))
         elif r.returncode != 0:
             skipped.append("%s: compare_v1 exit %s (no corpus or no copy)" % (d.name, r.returncode))
         r2 = subprocess.run([sys.executable, str(Path(__file__).with_name("compare_release.py")), "--old", str(d)],
                             capture_output=True, text=True, timeout=1800)
+        did = did or r2.returncode in (0, 1)
         if r2.returncode == 1:
             bad.append("%s hooks: %s" % (d.name, (r2.stdout.strip().splitlines() or ["worse"])[-1]))
         elif r2.returncode != 0:
             skipped.append("%s hooks: compare_release exit %s (no copy or no chain)" % (d.name, r2.returncode))
+        if did:
+            ran.append(d.name)
     if bad:
         return rep.say("FAIL", name, "; ".join(bad))
-    if skipped and len(skipped) == len(olds):
+    if not ran:
         return rep.say("SKIP", name, "; ".join(skipped))
-    rep.say("PASS", name, "vs " + ", ".join(d.name for d in olds if d.name not in "".join(skipped)))
+    rep.say("PASS", name, "vs " + ", ".join(ran) + ("; skipped: " + "; ".join(skipped) if skipped else ""))
 
 
 def main(argv=None):

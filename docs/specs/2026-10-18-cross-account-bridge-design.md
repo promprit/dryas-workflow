@@ -1,6 +1,6 @@
 # Cross-account session bridge: design
 
-Date: 2026-10-18. Status: draft for review. Branch: `worktree-snug-imagining-dolphin`.
+Date: 2026-10-18. Status: approved 2026-10-18; built (see "As built"). Branch: `worktree-snug-imagining-dolphin`.
 Contested: yes (changes the hook-chain stage contract: `inproc` stages run in `prompt`, and a post stage marked `"context": true` may return `additionalContext`; adds two tools to the jev MCP server that other sessions depend on).
 
 ## 1. Goal
@@ -251,3 +251,17 @@ A second pass with one waiting message reports delivery cost (informational: 2.3
 - Windows start-time matching.
 - Instant delivery to idle sessions: Claude Code channels or the session's `messagingSocketPath`; a separate spike, since the socket protocol is internal.
 - Codex and OpenCode editions.
+
+## 11. As built (2026-10-18)
+
+Differences from the sections above, decided during the run:
+
+- No rule line in `claude/CLAUDE.md.template` (§7.1): the template was 31 bytes under its budget; the `[Dryas bridge]` header of every delivery carries the instruction instead.
+- Discovery and identity live in `claude/jev/bridge_peers.py`; `bridge.py` holds the tools, sending and pruning.
+- The tools are listed only when the server runs with `DRYAS_HARNESS=claude`, which `claude/.mcp.json` sets; Codex and OpenCode keep their tool list.
+- Identity (§4.4) re-reads the caller's session file on every call, so it follows `/clear`.
+- A session with no `procStart` is kept by pid with a note; one whose start time does not match is dropped with a note (§4.2).
+- Delivery (§6.3) quotes every body line with `> `, flattens sender fields to one line with length caps, rejects malformed ids, ends with `[Dryas bridge] end of messages`, isolates each message's errors, and sends files over 64 KB to `bad/`.
+- A `prompt` inproc stage returns text only when marked `"context": true`, as in `post` (§6.2).
+- `tools/compare_release.py` takes `--old DIR` (default: the newest cached older release) instead of `--ref` (§9.3); the release check reports a skipped comparison as SKIP.
+- Known limit: a message still waiting when the recipient runs `/clear` is not delivered.
