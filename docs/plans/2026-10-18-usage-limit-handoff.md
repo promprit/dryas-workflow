@@ -17,7 +17,7 @@
 - At most two warnings per limit window per session: tier 0 at `switchAt`, tier 1 at `switchAt + 0.05`; reset when use falls below `switchAt`.
 - Warn only when another account has room (non-null `fiveHour`, both values below `switchAt`); otherwise silent.
 - The new session is started with plain `cl --account <calm label>`, never `cl -c` (which follows the newest conversation, the account being left).
-- Restore at startup only for a handoff whose header has `move=1`, under 30 min old, same project root; deleted after use.
+- Restore at startup only for a handoff whose header has `move=1`, under 30 min old, saved in the same folder (`move_path`, keyed by the folder's real path; changed from "same project root" after review); deleted after use.
 - State files: dir mode 0700, file mode 0600, as in `context_watch.py`.
 
 ## Review Focus
