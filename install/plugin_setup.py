@@ -484,7 +484,7 @@ def verify(cd: Path, comps: List[str]) -> int:
     return fails
 
 
-OWNED = ("accounts.json", "chain.local.json", "docs", "jev", "ruflo")  # what setup writes under the data root
+OWNED = ("accounts.json", "chain.local.json", "docs", "inbox", "jev", "ruflo")  # what setup writes under the data root
 
 
 def _within(a: Path, b: Path) -> bool:

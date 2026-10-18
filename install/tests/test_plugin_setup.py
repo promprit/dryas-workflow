@@ -508,6 +508,9 @@ class VerifyTest(unittest.TestCase):
 
 
 class UninstallTest(unittest.TestCase):
+    def test_inbox_is_owned(self):
+        self.assertIn("inbox", ps.OWNED)
+
     def test_one_dir_removed_other_kept(self):
         e = Env(self)
         for cd in (e.a, e.b):

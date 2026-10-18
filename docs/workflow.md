@@ -143,6 +143,8 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 
 **UserPromptSubmit** (15 s): Jev route, then context watch, then FlowObserve if enabled (observe-only, §12). Ruflo's own route hook (with the Ruflo extra) is dropped.
 
+**Bridge delivery** (`bridge-deliver`, core, Claude Code only, in-process): the last stage of UserPromptSubmit and of PostToolUse/PostToolUseFailure (the Bash/Write/Edit matcher above; no extra hook). It moves up to 5 waiting messages (16 KB) from `~/.dryas/inbox/<session id>/` to `delivered/` and returns them as additionalContext under a `[Dryas bridge]` header. An empty inbox costs one directory scan and prints nothing; a subagent's events get nothing; it never blocks.
+
 **Other events:**
 - **Dryas memory stages** (the `memory` component, observe-only: every applicable stage runs in order, exit codes and output are ignored, nothing is printed, and each stage has a 2 s budget, per stage (one event may run two stages, so its total can reach 4 s); the chain exits 0 whatever they do). Claude Code only:
   - `mem-edit`: PostToolUse and PostToolUseFailure on Write, Edit, MultiEdit and NotebookEdit; records each edit and whether it succeeded.
@@ -237,6 +239,15 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   - **Dropped:** route, compaction guidance, SubagentStart status, notify.
 - Ruflo's `CLAUDE.md` planning sections ("Implementation Loop", "Concurrency and authority") are not used, because the orchestrator owns planning.
 
+### Cross-account bridge
+
+Sessions on different Claude Code accounts (config dirs) cannot `SendMessage` each other. The jev MCP server adds two tools on Claude Code:
+
+- `list_peers`: live interactive sessions in every config dir listed in `~/.dryas/accounts.json` (name, sessionId, account base name, cwd, status, idle_for, same_account). Only `sessions/*.json` is read; `*.key` files never are. A session counts as live when its pid runs and started at the recorded `procStart`.
+- `send_message(to, text, reply_to?)`: `to` is a name that matches one live session or a sessionId prefix (8+ characters). Text is redacted and capped at 8 KB; at most 50 waiting per recipient and 20 sends per sender per 10 minutes.
+
+Messages are files under `~/.dryas/inbox/<recipient session id>/` (folders 0700, files 0600); nothing goes over the network and no model is called. The recipient sees them at its next prompt or Bash/Write/Edit call (bridge delivery, §5); an idle session sees nothing until then. Same-account peers are better reached with native `SendMessage`, which wakes idle sessions. Delivered messages are kept 7 days. `bridge.jsonl` in the Jev logs records sends and deliveries without the text. The tools are covered by the existing `mcp__plugin_dryas_jev` allow rule: no new prompt.
+
 ## 8. Optional extra: Superpowers
 
 > Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`.
@@ -276,7 +287,7 @@ This is the maintainer's example layout (a Mac plus a dev SSD at `$DEV_ROOT`); o
 | Mac (`~`) | SSD (`$DEV_ROOT`) |
 |---|---|
 | `~/.claude/` (settings, plugins including `dryas`, Claude memory per project); one such dir per account | `projects/<name>` |
-| `~/.dryas/` (Jev logs, thresholds, handoffs, `chain.local.json`, `accounts.json`, **`dryas.db` Dryas memory**, Ruflo helpers and MCP shim when the extra is on) | |
+| `~/.dryas/` (Jev logs, thresholds, handoffs, `chain.local.json`, `accounts.json`, `inbox/` (bridge messages), **`dryas.db` Dryas memory**, Ruflo helpers and MCP shim when the extra is on) | |
 | `~/.dryas/docs/dryas-workflow.md` (this file, installed) | `CLAUDE.md` (workspace rules, inherited by every project) |
 | `ruflo` CLI (only with the Ruflo extra; nvm Node), `~/.flowobserve/` (FlowObserve spool + SQLite) | `_caches/` (npm, pnpm, pip, Homebrew, Xcode, Ruflo memory with the extra) |
 | `~/.zshrc` (`OPENROUTER_API_KEY`, guarded cache block, `dev` alias) | `_tools/` (settings_merge.py, relink_claude.py) |
