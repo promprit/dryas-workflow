@@ -544,5 +544,56 @@ class MoveFolderTest(HandoffBase):
         self.assertFalse(os.path.exists(p))
 
 
+class FallThroughTest(HandoffBase):
+    def save(self, text, move):
+        import handoff_paths
+        write_jsonl(self.tp, [user(text)])
+        handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=move)
+        return handoff_paths.move_path(self.cwd) if move else handoff.handoff_path(self.cwd)
+
+    def restored(self, source):
+        out = handoff_restore.run({"cwd": self.cwd, "source": source})
+        return out["hookSpecificOutput"]["additionalContext"] if out else None
+
+    def test_clear_skips_stale_plain_for_fresh_move(self):
+        plain = self.save("PLAINTEXT", move=False)
+        t = time.time() - 1900
+        os.utime(plain, (t, t))
+        mv = self.save("MOVETEXT", move=True)
+        ctx = self.restored("clear")
+        self.assertIsNotNone(ctx)
+        self.assertIn("MOVETEXT", ctx)
+        self.assertNotIn("PLAINTEXT", ctx)
+        self.assertFalse(os.path.exists(mv))
+
+    def test_clear_skips_mismatched_plain_for_fresh_move(self):
+        os.makedirs(self.hdir, exist_ok=True)
+        with open(handoff.handoff_path(self.cwd), "w", encoding="utf-8") as f:
+            f.write("<!-- handoff cwd=%s session=s time=t kept=1 total=1 -->\n"
+                    "## Always kept\nPLAINTEXT\n" % os.path.join(self.tmp, "elsewhere"))
+        mv = self.save("MOVETEXT", move=True)
+        ctx = self.restored("clear")
+        self.assertIsNotNone(ctx)
+        self.assertIn("MOVETEXT", ctx)
+        self.assertNotIn("PLAINTEXT", ctx)
+        self.assertFalse(os.path.exists(mv))
+
+    def test_clear_prefers_usable_plain(self):
+        plain = self.save("PLAINTEXT", move=False)
+        mv = self.save("MOVETEXT", move=True)
+        ctx = self.restored("clear")
+        self.assertIn("PLAINTEXT", ctx)
+        self.assertNotIn("MOVETEXT", ctx)
+        self.assertFalse(os.path.exists(plain))
+        self.assertTrue(os.path.exists(mv))
+
+    def test_startup_deletes_expired_move_file(self):
+        mv = self.save("MOVETEXT", move=True)
+        t = time.time() - 1900
+        os.utime(mv, (t, t))
+        self.assertIsNone(self.restored("startup"))
+        self.assertFalse(os.path.exists(mv))
+
+
 if __name__ == "__main__":
     unittest.main()
