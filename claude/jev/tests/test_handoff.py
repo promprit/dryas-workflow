@@ -13,6 +13,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "tests"))
 import handoff
+import handoff_paths
 import handoff_restore
 from jev_client import JevUnavailable
 from tx_helpers import assistant, tool_result, tool_use, user, write_jsonl
@@ -619,6 +620,29 @@ class ModeTest(HandoffBase):
             md = f.read()
         self.assertIn("save --cwd \"$PWD\" --mode '$ARGUMENTS'", md)
         self.assertNotIn("If the arguments are", md)
+
+
+class UnreadableTest(HandoffBase):
+    def save_move(self):
+        write_jsonl(self.tp, [user("MOVETEXT")])
+        handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=True)
+        return handoff_paths.move_path(self.cwd)
+
+    def test_clear_skips_undecodable_plain_for_fresh_move(self):
+        mp = self.save_move()
+        plain = handoff.handoff_path(self.cwd)
+        with open(plain, "wb") as f:
+            f.write(b"<!-- handoff \xff\xfe not utf-8 -->\n")
+        out = handoff_restore.run({"cwd": self.cwd, "source": "clear"})
+        self.assertIn("MOVETEXT", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(mp))
+
+    def test_clear_skips_unopenable_plain_for_fresh_move(self):
+        mp = self.save_move()
+        os.makedirs(handoff.handoff_path(self.cwd))  # stat works, open fails
+        out = handoff_restore.run({"cwd": self.cwd, "source": "clear"})
+        self.assertIn("MOVETEXT", out["hookSpecificOutput"]["additionalContext"])
+        self.assertFalse(os.path.exists(mp))
 
 
 if __name__ == "__main__":
