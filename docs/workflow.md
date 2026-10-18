@@ -152,7 +152,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   - `gate-outcome` (core, PostToolUse on Bash, Claude Code only): records what happened after a gated command, for `/tune`.
   - A consolidation that would overrun the budget is marked pending and finished by a detached `dryas memory consolidate` (the launcher is `<plugin root>/bin/dryas`); see [memory-model.md](memory-model.md).
 - With the Ruflo extra, its own learning and memory hooks run instead of the Dryas stages: post-edit, session restore/end, memory import (no sync), PreCompact persist, SubagentStop post-task.
-- Jev compaction: `PreCompact` runs `compact_keep.py`, `SessionStart(compact)` runs `compact_restore.py`, and `SessionStart(clear)` runs `handoff_restore.py` (for `/handoff`).
+- Jev compaction: `PreCompact` runs `compact_keep.py`, `SessionStart(compact)` runs `compact_restore.py`, and `SessionStart(clear|startup)` runs `handoff_restore.py` (for `/handoff`; on startup only a `/handoff move` handoff).
 - *(optional)* FlowObserve's own hooks for other events, installed by FlowObserve itself (§12).
 
 **Rules for the chain:**
@@ -168,7 +168,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - **Code** lives in the repo's `claude/jev/` and ships in the plugin. Python 3.9 stdlib only; tests run with `python -m pytest -q claude/jev/tests`.
   - `jev_client.py`: `POST https://openrouter.ai/api/v1/systemone`, model `typesafe/jev-1.13`, timeout 3 s. It redacts the state first.
   - `redact.py`: removes keys and tokens, `NAME=secret`, bearer/authorization headers, PEM blocks, URL passwords and `--token` flags.
-  - `gate.py`, `route.py`, `scope_lock.py`, `planfile.py`, `chain.py`, `jevlog.py`, `compact_keep.py`, `compact_restore.py`, `transcript_items.py`, `handoff.py`, `handoff_paths.py`, `handoff_restore.py`, `context_watch.py`, `tune.py`.
+  - `gate.py`, `route.py`, `scope_lock.py`, `planfile.py`, `chain.py`, `jevlog.py`, `compact_keep.py`, `compact_restore.py`, `transcript_items.py`, `handoff.py`, `handoff_paths.py`, `handoff_restore.py`, `context_watch.py`, `usage_watch.py`, `tune.py`.
 - **MCP server `jev`**, shipped by the plugin (`.mcp.json`); its tools are `mcp__plugin_dryas_jev__<tool>`, allowed in `permissions.allow`:
   - `jev_judge(state, questions)` returns answers plus an `escalate` list.
   - `log_escalation(task, reason, decided_by, from_model, to_model)`.
@@ -198,7 +198,8 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
 - **Compaction.**
   - `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75` starts auto-compaction at about 75%.
   - **Context warning** (`context_watch.py`, prompt chain stage): at 65% and again at 70% Claude tells you to run `/handoff` then `/clear`. Window = `JEV_CONTEXT_WINDOW`, else 1M if the model id contains `[1m]`, names a 1M-default model (`Fable`, `Mythos`, or `Opus`/`Sonnet` 4.6 and later, e.g. `claude-opus-5-5`; version read as 1-2 digits so dates never count), or usage went past 200k; else 200k (`Haiku` 4.5, `Opus`/`Sonnet` 4.5 and older, 3.x, unknown ids). Same rule as FlowObserve's `millionModel()`/`windowFor()` (`server/src/transcript.ts`); change both together. Tiers reset after a compaction.
-  - **Manual (preferred, no lossy summary): `/handoff` then `/clear`.** `handoff.py` reads the whole transcript (deduped by uuid) into items: real user messages, Claude replies, subagent hand-backs, and one line per tool call with a trimmed result. Always kept without Jev: last 10 user messages, files touched, latest result per test command, commits. Jev scores the newest 200 other items keep/drop (40 per call, 60 s deadline). Saved redacted to `~/.dryas/jev/handoff/<project>-<hash>.md` (0600, keyed by the main repo root so worktrees match, pruned after 24 h). `/clear` fires `SessionStart(clear)` -> `handoff_restore.py` injects it (only if under 30 min old and same project) and deletes it.
+  - **Manual (preferred, no lossy summary): `/handoff` then `/clear`.** `handoff.py` reads the whole transcript (deduped by uuid) into items: real user messages, Claude replies, subagent hand-backs, and one line per tool call with a trimmed result. Always kept without Jev: last 10 user messages, files touched, latest result per test command, commits. Jev scores the newest 200 other items keep/drop (40 per call, 60 s deadline). Saved redacted to `~/.dryas/jev/handoff/<project>-<hash>.md` (0600, keyed by the main repo root so worktrees match, pruned after 24 h). A `/handoff move` handoff is saved separately as `move-<hash>.md`, keyed by the folder's real path. `/clear` fires `SessionStart(clear)` -> `handoff_restore.py` injects it (only if under 30 min old and same project) and deletes it.
+  - **Moving to another account: `/handoff move`, `/exit`, then `cl --account <label>`.** `usage_watch.py` (prompt chain stage, Claude only) reads FlowObserve's `GET /api/usage` on 127.0.0.1 (300 ms, fail silent) and, when this session's account is at `switchAt` (and again at +5 points) on its 5-hour or weekly use while another account is below it, tells you to move. `/handoff move` saves the handoff with `move=1`; the new session's `SessionStart(startup)` restores it (the move handoff is tied to the folder it was saved in: same 30 min rule, and start the new session in that same folder) and deletes it.
   - **Automatic (safety net):** at 75% Claude Code compacts and writes its own summary (kept short by the compact instructions in the injected rules). `PreCompact` runs the same handoff engine (`compact_keep.py`, 20 s deadline, hook timeout 30 s) and `SessionStart(compact)` re-injects the scored items word for word.
   - If Jev is down or the deadline passes, the newest 30 unscored items are kept instead, and the file says so.
   - This is our own code; **jev-use is not used** (it's unofficial).
@@ -260,7 +261,7 @@ The process skills Dryas uses are its own (`dryas:brainstorm`, `dryas:worktree`,
 | `/commit` | Conventional commit, gated by Jev "safe to commit?", never pushes |
 | `/tune` | Weekly calibration (§6) |
 | `/retro` | Session retrospective: friction by severity, proposes and never applies; accepted lessons go to memory (kind `retro`) |
-| `/handoff` | Jev-scored context reset: saves kept items, then you type `/clear` (§6) |
+| `/handoff` | Jev-scored context reset: saves kept items, then you type `/clear`; `/handoff move` for a new session on another account (§6) |
 | `/interrogate` | Two-model adversarial review with a lead verdict; gated step of /orchestrate or on request |
 | `/benchmark-checklist` | Vet a measured perf number before reporting it |
 | agent `dryas:executor` | `standard` tier (`model: sonnet`), tools Read/Edit/Write/Bash, one task section, locked scope. Ends with CHANGED / TESTS / DONE-CRITERIA / CONFIDENCE / UNRESOLVED |

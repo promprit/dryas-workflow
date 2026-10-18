@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""SessionStart(clear) hook: seed the fresh context with the Jev-scored handoff, then delete it.
-Only a file < 30 min old whose header cwd matches the event cwd is used. Never raises."""
+"""SessionStart(clear|startup) hook: seed the fresh context with the Jev-scored handoff, then delete it.
+Only a file < 30 min old whose header cwd matches the event cwd is used.
+On startup only a handoff saved with /handoff move (header move=1) is used. Never raises."""
 import json
 import os
 import sys
@@ -14,23 +15,41 @@ STALE_SECONDS = 1800
 
 def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     try:
-        from handoff_paths import handoff_path, parse_header, project_root, restore_context
-        if event.get("source") not in (None, "clear"):
+        from handoff_paths import handoff_path, move_path, parse_header, project_root, restore_context
+        source = event.get("source")
+        if source not in (None, "clear", "startup"):
             return None
         cwd = event.get("cwd")
         if not isinstance(cwd, str) or not cwd.strip():
             return None
-        path = handoff_path(cwd)
-        if time.time() - os.stat(path).st_mtime > STALE_SECONDS:
-            return None
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-        meta = parse_header(text.split("\n", 1)[0])
-        ctx = restore_context(text)
-        if not meta or meta["cwd"] != project_root(cwd) or not ctx:
-            return None
-        os.unlink(path)
-        return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}
+        startup = source == "startup"
+        paths = [move_path(cwd)] if startup else [handoff_path(cwd), move_path(cwd)]
+        root = None
+        for path in paths:
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            if time.time() - st.st_mtime > STALE_SECONDS:
+                if startup:
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+                continue
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            meta = parse_header(text.split("\n", 1)[0])
+            ctx = restore_context(text)
+            if not meta or not ctx or (startup and not meta.get("move")):
+                continue
+            if root is None:
+                root = project_root(cwd)
+            if meta["cwd"] != root:
+                continue
+            os.unlink(path)
+            return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}
+        return None
     except Exception:
         return None
 
