@@ -408,5 +408,41 @@ class RestoreTest(HandoffBase):
         self.assertEqual(p.returncode, 0)
 
 
+class MoveTest(HandoffBase):
+    def test_move_header_round_trips(self):
+        write_jsonl(self.tp, [user("u")])
+        out = handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=True)
+        with open(handoff.handoff_path(self.cwd), encoding="utf-8") as f:
+            first = f.readline()
+        self.assertRegex(first, r" move=1 -->$")
+        from handoff_paths import parse_header
+        self.assertIs(parse_header(first)["move"], True)
+        self.assertIn("for another account", out)
+        self.assertIn("/exit", out)
+        self.assertNotIn("/clear", out)
+
+    def test_plain_save_has_no_move(self):
+        write_jsonl(self.tp, [user("u")])
+        out = handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True))
+        with open(handoff.handoff_path(self.cwd), encoding="utf-8") as f:
+            first = f.readline()
+        self.assertNotIn("move=", first)
+        self.assertIn("Now run /clear.", out)
+
+    def test_old_header_has_no_move(self):
+        from handoff_paths import parse_header
+        meta = parse_header("<!-- handoff cwd=/x session=s time=2026-10-01T00:00:00+0700 kept=1 total=2 -->")
+        self.assertEqual(meta, {"cwd": "/x", "session": "s", "time": "2026-10-01T00:00:00+0700", "move": False})
+
+    def test_cli_move_flag(self):
+        from unittest import mock
+        with mock.patch.object(handoff, "run", return_value="ok") as r:
+            self.assertEqual(handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--move"]), 0)
+        r.assert_called_once_with(self.cwd, None, move=True)
+        with mock.patch.object(handoff, "run", return_value="ok") as r:
+            handoff.main(["handoff.py", "save", "--cwd", self.cwd])
+        r.assert_called_once_with(self.cwd, None, move=False)
+
+
 if __name__ == "__main__":
     unittest.main()
