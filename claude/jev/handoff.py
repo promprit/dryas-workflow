@@ -20,7 +20,7 @@ import jevlog
 import paths
 import thresholds
 import transcript_items
-from handoff_paths import handoff_dir, handoff_path, key_for, project_root  # noqa: F401 (re-exported)
+from handoff_paths import handoff_dir, handoff_path, key_for, move_path, project_root  # noqa: F401 (re-exported)
 from jev_client import JevUnavailable, judge
 from redact import redact
 
@@ -211,7 +211,7 @@ def run(cwd: str, transcript: Optional[str] = None, judge_fn=judge, deadline_s: 
     text, st = build_handoff(path, cwd, judge_fn, deadline_s=deadline_s, move=move)
     if not text:
         return "Handoff: nothing to save (no items in the transcript)."
-    target = handoff_path(cwd)
+    target = move_path(cwd) if move else handoff_path(cwd)
     write_private(target, text)
     prune(os.path.dirname(target))
     jevlog.append("handoff", {"kept": st["kept"], "total": st["total"], "scored": st["scored"], "always": st["always"],

@@ -413,7 +413,8 @@ class StartupRestoreTest(HandoffBase):
     def save(self, move):
         write_jsonl(self.tp, [user("u")])
         handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=move)
-        return handoff.handoff_path(self.cwd)
+        import handoff_paths
+        return handoff_paths.move_path(self.cwd) if move else handoff.handoff_path(self.cwd)
 
     def test_startup_restores_move_handoff(self):
         p = self.save(move=True)
@@ -449,7 +450,8 @@ class MoveTest(HandoffBase):
     def test_move_header_round_trips(self):
         write_jsonl(self.tp, [user("u")])
         out = handoff.run(self.cwd, self.tp, judge_keeping(lambda t: True), move=True)
-        with open(handoff.handoff_path(self.cwd), encoding="utf-8") as f:
+        import handoff_paths
+        with open(handoff_paths.move_path(self.cwd), encoding="utf-8") as f:
             first = f.readline()
         self.assertRegex(first, r" move=1 -->$")
         from handoff_paths import parse_header

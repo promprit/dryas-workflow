@@ -43,10 +43,15 @@ def handoff_path(cwd: str) -> str:
     return os.path.join(handoff_dir(), key_for(cwd) + ".md")
 
 
+def move_path(cwd: str) -> str:
+    """Move handoff file for exactly this folder (realpath, no git): worktrees never share one."""
+    return os.path.join(handoff_dir(), "move-" + hashlib.sha256(os.path.realpath(cwd).encode("utf-8")).hexdigest()[:16] + ".md")
+
+
 def parse_header(first_line: str) -> Optional[Dict[str, Any]]:
     m = HEADER_RE.match(first_line)
     return {"cwd": m.group(1), "session": m.group(2), "time": m.group(3),
-            "move": bool(re.search(r"\smove=1(\s|$)", first_line))} if m else None
+            "move": bool(re.search(r"\stotal=\d+ move=1 -->", first_line))} if m else None
 
 
 def restore_context(text: str, cap: int = RESTORE_CAP) -> Optional[str]:

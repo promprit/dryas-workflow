@@ -15,15 +15,24 @@ STALE_SECONDS = 1800
 
 def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     try:
-        from handoff_paths import handoff_path, parse_header, project_root, restore_context
+        from handoff_paths import handoff_path, move_path, parse_header, project_root, restore_context
         source = event.get("source")
         if source not in (None, "clear", "startup"):
             return None
         cwd = event.get("cwd")
         if not isinstance(cwd, str) or not cwd.strip():
             return None
-        path = handoff_path(cwd)
-        if time.time() - os.stat(path).st_mtime > STALE_SECONDS:
+        if source == "startup":
+            path = move_path(cwd)
+            st = os.stat(path)
+        else:
+            path = handoff_path(cwd)
+            try:
+                st = os.stat(path)
+            except FileNotFoundError:
+                path = move_path(cwd)
+                st = os.stat(path)
+        if time.time() - st.st_mtime > STALE_SECONDS:
             return None
         with open(path, encoding="utf-8") as f:
             text = f.read()
