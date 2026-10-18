@@ -22,26 +22,34 @@ def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         cwd = event.get("cwd")
         if not isinstance(cwd, str) or not cwd.strip():
             return None
-        if source == "startup":
-            path = move_path(cwd)
-            st = os.stat(path)
-        else:
-            path = handoff_path(cwd)
+        startup = source == "startup"
+        paths = [move_path(cwd)] if startup else [handoff_path(cwd), move_path(cwd)]
+        root = None
+        for path in paths:
             try:
                 st = os.stat(path)
-            except FileNotFoundError:
-                path = move_path(cwd)
-                st = os.stat(path)
-        if time.time() - st.st_mtime > STALE_SECONDS:
-            return None
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-        meta = parse_header(text.split("\n", 1)[0])
-        ctx = restore_context(text)
-        if not meta or meta["cwd"] != project_root(cwd) or not ctx or (source == "startup" and not meta.get("move")):
-            return None
-        os.unlink(path)
-        return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}
+            except OSError:
+                continue
+            if time.time() - st.st_mtime > STALE_SECONDS:
+                if startup:
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+                continue
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            meta = parse_header(text.split("\n", 1)[0])
+            ctx = restore_context(text)
+            if not meta or not ctx or (startup and not meta.get("move")):
+                continue
+            if root is None:
+                root = project_root(cwd)
+            if meta["cwd"] != root:
+                continue
+            os.unlink(path)
+            return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}
+        return None
     except Exception:
         return None
 
