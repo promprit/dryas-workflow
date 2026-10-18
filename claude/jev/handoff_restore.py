@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""SessionStart(clear) hook: seed the fresh context with the Jev-scored handoff, then delete it.
-Only a file < 30 min old whose header cwd matches the event cwd is used. Never raises."""
+"""SessionStart(clear|startup) hook: seed the fresh context with the Jev-scored handoff, then delete it.
+Only a file < 30 min old whose header cwd matches the event cwd is used.
+On startup only a handoff saved with /handoff move (header move=1) is used. Never raises."""
 import json
 import os
 import sys
@@ -15,7 +16,8 @@ STALE_SECONDS = 1800
 def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     try:
         from handoff_paths import handoff_path, parse_header, project_root, restore_context
-        if event.get("source") not in (None, "clear"):
+        source = event.get("source")
+        if source not in (None, "clear", "startup"):
             return None
         cwd = event.get("cwd")
         if not isinstance(cwd, str) or not cwd.strip():
@@ -27,7 +29,7 @@ def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             text = f.read()
         meta = parse_header(text.split("\n", 1)[0])
         ctx = restore_context(text)
-        if not meta or meta["cwd"] != project_root(cwd) or not ctx:
+        if not meta or meta["cwd"] != project_root(cwd) or not ctx or (source == "startup" and not meta.get("move")):
             return None
         os.unlink(path)
         return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": ctx}}

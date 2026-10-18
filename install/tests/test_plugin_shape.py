@@ -59,7 +59,7 @@ class PluginShapeTest(unittest.TestCase):
         ss = {g.get("matcher"): [x["command"] for x in g["hooks"]] for g in h["SessionStart"]}
         self.assertTrue(any("rules_inject.py" in c for c in ss["startup|resume|clear|compact"]))
         self.assertTrue(any("compact_restore.py" in c for c in ss["compact"]))
-        self.assertTrue(any("handoff_restore.py" in c for c in ss["clear"]))
+        self.assertTrue(any("handoff_restore.py" in c for c in ss["clear|startup"]))
 
     def test_pretool_matcher_covers_enabled_chain_stages(self):
         """PreToolUse spawns Python only for the tools an enabled pretool stage matches (flowobserve, shipped
