@@ -100,8 +100,21 @@ class PeersTest(unittest.TestCase):
         with open(os.path.join(self.sb.acc2, "sessions", "999999.json"), "w", encoding="utf-8") as f:
             f.write("{not json")
         out = bp.list_peers()
-        self.assertEqual(self.names(out), ["odd"])
-        self.assertIsNone(out["peers"][0]["idle_for"])
+        self.assertEqual(self.names(out), ["no-start", "odd"])
+        self.assertIn("start time missing for 1 session(s)", out["note"])
+        self.assertIsNone([p for p in out["peers"] if p["name"] == "odd"][0]["idle_for"])
+
+    def test_mismatch_is_noted(self):
+        bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_B, "reused", proc_start="Mon Jan  1 00:00:00 2001")
+        out = bp.list_peers()
+        self.assertEqual(self.names(out), [])
+        self.assertIn("1 session(s) skipped", out["note"])
+
+    def test_me_follows_session_id_change(self):
+        dirs = bp.account_dirs()[0]
+        self.assertEqual(bp.me(dirs)["sessionId"], bf.SID_ME)
+        bf.write_session(self.sb.acc1, os.getppid(), bf.SID_C, "me")
+        self.assertEqual(bp.me(dirs)["sessionId"], bf.SID_C)
 
     def test_me_found_from_parent(self):
         s = bp.me(bp.account_dirs()[0])

@@ -116,12 +116,12 @@ def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     to = args.get("to").strip() if isinstance(args.get("to"), str) else ""
     if not to:
         return _refuse("to is required")
-    if to == me["name"] or (len(to) >= 8 and me["sessionId"].startswith(to.lower())):
-        return _refuse("that is this session")
     sessions = bp.read_sessions(dirs)
     alive, _ = bp.live(sessions)
     peer, err = bp.resolve(to, sessions, bp.pool(alive, me), {s["sessionId"] for s in alive})
     if err or peer is None:
+        if to == me["name"] or (len(to) >= 8 and me["sessionId"].startswith(to.lower())):
+            return _refuse("that is this session")
         return _refuse(err or "no peer", **{"from": me["sessionId"]})
     reply_to = args.get("reply_to")
     if reply_to is not None and (not isinstance(reply_to, str) or not REPLY_ID.match(reply_to)):
@@ -135,15 +135,15 @@ def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     _mkdir(folder)
     if len(waiting(folder)) >= MAX_WAITING:
         return _refuse("inbox full: %s has not taken a turn" % _label(peer), to=peer["sessionId"])
+    rate = os.path.join(paths.inbox_root(), ".rate")
+    _mkdir(rate)
+    _write(rate, me["sessionId"] + ".json", (recent + [now])[-RATE_N:])  # counted first: a failed write still costs
     mid = "m-" + secrets.token_hex(6)
     _write(folder, "%d-%s.json" % (int(now * 1000), secrets.token_hex(4)), {
         "v": 1, "id": mid, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
         "from": {"sessionId": me["sessionId"], "name": str(me["name"] or ""), "account": bp.account(me["_dir"]),
                  "cwd": str(me["cwd"] or "")},
         "to": peer["sessionId"], "reply_to": reply_to, "text": text})
-    rate = os.path.join(paths.inbox_root(), ".rate")
-    _mkdir(rate)
-    _write(rate, me["sessionId"] + ".json", (recent + [now])[-RATE_N:])
     jevlog.append("bridge", {"event": "sent", "id": mid, "from": me["sessionId"], "to": peer["sessionId"],
                              "bytes": size, "reply_to": reply_to})
     out = {"id": mid, "to": {"name": peer["name"], "sessionId": peer["sessionId"], "account": bp.account(peer["_dir"])},

@@ -16,7 +16,7 @@ UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 FIELDS = ("pid", "procStart", "sessionId", "name", "cwd", "status", "updatedAt", "kind")
 PEER_KEYS = ("name", "sessionId", "account", "cwd", "status", "idle_for", "same_account", "kind")
 HINT = "same-account peers: native SendMessage reaches them even when idle; use send_message for other accounts"
-_ME: Dict[str, Any] = {}  # this MCP server's own session, kept once found
+_ME: Dict[str, Any] = {}  # this MCP server's own session's pid and config dir, kept once found
 
 
 def own_dir() -> str:
@@ -128,12 +128,28 @@ def start_times(pids: List[int]) -> Optional[Dict[int, str]]:
 
 
 def live(sessions: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    """Sessions whose pid runs and whose process started at procStart (a reused pid does not count)."""
+    """Sessions whose pid runs and whose process started at procStart (a reused pid does not count). A session
+    without a procStart is checked by pid only."""
     running = [s for s in sessions if pid_running(s["pid"])]
     st = start_times(sorted({s["pid"] for s in running}))
     if st is None:
         return running, "start time not checked"
-    return [s for s in running if _norm_time(s["procStart"]) and st.get(s["pid"]) == _norm_time(s["procStart"])], None
+    kept, missing, skipped = [], 0, 0
+    for s in running:
+        want = _norm_time(s["procStart"])
+        if not want:
+            missing += 1
+            kept.append(s)
+        elif st.get(s["pid"]) == want:
+            kept.append(s)
+        else:
+            skipped += 1
+    notes = []
+    if missing:
+        notes.append("start time missing for %d session(s); checked by pid only" % missing)
+    if skipped:
+        notes.append("%d session(s) skipped: start time did not match (ended or pid reused)" % skipped)
+    return kept, "; ".join(notes) or None
 
 
 def _ancestors(limit: int = 4) -> List[int]:
@@ -152,14 +168,18 @@ def _ancestors(limit: int = 4) -> List[int]:
 
 def me(dirs: List[str]) -> Optional[Dict[str, Any]]:
     """This MCP server's own session: sessions/<pid>.json of its parent process, or of up to 3 further ancestors
-    (a wrapper between Claude Code and the server). Kept once found."""
-    if "me" in _ME:
-        return _ME["me"]
+    (a wrapper between Claude Code and the server). Only where it was found is kept: the file is re-read on every
+    call, so a /clear (new sessionId, same pid) is followed."""
+    if "pid" in _ME:
+        s = _read(os.path.join(_ME["dir"], "sessions", "%d.json" % _ME["pid"]), _ME["dir"])
+        if s and s["pid"] == _ME["pid"]:
+            return s
+        _ME.clear()
     for pid in _ancestors():
         for d in dirs:
             s = _read(os.path.join(d, "sessions", "%d.json" % pid), d)
             if s and s["pid"] == pid:
-                _ME["me"] = s
+                _ME["pid"], _ME["dir"] = pid, d
                 return s
     return None
 

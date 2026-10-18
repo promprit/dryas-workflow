@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 import unittest
 from unittest import mock
 
@@ -57,6 +58,24 @@ class SendTest(unittest.TestCase):
             out, err = self.send(to=to, text="x")
             self.assertTrue(err)
             self.assertEqual(out["error"], "that is this session")
+
+    def test_same_name_peer_on_other_account_reachable(self):
+        bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_C, "me")
+        out, err = self.send(to="me", text="x")
+        self.assertFalse(err, out)
+        self.assertEqual(len(self.msgs(bf.SID_C)), 1)
+
+    def test_rate_counted_before_message(self):
+        real = bridge._write
+
+        def fail_inbox(folder, name, obj):
+            if folder == self.box():
+                raise OSError("disk")
+            return real(folder, name, obj)
+
+        with mock.patch.object(bridge, "_write", fail_inbox):
+            self.assertTrue(self.send(to="peer-b", text="x")[1])
+        self.assertEqual(len(bridge._recent_sends(bf.SID_ME, time.time())), 1)
 
     def test_ambiguous_name_refused_with_candidates(self):
         bf.write_session(self.sb.acc1, self.sb.child(), bf.SID_C, "peer-b")
