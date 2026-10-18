@@ -37,8 +37,11 @@ def run(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                     except OSError:
                         pass
                 continue
-            with open(path, encoding="utf-8") as f:
-                text = f.read()
+            try:
+                with open(path, encoding="utf-8") as f:
+                    text = f.read()
+            except (OSError, UnicodeDecodeError):
+                continue
             meta = parse_header(text.split("\n", 1)[0])
             ctx = restore_context(text)
             if not meta or not ctx or (startup and not meta.get("move")):
