@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import jev_mcp
@@ -369,6 +370,54 @@ class McpTest(unittest.TestCase):
         self.assertIn("HTTPError 400", r["result"]["content"][0]["text"])
         log_entry = self.read("mcp")[0]
         self.assertEqual(log_entry["error"], "HTTPError 400")
+
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+class BridgeToolsTest(unittest.TestCase):
+    def names(self):
+        r = jev_mcp.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        return {t["name"] for t in r["result"]["tools"]}
+
+    def call(self, name, args):
+        r = jev_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                            "params": {"name": name, "arguments": args}})
+        return r["result"]
+
+    def test_listed_on_claude(self):
+        with mock.patch.dict(os.environ, {"DRYAS_HARNESS": "claude"}):
+            self.assertTrue({"list_peers", "send_message"} <= self.names())
+
+    def test_hidden_and_refused_elsewhere(self):
+        env = {k: v for k, v in os.environ.items() if k != "DRYAS_HARNESS"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertFalse({"list_peers", "send_message"} & self.names())
+            res = self.call("list_peers", {})
+            self.assertTrue(res["isError"])
+            self.assertIn("unknown tool", res["content"][0]["text"])
+
+    def test_mcp_json_sets_harness(self):
+        with open(os.path.join(REPO_ROOT, "claude", ".mcp.json"), encoding="utf-8") as f:
+            cfg = json.load(f)
+        self.assertEqual(cfg["mcpServers"]["jev"]["env"]["DRYAS_HARNESS"], "claude")
+
+    def test_existing_allow_rule_covers_bridge_tools(self):
+        with open(os.path.join(REPO_ROOT, "claude", "settings.fragment.json"), encoding="utf-8") as f:
+            allow = json.load(f)["core"]["permissions"]["allow"]
+        self.assertIn("mcp__plugin_dryas_jev", allow)  # a server-wide rule: every jev tool, no new prompt
+
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
+    def test_list_peers_round_trip(self):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import bridge_fixture as bf
+        sb = bf.Sandbox(self)
+        sb.me()
+        bf.write_session(sb.acc2, sb.child(), bf.SID_B, "peer-b")
+        with mock.patch.dict(os.environ, {"DRYAS_HARNESS": "claude"}):
+            res = self.call("list_peers", {})
+        self.assertFalse(res["isError"])
+        self.assertEqual([p["name"] for p in json.loads(res["content"][0]["text"])["peers"]], ["peer-b"])
 
 
 if __name__ == "__main__":

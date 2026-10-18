@@ -7,6 +7,7 @@ import sys
 from typing import Any, Dict, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bridge
 import jev_client
 import jevlog
 import memory_mcp
@@ -78,6 +79,11 @@ TOOLS = [
     },
 ]
 TOOLS += memory_mcp.TOOLS  # owned core B: memory tools from the Dryas store
+
+
+def _claude() -> bool:
+    """The cross-account bridge reads Claude Code's sessions/ folders: its tools exist on Claude Code only."""
+    return os.environ.get("DRYAS_HARNESS") == "claude"
 
 
 def _error(mid: Any, code: int, message: str) -> Dict[str, Any]:
@@ -363,7 +369,7 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     if method == "ping":
         return _ok(mid, {})
     if method == "tools/list":
-        return _ok(mid, {"tools": TOOLS})
+        return _ok(mid, {"tools": TOOLS + (bridge.TOOLS if _claude() else [])})
     if method == "tools/call":
         try:
             name, args = params.get("name"), params.get("arguments") or {}
@@ -379,6 +385,9 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
                 return _text(mid, "logged")
             if name in memory_mcp.NAMES:
                 obj, is_error = memory_mcp.call(name, args)
+                return _text(mid, obj, is_error)
+            if name in bridge.NAMES and _claude():
+                obj, is_error = bridge.call(name, args)
                 return _text(mid, obj, is_error)
             if name in LOG_TOOLS:
                 file, strs, ints = LOG_TOOLS[name]
