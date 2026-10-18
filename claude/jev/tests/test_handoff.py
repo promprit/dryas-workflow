@@ -621,6 +621,19 @@ class ModeTest(HandoffBase):
         self.assertIn("save --cwd \"$PWD\" --mode '$ARGUMENTS'", md)
         self.assertNotIn("If the arguments are", md)
 
+    def test_command_guards_unsafe_arguments(self):
+        with open(os.path.join(REPO, "claude", "commands", "handoff.md"), encoding="utf-8") as f:
+            md = f.read()
+        self.assertIn("contain nothing but letters, digits, spaces and hyphens", md)
+        self.assertIn('"/handoff takes no argument, or move."', md)
+        self.assertEqual(md.count("--mode '$ARGUMENTS'"), 1)
+
+    def test_abbreviated_flag_is_not_expanded(self):
+        from unittest import mock
+        with mock.patch.object(handoff, "run", return_value="ok") as r:
+            handoff.main(["handoff.py", "save", "--cwd", self.cwd, "--mode", "--mov"])
+        r.assert_not_called()
+
 
 class UnreadableTest(HandoffBase):
     def save_move(self):
