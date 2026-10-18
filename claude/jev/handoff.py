@@ -131,12 +131,13 @@ def score(scored: List[Dict[str, Any]], judge_fn, keep_min: Optional[float] = No
     return kept, {"chunks": chunks, "cost": cost, "input_tokens": tokens, "partial": partial}
 
 
-def render(cwd: str, session: str, always: List[str], jev: List[str], total: int, note: str = "") -> str:
+def render(cwd: str, session: str, always: List[str], jev: List[str], total: int, note: str = "", move: bool = False) -> str:
     always, jev = list(always), list(jev)
     root = project_root(cwd)  # once: it spawns git
     while True:
-        head = "<!-- handoff cwd=%s session=%s time=%s kept=%d total=%d -->" % (
-            root, session, time.strftime("%Y-%m-%dT%H:%M:%S%z"), len(always) + len(jev), total)
+        head = "<!-- handoff cwd=%s session=%s time=%s kept=%d total=%d%s -->" % (
+            root, session, time.strftime("%Y-%m-%dT%H:%M:%S%z"), len(always) + len(jev), total,
+            " move=1" if move else "")
         parts = [head]
         if note:
             parts.append("> " + note)
@@ -166,7 +167,7 @@ def write_private(path: str, text: str) -> None:
 
 
 def build_handoff(path: str, cwd: str, judge_fn=judge, keep_min: Optional[float] = None, deadline_s: float = 20,
-                  clock=time.monotonic) -> Tuple[str, Dict[str, Any]]:
+                  clock=time.monotonic, move: bool = False) -> Tuple[str, Dict[str, Any]]:
     """Shared engine (handoff + auto-compaction). Returns (file text, stats); text is "" when there are no items."""
     t0 = clock()
     items = transcript_items.extract_items(path)
@@ -185,7 +186,7 @@ def build_handoff(path: str, cwd: str, judge_fn=judge, keep_min: Optional[float]
         kept = scored[-FALLBACK_NEWEST:]
     jev_lines = [_line(it) for it in kept]
     session = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.splitext(os.path.basename(path))[0])
-    text = render(cwd, session, always_lines, jev_lines, len(items), note)
+    text = render(cwd, session, always_lines, jev_lines, len(items), note, move)
     m = re.search(r"kept=(\d+)", text.split("\n", 1)[0])
     stats = dict(stats, total=len(items), scored=len(scored), always=len(always_lines), jev_ok=jev_ok, note=note,
                  kept=int(m.group(1)) if m else len(always_lines) + len(jev_lines))
@@ -203,11 +204,11 @@ def prune(d: str, max_age: float = PRUNE_SECONDS) -> None:
         pass
 
 
-def run(cwd: str, transcript: Optional[str] = None, judge_fn=judge, deadline_s: float = 60) -> str:
+def run(cwd: str, transcript: Optional[str] = None, judge_fn=judge, deadline_s: float = 60, move: bool = False) -> str:
     path = transcript or find_transcript(cwd)
     if not path or not os.path.isfile(path):
         return "Handoff: No transcript found for %s." % cwd
-    text, st = build_handoff(path, cwd, judge_fn, deadline_s=deadline_s)
+    text, st = build_handoff(path, cwd, judge_fn, deadline_s=deadline_s, move=move)
     if not text:
         return "Handoff: nothing to save (no items in the transcript)."
     target = handoff_path(cwd)
@@ -217,6 +218,9 @@ def run(cwd: str, transcript: Optional[str] = None, judge_fn=judge, deadline_s: 
                               "jev_ok": st["jev_ok"], "chunks": st.get("chunks"), "cost": st.get("cost"),
                               "input_tokens": st.get("input_tokens")})
     note = st["note"]
+    if move:
+        return "Handoff saved for another account: %d/%d items (%s%s). Now /exit, then start the new session in this folder within 30 min; it loads this handoff on startup." % (
+            st["kept"], st["total"], target, "; " + note if note else "")
     return "Handoff saved: %d/%d items (%s%s). Now run /clear." % (st["kept"], st["total"], target, "; " + note if note else "")
 
 
@@ -226,16 +230,17 @@ def main(argv: List[str]) -> int:
     s = sub.add_parser("save")
     s.add_argument("--cwd", required=True)
     s.add_argument("--transcript")
+    s.add_argument("--move", action="store_true")
     try:
         args = ap.parse_args(argv[1:])
     except SystemExit:
-        print("Handoff: usage: handoff.py save --cwd <dir> [--transcript <path>]")
+        print("Handoff: usage: handoff.py save --cwd <dir> [--transcript <path>] [--move]")
         return 0
     if args.cmd != "save":
-        print("Handoff: usage: handoff.py save --cwd <dir> [--transcript <path>]")
+        print("Handoff: usage: handoff.py save --cwd <dir> [--transcript <path>] [--move]")
         return 0
     try:
-        print(run(args.cwd, args.transcript))
+        print(run(args.cwd, args.transcript, move=args.move))
     except Exception as e:
         print("Handoff failed (%s); nothing saved." % type(e).__name__)
     return 0
