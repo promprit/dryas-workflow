@@ -1188,6 +1188,7 @@ Scope:
 - claude/jev/tests/test_chain.py
 - claude/jev/tests/test_import_cost.py
 - reference/cloud-bindings.json
+- install/tests/test_opencode_chain_stages.py
 - codex/jev/**
 - opencode/dryas/jev/**
 Done:
