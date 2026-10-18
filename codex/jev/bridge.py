@@ -11,6 +11,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bridge_deliver as bd
 import bridge_peers as bp
 import jevlog
 import paths
@@ -74,13 +75,6 @@ def _write(folder: str, name: str, obj: Any) -> None:
             delay *= 2
 
 
-def waiting(folder: str) -> List[str]:
-    try:
-        return sorted(n for n in os.listdir(folder) if n.endswith(".json") and not n.startswith("."))
-    except OSError:
-        return []
-
-
 def _recent_sends(sid: str, now: float) -> List[float]:
     try:
         with open(os.path.join(paths.inbox_root(), ".rate", sid + ".json"), encoding="utf-8") as f:
@@ -133,7 +127,7 @@ def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     folder = paths.inbox_dir(peer["sessionId"])
     _mkdir(paths.inbox_root())
     _mkdir(folder)
-    if len(waiting(folder)) >= MAX_WAITING:
+    if len(bd.waiting(folder)) >= MAX_WAITING:
         return _refuse("inbox full: %s has not taken a turn" % _label(peer), to=peer["sessionId"])
     rate = os.path.join(paths.inbox_root(), ".rate")
     _mkdir(rate)
@@ -193,7 +187,7 @@ def prune(now: Optional[float] = None) -> None:
                     _unlink(os.path.join(p, f))
                     files += 1
             continue
-        if not bp.UUID.match(name):
+        if not bd.UUID.match(name):
             continue
         found = _files(p)
         if name not in alive and all(now - m > KEEP for _, m in found):
