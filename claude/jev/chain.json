@@ -9,11 +9,13 @@
     {"name": "jev-route", "harness": ["claude", "codex", "opencode"], "component": "jev", "cmd": ["$PY", "-X", "utf8", "$CD/jev/route.py"], "timeout": 5},
     {"name": "context-watch", "harness": ["claude", "opencode"], "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/context_watch.py"], "timeout": 2},
     {"name": "usage-watch", "harness": ["claude"], "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/usage_watch.py"], "timeout": 2},
+    {"name": "bridge-deliver", "harness": ["claude"], "component": "core", "inproc": "bridge_deliver", "context": true, "cmd": ["$PY", "-X", "utf8", "$CD/jev/bridge_deliver.py"], "timeout": 1},
     {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["$PY", "-X", "utf8", "-S", "$HOME/.flowobserve/bin/fo_hook.py"], "timeout": 1, "observe": true}
   ],
   "post": [
     {"name": "mem-edit", "harness": ["claude", "opencode"], "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "edit"], "match": "Write|Edit|MultiEdit|NotebookEdit", "timeout": 2, "observe": true},
-    {"name": "gate-outcome", "harness": ["claude", "opencode"], "component": "core", "inproc": "gate_outcome", "cmd": ["$PY", "-X", "utf8", "$CD/jev/gate_outcome.py"], "match": "Bash", "timeout": 2, "observe": true}
+    {"name": "gate-outcome", "harness": ["claude", "opencode"], "component": "core", "inproc": "gate_outcome", "cmd": ["$PY", "-X", "utf8", "$CD/jev/gate_outcome.py"], "match": "Bash", "timeout": 2, "observe": true},
+    {"name": "bridge-deliver", "harness": ["claude"], "component": "core", "inproc": "bridge_deliver", "context": true, "cmd": ["$PY", "-X", "utf8", "$CD/jev/bridge_deliver.py"], "timeout": 1}
   ],
   "subagent-stop": [
     {"name": "mem-task", "harness": ["claude", "opencode"], "component": "memory", "cmd": ["$PY", "-X", "utf8", "$CD/jev/memhooks.py", "task"], "timeout": 2, "observe": true}

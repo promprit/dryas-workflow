@@ -37,7 +37,7 @@ class StageListTest(unittest.TestCase):
             self.assertEqual(names(kind, "codex"), [], kind)
 
     def test_claude_unchanged(self):
-        self.assertEqual(names("post", "claude"), ["mem-edit", "gate-outcome"])
+        self.assertEqual(names("post", "claude"), ["mem-edit", "gate-outcome", "bridge-deliver"])
         self.assertEqual(names("session-end", "claude"), ["mem-session-end", "mem-notes"])
 
 

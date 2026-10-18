@@ -71,6 +71,15 @@ def accounts_file() -> str:
     return os.path.join(data_root(), "accounts.json")
 
 
+def inbox_root() -> str:
+    """Cross-account bridge messages: <data root>/inbox/<recipient sessionId>/."""
+    return os.path.join(data_root(), "inbox")
+
+
+def inbox_dir(sid: str) -> str:
+    return os.path.join(inbox_root(), sid)
+
+
 def ruflo_dir() -> str:
     return os.path.join(data_root(), "ruflo")
 

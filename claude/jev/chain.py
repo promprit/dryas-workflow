@@ -6,7 +6,9 @@ after a deny only observe stages run. UserPromptSubmit: additionalContext is con
 Any failure of a stage is skipped, except a "fail_closed" stage while a task is active
 (.orchestrate/active.json): its timeout, crash or unparseable output becomes a deny.
 The chain itself always exits 0.
-A stage with `inproc` runs in this process (only the known `scope_lock`); its `cmd` stays for tools that run stages one by one.
+A stage with `inproc` runs in this process (only the known modules: `scope_lock`, `gate_outcome`, `bridge_deliver`);
+its `cmd` stays for tools that run stages one by one. Only `bridge_deliver` returns text: in `prompt` and `post` a
+stage marked `"context": true` adds it as additionalContext (UserPromptSubmit / PostToolUse).
 """
 import json
 import os
@@ -272,6 +274,11 @@ def prompt(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Opt
         try:
             if not _applies(st, event):
                 continue
+            if "inproc" in st:
+                ctx = _inproc(st, event)
+                if ctx and st.get("context") is True:
+                    parts.append(ctx)  # text only: an inproc stage can never block
+                continue
             code, out, err = _run(st, raw)
             if st.get("observe") or code is None:
                 continue
@@ -296,26 +303,36 @@ def prompt(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> Opt
 OBSERVE_KINDS = ("post", "subagent-stop", "session-start", "session-end", "precompact", "stop")
 
 
-def observe(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]]) -> None:
+def observe(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]], kind: str = "") -> List[str]:
     """Observe-only events (memory, outcomes): every applicable stage runs in order; exit codes and output are
-    ignored and nothing is printed, so a slow, crashing or noisy stage never changes the session."""
+    ignored, so a slow, crashing or noisy stage never changes the session. The one exception: on "post", the text
+    of an inproc stage marked "context": true (bridge delivery) is returned for the caller to print."""
+    ctx: List[str] = []
     for st in stages:
         try:
             if not _applies(st, event):
                 continue
             if "inproc" in st:
-                _inproc(st, event)
+                out = _inproc(st, event)
+                if out and st.get("context") is True and kind == "post":
+                    ctx.append(out)
             else:
                 _run(st, raw)
         except Exception:
             continue
+    return ctx
 
 
-def _inproc(stage: Dict[str, Any], event: Dict[str, Any]) -> None:
-    """A stage with an "inproc" module runs in this process (no subprocess). Only known modules; anything else is skipped."""
+def _inproc(stage: Dict[str, Any], event: Dict[str, Any]) -> Optional[str]:
+    """A stage with an "inproc" module runs in this process (no subprocess). Only known modules; anything else is
+    skipped. Only bridge_deliver returns text."""
     if stage["inproc"] == "gate_outcome":
         import gate_outcome
         gate_outcome.record(event)
+    elif stage["inproc"] == "bridge_deliver":
+        import bridge_deliver
+        return bridge_deliver.deliver(event) or None
+    return None
 
 
 def main(argv: List[str]) -> int:
@@ -344,7 +361,12 @@ def main(argv: List[str]) -> int:
     elif kind == "prompt":
         out = prompt(event, raw, load_stages("prompt", harness))
     elif kind in OBSERVE_KINDS:
-        observe(event, raw, load_stages(kind, harness))
+        ctx = observe(event, raw, load_stages(kind, harness), kind)
+        if ctx:
+            name = event.get("hook_event_name")
+            sys.stdout.write(json.dumps({"hookSpecificOutput": {
+                "hookEventName": name if name in ("PostToolUse", "PostToolUseFailure") else "PostToolUse",
+                "additionalContext": "\n".join(ctx)}}))
         return 0
     else:
         return 0
