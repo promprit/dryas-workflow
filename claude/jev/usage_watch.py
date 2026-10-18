@@ -119,10 +119,10 @@ def run(event: Dict[str, Any], fetch: Callable[[str, float], Optional[Dict[str, 
         warned = _read_tier(sfile)
         if tier < 0:
             if warned >= 0:
-                _write_tier(sfile, -1, use)  # a new window: warn again next time
+                _write_tier(sfile, -1, use)
             return None
         if tier <= warned or calm is None:
-            return None  # a tier is spent only when it was shown
+            return None
         _write_tier(sfile, tier, use)
         return ("Account %s is at %s %s; %s has room (5h %s). Tell the user: run /handoff move, then /exit, then "
                 "start a new session in this folder with: cl --account %s (the handoff loads on startup within 30 min)."
