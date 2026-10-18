@@ -442,7 +442,7 @@ class ChainWatchTest(unittest.TestCase):
     def test_real_chain_json_order(self):
         with open(os.path.join(HERE, "chain.json"), encoding="utf-8") as f:
             names = [s["name"] for s in json.load(f)["prompt"]]
-        self.assertEqual(names, ["jev-route", "context-watch", "flowobserve"])
+        self.assertEqual(names, ["jev-route", "context-watch", "bridge-deliver", "flowobserve"])
 
 
 CHAIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

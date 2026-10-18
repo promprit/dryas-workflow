@@ -141,3 +141,83 @@ class StopRouteTest(unittest.TestCase):
         self.assertEqual((p.returncode, p.stdout), (0, ""))
         with open(out, encoding="utf-8") as f:
             self.assertEqual(f.read(), "ran")
+
+
+BRIDGE_STAGE = {"name": "bridge-deliver", "harness": ["claude"], "component": "core", "inproc": "bridge_deliver",
+                "context": True, "cmd": ["$PY", "-X", "utf8", "$CD/jev/bridge_deliver.py"], "timeout": 1}
+
+
+class BridgeStageTest(unittest.TestCase):
+    SID = "66666666-6666-4666-8666-666666666666"
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        root = os.path.join(self.d, "data")
+        self.box = os.path.join(root, "inbox", self.SID)
+        os.makedirs(self.box)
+        with open(os.path.join(self.box, "1792000000000-00000001.json"), "w", encoding="utf-8") as f:
+            json.dump({"v": 1, "id": "m-000000000001", "ts": "2026-10-18T12:34:56Z",
+                       "from": {"sessionId": "77777777-7777-4777-8777-777777777777", "name": "sender",
+                                "account": ".claude-two", "cwd": "/w"},
+                       "to": self.SID, "reply_to": None, "text": "ping"}, f)
+        self.env = {"DRYAS_DATA_ROOT": root, "JEV_LOG_DIR": os.path.join(self.d, "logs")}
+
+    def config(self, kind, stages):
+        p = os.path.join(self.d, "chain.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({kind: stages}, f)
+        return p
+
+    def ev(self, name, **kw):
+        e = {"session_id": self.SID, "hook_event_name": name, "tool_name": "Bash", "tool_input": {"command": "ls"}}
+        e.update(kw)
+        return e
+
+    def test_post_context_stage_prints_additional_context(self):
+        p, _ = run_chain("post", self.ev("PostToolUse"), self.config("post", [BRIDGE_STAGE]), env_extra=self.env)
+        self.assertEqual(p.returncode, 0)
+        hso = json.loads(p.stdout)["hookSpecificOutput"]
+        self.assertEqual(hso["hookEventName"], "PostToolUse")
+        self.assertIn("ping", hso["additionalContext"])
+
+    def test_post_failure_event_name_kept(self):
+        p, _ = run_chain("post", self.ev("PostToolUseFailure"), self.config("post", [BRIDGE_STAGE]), env_extra=self.env)
+        self.assertEqual(json.loads(p.stdout)["hookSpecificOutput"]["hookEventName"], "PostToolUseFailure")
+
+    def test_plain_observe_stage_still_prints_nothing(self):
+        noisy = {"name": "noisy", "component": "memory", "observe": True, "timeout": 2,
+                 "cmd": [sys.executable, "-c", "print('junk')"]}
+        p, _ = run_chain("post", self.ev("PostToolUse"), self.config("post", [noisy, BRIDGE_STAGE]), env_extra=self.env)
+        self.assertNotIn("junk", p.stdout)
+        self.assertIn("ping", p.stdout)
+
+    def test_unknown_inproc_with_context_ignored(self):
+        rogue = dict(BRIDGE_STAGE, name="rogue", inproc="memhooks")
+        p, _ = run_chain("post", self.ev("PostToolUse"), self.config("post", [rogue]), env_extra=self.env)
+        self.assertEqual(p.stdout, "")
+        self.assertEqual(len([n for n in os.listdir(self.box) if n.endswith(".json")]), 1)
+
+    def test_prompt_runs_inproc(self):
+        p, _ = run_chain("prompt", self.ev("UserPromptSubmit", prompt="hi"), self.config("prompt", [BRIDGE_STAGE]),
+                         env_extra=self.env)
+        hso = json.loads(p.stdout)["hookSpecificOutput"]
+        self.assertEqual(hso["hookEventName"], "UserPromptSubmit")
+        self.assertIn("ping", hso["additionalContext"])
+
+    def test_codex_harness_skips_stage(self):
+        p, _ = run_chain("prompt", self.ev("UserPromptSubmit", prompt="hi"), self.config("prompt", [BRIDGE_STAGE]),
+                         harness="codex", env_extra=self.env)
+        self.assertNotIn("ping", p.stdout)
+
+    def test_inproc_prompt_stage_never_blocks(self):
+        ev = self.ev("UserPromptSubmit", prompt="hi")
+        with mock.patch.object(chain, "_inproc", return_value='{"decision": "block", "reason": "x"}'):
+            out = chain.prompt(ev, json.dumps(ev), [BRIDGE_STAGE])
+        self.assertNotIn("decision", out)
+        self.assertIn("block", out["hookSpecificOutput"]["additionalContext"])
+
+    def test_raising_inproc_stage_is_skipped(self):
+        ev = self.ev("PostToolUse")
+        with mock.patch.object(chain, "_inproc", side_effect=RuntimeError("boom")):
+            self.assertEqual(chain.observe(ev, json.dumps(ev), [BRIDGE_STAGE], "post"), [])
+            self.assertIsNone(chain.prompt(ev, json.dumps(ev), [BRIDGE_STAGE]))

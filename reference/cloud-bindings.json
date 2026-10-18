@@ -2,6 +2,7 @@
  "about": "Cloud binding table (owned core E): what `dryas cloud` puts into a repo for claude.ai/code cloud sessions. Every core component of the inventory kinds command, skill, agent, MCP server, plugin hook, chain stage and component is copied, opt-in or excluded with a reason. tools/inventory.py --check enforces it.",
  "entries": {
   "agent:claude:executor": "copy: .claude/agents/executor.md",
+  "chain_stage:post:bridge-deliver:core": "copy: .dryas/jev/chain.json (delivers nothing in a cloud copy: no other accounts there)",
   "chain_stage:post:gate-outcome:core": "copy: .dryas/jev/chain.json",
   "chain_stage:post:mem-edit:memory": "copy: .dryas/jev/chain.json (Dryas memory in .dryas/state/)",
   "chain_stage:precompact:mem-notes:core": "copy: .dryas/jev/chain.json (writes notes only with --persist-memory)",
@@ -10,6 +11,7 @@
   "chain_stage:pretool:jev-gate:jev": "copy: .dryas/jev/chain.json (local judge unless the environment opts into Jev)",
   "chain_stage:pretool:ruflo-pre-bash:ruflo": "exclude: Ruflo needs Node and npm; the stage ships disabled",
   "chain_stage:pretool:scope-lock:core": "copy: .dryas/jev/chain.json",
+  "chain_stage:prompt:bridge-deliver:core": "copy: .dryas/jev/chain.json (delivers nothing in a cloud copy: no other accounts there)",
   "chain_stage:prompt:context-watch:core": "copy: .dryas/jev/chain.json",
   "chain_stage:prompt:flowobserve:flowobserve": "exclude: FlowObserve is not in a cloud session; the stage ships disabled",
   "chain_stage:prompt:jev-route:jev": "copy: .dryas/jev/chain.json (local judge unless the environment opts into Jev)",

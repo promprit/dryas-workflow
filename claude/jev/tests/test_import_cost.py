@@ -33,6 +33,12 @@ class ImportCostTest(unittest.TestCase):
         self.assertEqual(prescreen._SED_CMD.pattern, shellwrites._SED_CMD.pattern)
         self.assertEqual(prescreen._SED_CMD.flags, shellwrites._SED_CMD.flags)
 
+    def test_hooks_do_not_load_bridge_tools(self):
+        self.assertFalse(loaded("import chain", "bridge"))
+        self.assertFalse(loaded("import chain, bridge_deliver", "bridge_peers"))
+        self.assertFalse(loaded("import bridge_deliver; bridge_deliver.deliver({'session_id': "
+                                "'44444444-4444-4444-8444-444444444444'})", "bridge"))
+
 
 if __name__ == "__main__":
     unittest.main()
