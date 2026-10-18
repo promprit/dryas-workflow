@@ -452,6 +452,26 @@ def jev_route(rep, chain, env):
     rep.say("PASS" if "Jev " in out else "WARN", "Jev route", "" if "Jev " in out else "no 'Jev ' line in output")
 
 
+def bridge(rep, root, env):
+    """The cross-account bridge: delivery stage installed for prompt and post; list_peers reads the account dirs."""
+    try:
+        chain = json.loads((Path(root) / "jev" / "chain.json").read_text(encoding="utf-8"))
+        ok = all(any(s.get("name") == "bridge-deliver" for s in chain.get(k, [])) for k in ("prompt", "post"))
+    except (OSError, ValueError):
+        ok = False
+    rep.say("PASS" if ok else "FAIL", "bridge delivery stage", "" if ok else "bridge-deliver missing in %s" % root)
+    code = ("import json, sys; sys.path.insert(0, %r); import bridge_peers as bp; d, note = bp.account_dirs(); "
+            "print(json.dumps({'dirs': len(d), 'sessions': len(bp.read_sessions(d)), 'note': note}))"
+            % fwd(Path(root) / "jev"))
+    r = subprocess.run([sys.executable, "-X", "utf8", "-c", code], capture_output=True, text=True, env=env, timeout=30)
+    try:
+        j = json.loads(r.stdout)
+    except ValueError:
+        return rep.say("FAIL", "bridge list_peers", (r.stderr.strip().splitlines() or ["no output"])[-1])
+    detail = "%d account dir(s), %d session file(s)" % (j["dirs"], j["sessions"])
+    rep.say("WARN" if j["note"] else "PASS", "bridge list_peers", detail + ("; " + j["note"] if j["note"] else ""))
+
+
 def ruflo(rep, cd, root_dir, env, run_env):
     """env names the real data root (checked, never written); the helper runs with run_env (temp data root)."""
     try:
@@ -497,6 +517,10 @@ def better_than_previous(rep):
             bad.append("%s: %s" % (d.name, (r.stdout.strip().splitlines() or ["worse"])[-1]))
         elif r.returncode != 0:
             skipped.append("%s: compare_v1 exit %s (no corpus or no copy)" % (d.name, r.returncode))
+        r2 = subprocess.run([sys.executable, str(Path(__file__).with_name("compare_release.py")), "--old", str(d)],
+                            capture_output=True, text=True, timeout=1800)
+        if r2.returncode == 1:
+            bad.append("%s hooks: %s" % (d.name, (r2.stdout.strip().splitlines() or ["worse"])[-1]))
     if bad:
         return rep.say("FAIL", name, "; ".join(bad))
     if skipped and len(skipped) == len(olds):
@@ -579,6 +603,7 @@ def _checks(rep, cds, cdxs, env, bash, tmp, ods=()):
         chain = Path(root) / "jev" / "chain.py"
         scope_lock(rep, chain, "claude", penv)
         jev_route(rep, chain, penv)
+        bridge(rep, root, penv)
         ruflo(rep, cd, root, penv, dict(hook_env, CLAUDE_PLUGIN_ROOT=fwd(root)))
     for cdx in cdxs:
         codex_plugin(rep, cdx, shutil.which("codex"), bash, hook_env)
