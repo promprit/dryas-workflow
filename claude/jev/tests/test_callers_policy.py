@@ -64,6 +64,12 @@ class RoutePolicyTest(Base):
         rec = self.last("route")
         self.assertEqual((rec["provider"], rec["injected"], rec["judge_policy"]), ("local", False, "project_local"))
 
+    def test_route_nul_cwd_does_not_crash(self):
+        os.unlink(os.path.join(self.tmp, "VOID", ".dryas-judge"))
+        self.assertIsNone(route.run({"prompt": "x", "cwd": "/tmp/a\x00b"}, boom))
+        rec = self.last("route")
+        self.assertEqual((rec["provider"], rec["judge_policy"]), ("local", "project_local"))
+
 
 class McpPolicyTest(Base):
     def call(self, state, judge_fn=None):
