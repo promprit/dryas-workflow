@@ -5,12 +5,14 @@
 when a key is set or a judge function is injected (tests), else local; the shadow is local when jev
 decides, else none. Settings: thresholds `judge.provider`, `judge.shadow` (change with /tune apply).
 In a claude.ai/code cloud session (CLAUDE_CODE_REMOTE=true) "auto" is local even with a key, unless the environment
-opted into Jev with DRYAS_JUDGE=jev (owned core E)."""
+opted into Jev with DRYAS_JUDGE=jev (owned core E).
+A folder at or below a committed .dryas-judge marker always gets ("local", "none") (judge_policy.py)."""
 import os
 import sys
 from typing import Any, Callable, Dict, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import judge_policy
 
 
 KEY_VARS = ("OPENROUTER_API_KEY", "DRYAS_OPENROUTER_KEY", "CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY")
@@ -36,7 +38,14 @@ def _has_key() -> bool:
     return bool(env_key())
 
 
-def resolve(th: Dict[str, Any], injected: bool) -> Tuple[str, str]:
+def policy(cwd: Optional[str] = None) -> Optional[str]:
+    """"project_local" when a .dryas-judge marker covers cwd (else the process directory), otherwise None."""
+    return "project_local" if judge_policy.project_local(cwd) else None
+
+
+def resolve(th: Dict[str, Any], injected: bool, cwd: Optional[str] = None) -> Tuple[str, str]:
+    if judge_policy.project_local(cwd):
+        return "local", "none"
     cfg = th.get("judge") if isinstance(th.get("judge"), dict) else {}
     provider, shadow = cfg.get("provider", "auto"), cfg.get("shadow", "auto")
     if provider not in ("local", "jev"):
@@ -47,9 +56,11 @@ def resolve(th: Dict[str, Any], injected: bool) -> Tuple[str, str]:
 
 
 def ask(state: Any, questions: Dict[str, Any], local: Dict[str, Any], th: Dict[str, Any],
-        judge_fn: Optional[Callable[..., Dict[str, Any]]] = None) -> Dict[str, Any]:
-    provider, shadow = resolve(th, judge_fn is not None)
+        judge_fn: Optional[Callable[..., Dict[str, Any]]] = None, cwd: Optional[str] = None) -> Dict[str, Any]:
+    provider, shadow = resolve(th, judge_fn is not None, cwd)
     out: Dict[str, Any] = {"provider": provider, "shadow_provider": shadow}
+    if policy(cwd):
+        out["judge_policy"] = "project_local"
     remote: Any = None
     if "jev" in (provider, shadow):
         from jev_client import judge

@@ -115,5 +115,41 @@ class EngineTest(unittest.TestCase):
             json.loads(p.stdout)
 
 
+class EnginePolicyTest(unittest.TestCase):
+    """OpenCode compact and handoff under a .dryas-judge marker send nothing to Jev (spec 2026-10-19 §7.3)."""
+    setUp = EngineTest.setUp
+    tearDown = EngineTest.tearDown
+    ev = EngineTest.ev
+
+    def boom(self, state, questions):
+        raise AssertionError("Jev called under a marker")
+
+    def mark(self):
+        import judge_policy
+        judge_policy.clear_cache()
+        self.addCleanup(judge_policy.clear_cache)
+        open(os.path.join(self.proj, ".dryas-judge"), "w").write("local\n")
+        p = mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "k", "JEV_LOG_DIR": os.path.join(self.tmp, "logs")})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def last(self, name):
+        with open(os.path.join(self.tmp, "logs", name + ".jsonl")) as f:
+            return [json.loads(l) for l in f][-1]
+
+    def test_compact_under_marker_never_calls_jev(self):
+        self.mark()
+        out = opencode_session.compact(self.ev(), judge_fn=self.boom)
+        self.assertIn("Handoff from previous session", out["context"])
+        self.assertEqual((self.last("compact")["jev_ok"], self.last("compact")["judge_policy"]),
+                         ("local", "project_local"))
+
+    def test_handoff_under_marker_never_calls_jev(self):
+        self.mark()
+        out = opencode_session.save_handoff(self.ev(), judge_fn=self.boom)
+        self.assertIn("local judge (project policy)", out["line"])
+        self.assertEqual(self.last("handoff")["judge_policy"], "project_local")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import jevlog
 import paths
+import providers
 import thresholds
 import transcript_items
 from handoff_paths import handoff_dir, handoff_path, key_for, move_path, project_root  # noqa: F401 (re-exported)
@@ -30,6 +31,8 @@ CAP = 12000
 SCORE_WINDOW = 200
 PRUNE_SECONDS = 86400
 NOTE_UNAVAILABLE = "Jev unavailable — kept newest 30"
+NOTE_LOCAL = "local judge — kept newest 30"
+NOTE_POLICY = "local judge (project policy) — kept newest 30"
 NOTE_PARTIAL = "Jev deadline reached — newest 30 of the unscored rest kept"
 
 
@@ -177,19 +180,25 @@ def build_handoff(path: str, cwd: str, judge_fn=judge, keep_min: Optional[float]
     always_lines = [redact(l) for l in always_lines]
     scored = [it for i, it in enumerate(items) if i not in represented][-SCORE_WINDOW:]
     note, jev_ok, stats = "", True, {}
-    try:
-        kept, stats = score(scored, judge_fn, keep_min, deadline_s, clock, t0)
-        if stats.get("partial"):
-            jev_ok, note = "partial", NOTE_PARTIAL
-    except JevUnavailable:
-        jev_ok, note = False, NOTE_UNAVAILABLE
+    pol = providers.policy(cwd)
+    if providers.resolve(thresholds.load(), judge_fn is not judge, cwd)[0] == "local":
+        jev_ok, note = "local", (NOTE_POLICY if pol else NOTE_LOCAL)
         kept = scored[-FALLBACK_NEWEST:]
+    else:
+        try:
+            kept, stats = score(scored, judge_fn, keep_min, deadline_s, clock, t0)
+            if stats.get("partial"):
+                jev_ok, note = "partial", NOTE_PARTIAL
+        except JevUnavailable:
+            jev_ok, note = False, NOTE_UNAVAILABLE
+            kept = scored[-FALLBACK_NEWEST:]
     jev_lines = [_line(it) for it in kept]
     session = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.splitext(os.path.basename(path))[0])
     text = render(cwd, session, always_lines, jev_lines, len(items), note, move)
     m = re.search(r"kept=(\d+)", text.split("\n", 1)[0])
     stats = dict(stats, total=len(items), scored=len(scored), always=len(always_lines), jev_ok=jev_ok, note=note,
-                 kept=int(m.group(1)) if m else len(always_lines) + len(jev_lines))
+                 kept=int(m.group(1)) if m else len(always_lines) + len(jev_lines),
+                 **({"judge_policy": pol} if pol else {}))
     return text, stats
 
 
@@ -214,9 +223,10 @@ def run(cwd: str, transcript: Optional[str] = None, judge_fn=judge, deadline_s: 
     target = move_path(cwd) if move else handoff_path(cwd)
     write_private(target, text)
     prune(os.path.dirname(target))
-    jevlog.append("handoff", {"kept": st["kept"], "total": st["total"], "scored": st["scored"], "always": st["always"],
-                              "jev_ok": st["jev_ok"], "chunks": st.get("chunks"), "cost": st.get("cost"),
-                              "input_tokens": st.get("input_tokens")})
+    jevlog.append("handoff", dict({"kept": st["kept"], "total": st["total"], "scored": st["scored"], "always": st["always"],
+                                   "jev_ok": st["jev_ok"], "chunks": st.get("chunks"), "cost": st.get("cost"),
+                                   "input_tokens": st.get("input_tokens")},
+                                  **({"judge_policy": st["judge_policy"]} if st.get("judge_policy") else {})))
     note = st["note"]
     if move:
         return "Handoff saved for another account: %d/%d items (%s%s). Now /exit, then start the new session in this folder within 30 min; it loads this handoff on startup." % (

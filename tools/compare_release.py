@@ -10,6 +10,7 @@ local judge), with an empty bridge inbox. Sides alternate per run (old, new, new
 both. PASS when this branch asks 0 times and blocks 0 times and its median per-event time is no higher than the old
 one's beyond the larger of the two run-to-run ranges. A second pass with one waiting message before each event
 reports the delivery cost (informational: the old release cannot deliver).
+--marked puts a .dryas-judge marker in the sandbox folder (project-local judge, spec 2026-10-19).
 """
 import argparse
 import json
@@ -82,7 +83,7 @@ def _seed(data: Path, n: int) -> None:
     (box / ("%013d-%08x.json" % (n, n))).write_text(json.dumps(msg), encoding="utf-8")
 
 
-def run(old_dir: Path, runs: int, seeded: bool = False) -> Dict[str, Dict[str, Any]]:
+def run(old_dir: Path, runs: int, seeded: bool = False, marked: bool = False) -> Dict[str, Dict[str, Any]]:
     chains = {"old": old_dir / "jev" / "chain.py", "new": REPO / "claude" / "jev" / "chain.py"}
     tmp = Path(tempfile.mkdtemp())
     try:
@@ -91,6 +92,8 @@ def run(old_dir: Path, runs: int, seeded: bool = False) -> Dict[str, Dict[str, A
         data.mkdir()
         env.update(DRYAS_DATA_ROOT=str(data), JEV_CHAIN_LOCAL=str(tmp / "none.json"))
         evs = events(str(tmp))
+        if marked:
+            (tmp / ".dryas-judge").write_text("local\n", encoding="utf-8")
         res = {s: {"asks": 0, "blocks": 0, "times": []} for s in chains}
         n = 0
         for r in range(runs):
@@ -131,12 +134,13 @@ def main() -> int:
     newest = default_old(cd / "plugins" / "cache" / "dryas-workflow" / "dryas", ours)
     p.add_argument("--old", default=str(newest) if newest else "")
     p.add_argument("--runs", type=int, default=6)
+    p.add_argument("--marked", action="store_true", help="put a .dryas-judge marker in the sandbox project folder")
     a = p.parse_args()
     old = Path(a.old)
     if not (old / "jev" / "chain.py").is_file():
         sys.stderr.write("no old Dryas copy at %s (pass --old)\n" % (a.old or "the plugin cache"))
         return 2
-    s = run(old, max(a.runs, 4))
+    s = run(old, max(a.runs, 4), marked=a.marked)
     print("%-12s %12s %12s" % ("", old.name, "this"))
     for k in ("asks", "blocks", "p50_ms"):
         print("%-12s %12s %12s" % (k, round(s["old"][k], 1), round(s["new"][k], 1)))

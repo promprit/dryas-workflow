@@ -285,15 +285,17 @@ def _checked_questions(mid: Any, args: Dict[str, Any]) -> Any:
     return normalized, None
 
 
-def _local(mid: Any, args: Dict[str, Any]) -> Dict[str, Any]:
+def _local(mid: Any, args: Dict[str, Any], policy: Optional[str] = None) -> Dict[str, Any]:
     """Local judge provider: no model answers. Validate as Jev would, then escalate every question."""
     normalized_questions, reply = _checked_questions(mid, args)
     if reply:
         return reply
     names = sorted(q[:64] for q in normalized_questions)[:64]
-    jevlog.append("mcp", {"tool": "jev_judge", "provider": "local", "escalate": names})
+    jevlog.append("mcp", dict({"tool": "jev_judge", "provider": "local", "escalate": names},
+                              **({"judge_policy": policy} if policy else {})))
+    note = "Local judge (project policy)" if policy else "Local judge"
     return _text(mid, {"answers": {}, "escalate": names, "provider": "local",
-                       "note": "Local judge: no model answers. The orchestrator decides every question."})
+                       "note": note + ": no model answers. The orchestrator decides every question."})
 
 
 def _judge(mid: Any, args: Dict[str, Any], judge_fn) -> Dict[str, Any]:
@@ -374,8 +376,11 @@ def handle(msg: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
         try:
             name, args = params.get("name"), params.get("arguments") or {}
             if name == "jev_judge":
-                if judge_fn is None and providers.resolve(thresholds.load(), False)[0] == "local":
-                    return _local(mid, args)
+                st = args.get("state")
+                cwd = st.get("cwd") if isinstance(st, dict) and isinstance(st.get("cwd"), str) else None
+                pol = providers.policy(cwd)
+                if pol or (judge_fn is None and providers.resolve(thresholds.load(), False, cwd)[0] == "local"):
+                    return _local(mid, args, pol)
                 return _judge(mid, args, judge_fn or jev_client.judge)
             if name == "log_escalation":
                 jevlog.append("escalations", _sanitize_log_escalation(args))

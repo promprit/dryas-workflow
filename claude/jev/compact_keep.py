@@ -59,8 +59,9 @@ def run(event: Dict[str, Any], judge_fn=judge) -> int:
         if not text:
             return 0
         handoff.write_private(target, text)
-        jevlog.append("compact", {"kept": st["kept"], "of": st["total"], "scored": st["scored"], "jev_ok": st["jev_ok"],
-                                  "chunks": st.get("chunks"), "input_tokens": st.get("input_tokens"), "cost": st.get("cost")})
+        jevlog.append("compact", dict({"kept": st["kept"], "of": st["total"], "scored": st["scored"], "jev_ok": st["jev_ok"],
+                                       "chunks": st.get("chunks"), "input_tokens": st.get("input_tokens"), "cost": st.get("cost")},
+                                      **({"judge_policy": st["judge_policy"]} if st.get("judge_policy") else {})))
         return st["kept"]
     except Exception as e:
         jevlog.append("compact", {"kept": 0, "error": type(e).__name__})
