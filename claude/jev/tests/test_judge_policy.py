@@ -143,6 +143,10 @@ class JudgePolicyTest(unittest.TestCase):
         self.unmarked_process()
         self.assertFalse(judge_policy.project_local(os.path.abspath(os.sep)))
 
+    def test_nul_byte_cwd_fails_closed(self):
+        self.unmarked_process()
+        self.assertTrue(judge_policy.project_local("/tmp/a\x00b"))
+
     def test_cache_skips_second_walk(self):
         self.mark()
         start = os.path.join(self.root, "Pilot", "src")
