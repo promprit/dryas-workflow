@@ -45,11 +45,11 @@ def _chain_marked(cur: str) -> bool:
 
 
 def _covers(start: str, seen: Set[str]) -> bool:
-    key = os.path.abspath(start)  # no filesystem calls, so a cache hit stays free
+    key = os.path.abspath(start)
     if key in _covered:
         return True
     for head in (key, os.path.realpath(key)):
-        if head not in seen:  # cwd is usually the process folder: walk each chain once per call
+        if head not in seen:
             seen.add(head)
             if _chain_marked(head):
                 _covered.add(key)
@@ -70,7 +70,7 @@ def project_local(cwd: Optional[str] = None) -> bool:
         return True
     for start in _rest():
         if start is None:
-            return True  # no process folder to judge by: fail closed
+            return True
         if _covers(start, seen):
             return True
     return False
