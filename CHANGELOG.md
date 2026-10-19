@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
-- Project-local judge: a committed .dryas-judge marker keeps a project and everything below it on the local judge; /handoff and compaction now honour judge.provider (spec docs/specs/2026-10-19-project-local-judge-design.md).
+- Project-local judge: a committed .dryas-judge marker keeps a project and everything below it on the local judge; /handoff and compaction now honour judge.provider; /handoff and compaction log jev_ok "local" when the provider is local (spec docs/specs/2026-10-19-project-local-judge-design.md).
 
 ## 2.3.2 - 2026-10-16
 
