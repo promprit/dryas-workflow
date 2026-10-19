@@ -3,6 +3,7 @@
 The key comes from OPENROUTER_API_KEY, then the plugin option (DRYAS_OPENROUTER_KEY in the MCP server,
 CLAUDE_PLUGIN_OPTION_OPENROUTER_KEY in hooks) at call time and is never stored. State is redacted
 before sending. Every failure raises JevUnavailable so callers can fail open.
+Under a .dryas-judge marker (judge_policy.py) nothing is sent: JevUnavailable("project_local").
 """
 import http.client
 import json
@@ -12,6 +13,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable, Dict, Optional
 
+import judge_policy
 from redact import redact_obj
 
 ENDPOINT = "https://openrouter.ai/api/v1/systemone"
@@ -77,6 +79,9 @@ def _read_by(resp: Any, deadline: float) -> bytes:
 
 def judge(state: Any, questions: Dict[str, Any], timeout: float = TIMEOUT_S,
           opener: Optional[Callable[..., Any]] = None) -> Dict[str, Any]:
+    cwd = state.get("cwd") if isinstance(state, dict) else None
+    if judge_policy.project_local(cwd if isinstance(cwd, str) else None):
+        raise JevUnavailable("project_local")
     key = api_key()
     if not key:
         raise JevUnavailable("OPENROUTER_API_KEY not set")
