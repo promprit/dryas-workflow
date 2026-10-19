@@ -80,7 +80,7 @@ Tests first, in `claude/jev/tests/`:
 3. One test per caller with a fake Jev that fails if called, all under a marked temp folder: gate, route, `jev_mcp` `jev_judge`, `handoff.run`, `compact_keep.run`, `opencode_session.compact` and `save_handoff`. Each asserts zero calls and `judge_policy` in the log line.
 4. Global hole: `judge.provider: local`, key set, no marker: `build_handoff` never calls the judge; note is "local judge — kept newest 30".
 5. Guard: `jev_client.judge` with `state["cwd"]` under a marker, and with the process directory under a marker, raises `JevUnavailable("project_local")` and the opener is never called.
-6. No marker: the existing suite passes unchanged; `tools/inventory.py --check` 0 problems; `tools/release_check.py` and `tools/release_check_opencode.py` pass after sync.
+6. No marker: the existing suite passes unchanged; `tools/inventory.py --check` 0 problems; `tools/sync_codex_plugin.py --check` and `tools/sync_opencode.py --check` exit 0 after sync. `tools/release_check.py` and `tools/release_check_opencode.py` check a real install and run in section 8, step 5.
 
 Speed (release rule; read `pstack/benchmark-checklist.md` before reporting a number):
 
@@ -93,7 +93,7 @@ Speed (release rule; read `pstack/benchmark-checklist.md` before reporting a num
 2. Start a session in `VOID/Pilot`; one prompt, one Bash command, one `/handoff`.
 3. Check: `route.jsonl` and `gate.jsonl` lines for that session show `provider: local` and `judge_policy: project_local`; no `provider: jev` line for that session; `handoff.jsonl` shows `judge_policy` and no cost.
 4. Repeat steps 2–3 in one VOID worktree.
-5. Release per the usual process (version bump, both accounts upgraded with `claude plugin update`).
+5. Release per the usual process (version bump, both accounts upgraded with `claude plugin update`), then `tools/release_check.py` and `tools/release_check_opencode.py` pass on the install.
 
 ## 9. Risks
 
