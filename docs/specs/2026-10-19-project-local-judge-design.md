@@ -34,9 +34,9 @@ Out of scope: Laya or any other provider; a path list in `thresholds.json` (decl
 ## 3. Marker and lookup (`claude/jev/judge_policy.py`, new)
 
 - `project_local(cwd: Optional[str]) -> bool`.
-- Start directory: `cwd` when it is a non-empty string, else `os.getcwd()`; if that raises, return `False` (the B guard still runs with its own directory, section 4).
-- Resolve with `os.path.realpath`, then `os.lstat("<dir>/.dryas-judge")` in that folder and every parent up to the filesystem root. Success is a hit. `FileNotFoundError` and `NotADirectoryError` mean no marker there; any other `OSError` (for example a parent folder without search permission) counts as a hit. Do not use `os.path.lexists`: it swallows `OSError` and would fail open. The first hit returns `True`. Content is never needed to decide (D2); the file is not read.
-- Cache: a module-level dict from the resolved start directory to the result, for the life of the process. Hooks are short-lived processes; the MCP server is long-lived, so a marker added while it runs takes effect at the next session. That is acceptable: the marker is committed once, before client access (section 8).
+- Start folders, in order: `cwd` when it is a non-empty string; `os.getcwd()`; `CLAUDE_PROJECT_DIR` when set and non-empty. If `os.getcwd()` raises, use the process folder recorded once at import (`_PROCESS_START`); if that is missing too, return `True` (fail closed). The result is `True` when any start folder is covered.
+- A start folder is covered when `os.lstat("<dir>/.dryas-judge")` hits in it or any parent up to the filesystem root, along either its `os.path.abspath` chain (logical, so a symlink out of the marked folder stays covered) or its `os.path.realpath` chain. Success is a hit. `FileNotFoundError` and `NotADirectoryError` mean no marker there; any other `OSError` (for example a parent folder without search permission) counts as a hit. Do not use `os.path.lexists`: it swallows `OSError` and would fail open. The first hit returns `True`. Content is never needed to decide (D2); the file is not read.
+- Cache: a module-level set of `os.path.abspath` start folders found covered, for the life of the process. Only positive answers are cached; a negative answer is recomputed on every call, so a marker added while the long-lived MCP server runs is seen at the next call.
 - Python 3.9 stdlib only; no exceptions escape (any `OSError` during the walk counts as a hit, so an unreadable folder fails closed).
 - Coverage: the VOID root, child repos and their subfolders, `VOID/**/.claude/worktrees/*` and sibling worktrees `VOID/<repo>-<slug>` are all below the marker. A worktree created outside `projects/VOID/` is not covered and is out of scope.
 
@@ -100,4 +100,5 @@ Speed (release rule; read `pstack/benchmark-checklist.md` before reporting a num
 - A new judge caller added later that skips `resolve`: caught by the B guard as long as its state carries `cwd` or its process runs under the project.
 - MCP `jev_judge` decides by the MCP server's launch folder when the state has no `cwd`: a session started outside VOID that later works in VOID gets Jev triage there. Same acceptance as the next point.
 - A session started outside VOID that edits VOID files by absolute path: its `cwd` is not under the marker, so Jev judges those calls. Accepted: VOID work starts in VOID folders (workspace rule: one session per project folder).
+- A child repo checked out outside the marked folder is not covered; commit a marker in each child repo to cover that.
 - Marker deleted by a commit: visible in VOID's history; the proof check in section 8 is the guard against silent removal.
