@@ -105,12 +105,12 @@ class JudgePolicyTest(unittest.TestCase):
 
     def test_getcwd_failure_falls_back_to_process_start(self):
         self.mark()
-        with mock.patch.object(judge_policy, "_PROCESS_START", os.path.join(self.root, "Pilot"), create=True), \
+        with mock.patch.object(judge_policy, "_PROCESS_START", os.path.join(self.root, "Pilot")), \
                 mock.patch("os.getcwd", side_effect=FileNotFoundError):
             self.assertTrue(judge_policy.project_local(None))
 
     def test_getcwd_failure_without_process_start_fails_closed(self):
-        with mock.patch.object(judge_policy, "_PROCESS_START", None, create=True), \
+        with mock.patch.object(judge_policy, "_PROCESS_START", None), \
                 mock.patch.dict(os.environ), mock.patch("os.getcwd", side_effect=FileNotFoundError):
             os.environ.pop("CLAUDE_PROJECT_DIR", None)
             self.assertTrue(judge_policy.project_local(None))
