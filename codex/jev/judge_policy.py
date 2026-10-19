@@ -30,7 +30,7 @@ def _marked(folder: str) -> bool:
         return True
     except (FileNotFoundError, NotADirectoryError):
         return False
-    except OSError:  # e.g. a parent without search permission: fail closed
+    except (OSError, ValueError):  # no search permission, NUL byte: fail closed
         return True
 
 
@@ -45,10 +45,14 @@ def _chain_marked(cur: str) -> bool:
 
 
 def _covers(start: str, seen: Set[str]) -> bool:
-    key = os.path.abspath(start)
-    if key in _covered:
+    try:
+        key = os.path.abspath(start)
+        if key in _covered:
+            return True
+        heads = (key, os.path.realpath(key))
+    except (OSError, ValueError):
         return True
-    for head in (key, os.path.realpath(key)):
+    for head in heads:
         if head not in seen:
             seen.add(head)
             if _chain_marked(head):
