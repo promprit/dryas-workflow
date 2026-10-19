@@ -38,14 +38,20 @@ QUESTIONS: Dict[str, Any] = {
 }
 
 
+def _policy_fields(cwd: Optional[str]) -> Dict[str, Any]:
+    p = providers.policy(cwd)
+    return dict(judge_policy=p) if p else {}
+
+
 def run(event: Dict[str, Any], judge_fn=None) -> Optional[str]:
     prompt = str(event.get("prompt", ""))
     if not prompt.strip():
         return None
     t_all = thresholds.load()
     t = t_all["route"]
-    if providers.resolve(t_all, judge_fn is not None)[0] == "local":
-        jevlog.append("route", {"provider": "local", "injected": False})
+    cwd = event.get("cwd") if isinstance(event.get("cwd"), str) else None
+    if providers.resolve(t_all, judge_fn is not None, cwd)[0] == "local":
+        jevlog.append("route", dict({"provider": "local", "injected": False}, **_policy_fields(cwd)))
         return None  # the local judge gives no route hint
     try:
         res = (judge_fn or judge)({"prompt": prompt[:4000], "cwd": str(event.get("cwd", ""))}, QUESTIONS)
