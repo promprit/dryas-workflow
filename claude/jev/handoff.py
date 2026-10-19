@@ -33,7 +33,7 @@ PRUNE_SECONDS = 86400
 NOTE_UNAVAILABLE = "Jev unavailable — kept newest 30"
 NOTE_LOCAL = "local judge — kept newest 30"
 NOTE_POLICY = "local judge (project policy) — kept newest 30"
-NOTE_PARTIAL ="Jev deadline reached — newest 30 of the unscored rest kept"
+NOTE_PARTIAL = "Jev deadline reached — newest 30 of the unscored rest kept"
 
 
 def projects_dir() -> str:

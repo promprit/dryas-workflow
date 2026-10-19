@@ -324,7 +324,7 @@ def run(event: Dict[str, Any], judge_fn=None) -> Optional[Dict[str, Any]]:
     state = {"environment": os.environ.get("JEV_GATE_STATE", DEFAULT_STATE), "cwd": str(event.get("cwd", "")),
              "action": describe(tool, ti)}
     try:
-        v = providers.ask(state, QUESTIONS, local, t_all, judge_fn)
+        v = providers.ask(state, QUESTIONS, local, t_all, judge_fn, cwd=cwd or None)
         a = v["answers"]
         d = _local_decision(local) if v["provider"] == "local" else decide(a, t)
         run_rule = ""
@@ -354,7 +354,7 @@ def _record(base: Dict[str, Any], d: Optional[Tuple[str, str]], a: Dict[str, Any
     shadow = _shadow_fields(v, t, local)
     return dict(base, decision=d[0] if d else "none", p_safe=round(a["safe"]["value"], 3), risk=a["risk"]["value"],
                 risk_conf=round(a["risk"]["confidence"], 3), provider=v["provider"],
-                **_provider_fields(v, local_ms), **shadow, **_false_skip(base, d, shadow))
+                **_provider_fields(v, local_ms), **_policy_fields(v), **shadow, **_false_skip(base, d, shadow))
 
 
 def _task_review(tool: str, ti: Dict[str, Any], cwd: str, loaded: Tuple[Optional[str], Any]) -> Dict[str, Any]:
@@ -386,6 +386,10 @@ def _provider_fields(v: Dict[str, Any], local_ms: float) -> Dict[str, Any]:
         return dict(local_ms=local_ms, reasons=list(v.get("reasons", []))[:4], fallback=v["fallback"],
                     error=v.get("error"))
     return dict(local_ms=local_ms, reasons=list(v.get("reasons", []))[:4])
+
+
+def _policy_fields(v: Dict[str, Any]) -> Dict[str, Any]:
+    return dict(judge_policy=v["judge_policy"]) if v.get("judge_policy") else {}
 
 
 def _shadow_fields(v: Dict[str, Any], t: Dict[str, Any], local: Dict[str, Any]) -> Dict[str, Any]:
