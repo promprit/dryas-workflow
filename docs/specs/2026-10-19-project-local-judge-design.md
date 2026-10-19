@@ -35,7 +35,7 @@ Out of scope: Laya or any other provider; a path list in `thresholds.json` (decl
 
 - `project_local(cwd: Optional[str]) -> bool`.
 - Start directory: `cwd` when it is a non-empty string, else `os.getcwd()`; if that raises, return `False` (the B guard still runs with its own directory, section 4).
-- Resolve with `os.path.realpath`, then check `<dir>/.dryas-judge` with `os.path.lexists` in that folder and every parent up to the filesystem root. The first hit returns `True`. Content is never needed to decide (D2); the file is not read.
+- Resolve with `os.path.realpath`, then `os.lstat("<dir>/.dryas-judge")` in that folder and every parent up to the filesystem root. Success is a hit. `FileNotFoundError` and `NotADirectoryError` mean no marker there; any other `OSError` (for example a parent folder without search permission) counts as a hit. Do not use `os.path.lexists`: it swallows `OSError` and would fail open. The first hit returns `True`. Content is never needed to decide (D2); the file is not read.
 - Cache: a module-level dict from the resolved start directory to the result, for the life of the process. Hooks are short-lived processes; the MCP server is long-lived, so a marker added while it runs takes effect at the next session. That is acceptable: the marker is committed once, before client access (section 8).
 - Python 3.9 stdlib only; no exceptions escape (any `OSError` during the walk counts as a hit, so an unreadable folder fails closed).
 - Coverage: the VOID root, child repos and their subfolders, `VOID/**/.claude/worktrees/*` and sibling worktrees `VOID/<repo>-<slug>` are all below the marker. A worktree created outside `projects/VOID/` is not covered and is out of scope.
@@ -48,11 +48,13 @@ Out of scope: Laya or any other provider; a path list in `thresholds.json` (decl
 | --- | --- |
 | `gate.py` (line 327 `providers.ask`) | Pass the event's `cwd`. Log `judge_policy` from the result. |
 | `route.py` (`run`) | Pass the event's `cwd` to `resolve`; the existing local branch logs `{"provider": "local", "injected": false}` plus `judge_policy`. |
-| `jev_mcp.py` (`jev_judge`) | Pass `args.get("cwd")` when it is a string, else `None` (process directory). The existing `_local` branch answers; its log line gets `judge_policy`. |
+| `jev_mcp.py` (`jev_judge`) | The tool's `inputSchema` has only `state` and `questions`, and the orchestrator sends no `cwd`, so in practice the decision uses `state["cwd"]` when the state carries one, else the MCP server's process directory (its session's launch folder). Do not add a `cwd` argument to the schema. The existing `_local` branch answers; its `mcp.jsonl` line gets `judge_policy`. The server is long-lived and the lookup is cached, so the session must start in a folder under the marker (section 9). |
 | `handoff.build_handoff` | Before `score()`: if `providers.resolve(thresholds.load(), judge_fn is not judge, cwd)[0] == "local"`, skip scoring and use the existing fallback (`kept = scored[-FALLBACK_NEWEST:]`). The note is `NOTE_LOCAL = "local judge (project policy) — kept newest 30"` when the policy applied, `"local judge — kept newest 30"` for a global `local`. `jev_ok` is `"local"`. Stats carry `judge_policy` when it applied; `handoff.run` and `compact_keep.run` log it. This covers `/handoff`, PreCompact and both `opencode_session` paths. |
 | `jev_client.judge` (guard) | First statement: `cwd = state.get("cwd") if isinstance(state, dict) else None`; if `judge_policy.project_local(cwd)` raise `JevUnavailable("project_local")`. Nothing is built or sent. |
 
-Test injection: callers that pass an explicit `judge_fn` keep today's meaning of `injected` for `resolve`, but the marker check runs first, so a test with a marker and a fake Jev must see zero calls to the fake.
+Test injection: callers that pass an explicit `judge_fn` keep today's meaning of `injected` for `resolve`, but the marker check runs first, so a test with a marker and a fake Jev must see zero calls to the fake. In `build_handoff`, `injected` is `judge_fn is not judge`; this is valid because `handoff.py` imports `judge` from `jev_client`, and `compact_keep.run` and `opencode_session` default to that same function.
+
+Logging: `gate` builds its log line through `_provider_fields`; add `judge_policy` there (and in the other callers' existing log builders), so `tools/inventory.py --check`, which traces log fields, stays at 0 problems.
 
 ## 5. Behaviour in a marked project
 
@@ -73,7 +75,7 @@ Test injection: callers that pass an explicit `judge_fn` keep today's meaning of
 
 Tests first, in `claude/jev/tests/`:
 
-1. `test_judge_policy.py`: marker found from root, child repo, `.claude/worktrees/x/src`, sibling worktree folder; not found outside; empty, junk and unreadable (mode 000) marker count as local; missing `cwd` uses the process directory; cache returns the same answer without new `stat` calls.
+1. `test_judge_policy.py`: marker found from root, child repo, `.claude/worktrees/x/src`, sibling worktree folder; not found outside; empty, junk and unreadable (mode 000) marker count as local; a parent folder without search permission (mode 000) counts as local; missing `cwd` uses the process directory; cache returns the same answer without new `stat` calls.
 2. `test_providers.py` (extend): with a marker, `resolve` returns `("local", "none")` for `provider` `jev`/`auto`, `shadow` `jev`, a key set, and `injected=True`.
 3. One test per caller with a fake Jev that fails if called, all under a marked temp folder: gate, route, `jev_mcp` `jev_judge`, `handoff.run`, `compact_keep.run`, `opencode_session.compact` and `save_handoff`. Each asserts zero calls and `judge_policy` in the log line.
 4. Global hole: `judge.provider: local`, key set, no marker: `build_handoff` never calls the judge; note is "local judge — kept newest 30".
@@ -96,5 +98,6 @@ Speed (release rule; read `pstack/benchmark-checklist.md` before reporting a num
 ## 9. Risks
 
 - A new judge caller added later that skips `resolve`: caught by the B guard as long as its state carries `cwd` or its process runs under the project.
+- MCP `jev_judge` decides by the MCP server's launch folder when the state has no `cwd`: a session started outside VOID that later works in VOID gets Jev triage there. Same acceptance as the next point.
 - A session started outside VOID that edits VOID files by absolute path: its `cwd` is not under the marker, so Jev judges those calls. Accepted: VOID work starts in VOID folders (workspace rule: one session per project folder).
 - Marker deleted by a commit: visible in VOID's history; the proof check in section 8 is the guard against silent removal.
