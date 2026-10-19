@@ -31,11 +31,23 @@ class JudgePolicyTest(unittest.TestCase):
         for d in ("", "Pilot/src", "Pilot/.claude/worktrees/x/src", "void-data-platform-slug"):
             self.assertTrue(judge_policy.project_local(os.path.join(self.root, d)), d)
 
+    def unmarked_process(self):
+        """Process folder unmarked and CLAUDE_PROJECT_DIR unset, so only the given cwd counts."""
+        p = mock.patch.dict(os.environ)
+        p.start()
+        self.addCleanup(p.stop)
+        os.environ.pop("CLAUDE_PROJECT_DIR", None)
+        g = mock.patch("os.getcwd", return_value=os.path.join(self.tmp, "elsewhere"))
+        g.start()
+        self.addCleanup(g.stop)
+
     def test_no_marker_outside(self):
         self.mark()
+        self.unmarked_process()
         self.assertFalse(judge_policy.project_local(os.path.join(self.tmp, "elsewhere")))
 
     def test_no_marker_anywhere(self):
+        self.unmarked_process()
         self.assertFalse(judge_policy.project_local(os.path.join(self.root, "Pilot")))
 
     def test_any_content_means_local(self):
@@ -91,11 +103,42 @@ class JudgePolicyTest(unittest.TestCase):
             with mock.patch("os.getcwd", return_value=os.path.join(self.root, "Pilot")):
                 self.assertTrue(judge_policy.project_local(cwd), repr(cwd))
 
-    def test_getcwd_failure_is_false(self):
-        with mock.patch("os.getcwd", side_effect=FileNotFoundError):
-            self.assertFalse(judge_policy.project_local(None))
+    def test_getcwd_failure_falls_back_to_process_start(self):
+        self.mark()
+        with mock.patch.object(judge_policy, "_PROCESS_START", os.path.join(self.root, "Pilot"), create=True), \
+                mock.patch("os.getcwd", side_effect=FileNotFoundError):
+            self.assertTrue(judge_policy.project_local(None))
+
+    def test_getcwd_failure_without_process_start_fails_closed(self):
+        with mock.patch.object(judge_policy, "_PROCESS_START", None, create=True), \
+                mock.patch.dict(os.environ), mock.patch("os.getcwd", side_effect=FileNotFoundError):
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+            self.assertTrue(judge_policy.project_local(None))
+
+    def test_claude_project_dir_marked(self):
+        self.mark()
+        with mock.patch.dict(os.environ, {"CLAUDE_PROJECT_DIR": os.path.join(self.root, "Pilot")}), \
+                mock.patch("os.getcwd", return_value=os.path.join(self.tmp, "elsewhere")):
+            self.assertTrue(judge_policy.project_local(os.path.join(self.tmp, "elsewhere")))
+
+    def test_logical_symlink_out_of_marked_folder(self):
+        if not hasattr(os, "symlink") or os.name == "nt":
+            self.skipTest("symlinks")
+        self.mark()
+        link = os.path.join(self.root, "data")
+        os.symlink(os.path.join(self.tmp, "elsewhere"), link)
+        self.unmarked_process()
+        self.assertTrue(judge_policy.project_local(link))
+
+    def test_negative_not_cached(self):
+        self.unmarked_process()
+        start = os.path.join(self.root, "Pilot")
+        self.assertFalse(judge_policy.project_local(start))
+        self.mark()
+        self.assertTrue(judge_policy.project_local(start))
 
     def test_walk_stops_at_root(self):
+        self.unmarked_process()
         self.assertFalse(judge_policy.project_local(os.path.abspath(os.sep)))
 
     def test_cache_skips_second_walk(self):

@@ -37,6 +37,12 @@ class JevClientGuardTest(unittest.TestCase):
                     jev_client.judge(state, {}, opener=self.opener)
             self.assertEqual(str(e.exception), "project_local", repr(state))
 
+    def test_marked_process_folder_beats_unmarked_state_cwd(self):
+        with mock.patch("os.getcwd", return_value=self.marked):
+            with self.assertRaises(jev_client.JevUnavailable) as e:
+                jev_client.judge({"cwd": "/tmp"}, {}, opener=self.opener)
+        self.assertEqual(str(e.exception), "project_local")
+
 
 if __name__ == "__main__":
     unittest.main()
