@@ -34,7 +34,6 @@ def main() -> int:
             warm.append((time.perf_counter() - t0) * 1e6)
         c, w = statistics.median(cold), statistics.median(warm)
         print("cold p50 %.1f us, cached p50 %.2f us (n=%d)" % (c, w, n))
-        # Unmarked folder: negatives are not cached, so every call walks the cwd, process folder and env chains.
         outside = os.path.join(tmp, "outside", "a", "b", "c", "d", "src")
         os.makedirs(outside)
         here, env = os.getcwd(), os.environ.pop("CLAUDE_PROJECT_DIR", None)
