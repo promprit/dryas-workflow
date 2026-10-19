@@ -81,6 +81,13 @@ class McpPolicyTest(Base):
             self.call({"task": "x"}, boom)
         self.assertEqual(self.last("mcp")["judge_policy"], "project_local")
 
+    def test_unmarked_state_cwd_with_marked_process_is_local(self):
+        outside = os.path.join(self.tmp, "outside")
+        os.makedirs(outside)
+        with mock.patch("os.getcwd", return_value=self.cwd):
+            self.call({"cwd": outside}, boom)
+        self.assertEqual(self.last("mcp")["judge_policy"], "project_local")
+
 
 if __name__ == "__main__":
     unittest.main()
