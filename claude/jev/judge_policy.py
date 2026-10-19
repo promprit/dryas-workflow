@@ -2,9 +2,9 @@
 
 A committed `.dryas-judge` file at a project root keeps every judge call for sessions at or below that folder on
 the local judge. Any marker means local, whatever it holds; the file is never read. Start folders: the given cwd,
-the process folder (or the folder recorded at import if it is gone) and CLAUDE_PROJECT_DIR; any covered one means
-local. A folder is covered when the marker sits in it or a parent on its logical (abspath) or resolved (realpath)
-chain. An unexpected error while looking counts as a marker, and no start folder at all means local (fail closed).
+the process folder and CLAUDE_PROJECT_DIR; any covered one means local. A folder is covered when the marker sits
+in it or a parent on its logical (abspath) or resolved (realpath) chain. An unexpected error while looking counts as
+a marker, and no process folder (it cannot be read) or no start folder at all means local (fail closed).
 Only positive answers are cached, so a marker added later is seen at the next call."""
 import os
 from typing import Iterator, Optional, Set
@@ -18,9 +18,6 @@ def _getcwd() -> Optional[str]:
         return os.getcwd()
     except OSError:
         return None
-
-
-_PROCESS_START = _getcwd()
 
 
 def clear_cache() -> None:
@@ -61,8 +58,7 @@ def _covers(start: str, seen: Set[str]) -> bool:
 
 
 def _rest() -> Iterator[Optional[str]]:
-    proc = _getcwd()
-    yield proc if proc is not None else _PROCESS_START
+    yield _getcwd()
     env = os.environ.get("CLAUDE_PROJECT_DIR")
     if env:
         yield env
