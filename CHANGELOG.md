@@ -2,9 +2,17 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 2.3.3 - 2026-10-19
 
-- Project-local judge: a committed .dryas-judge marker keeps a project and everything below it on the local judge; /handoff and compaction now honour judge.provider; /handoff and compaction log jev_ok "local" when the provider is local (spec docs/specs/2026-10-19-project-local-judge-design.md).
+Keep a project's judge data on your Mac. Commit an empty `.dryas-judge` file at a project's root and every session in that folder, its sub-repos and its worktrees uses the local judge alone: nothing from the safety gate, prompt routing, `jev_judge`, `/handoff` or compaction goes to OpenRouter. Built on 2.3.2 (not on main's newer, slower hooks): no new prompts and no hook slowdown against 2.3.2.
+
+### Added
+- Project-local judge: `.dryas-judge` marker (`judge_policy.py`). Any marker means local, even an unreadable one; the check covers the session folder, the process folder and `CLAUDE_PROJECT_DIR`, on the logical and the resolved path, and fails closed on any lookup error. Judge log lines it decides carry `"judge_policy": "project_local"`.
+- `jev_client.judge` refuses to send under a marker, whatever the caller passes.
+- `tools/compare_release.py` (with `--marked`) and `tools/bench_judge_policy.py`.
+
+### Changed
+- `/handoff` and compaction honour `judge.provider` (a global `local` now also keeps them off OpenRouter) and log `jev_ok: "local"` when the provider is local; their note reads "local judge — kept newest 30" instead of "Jev unavailable".
 
 ## 2.3.2 - 2026-10-16
 
