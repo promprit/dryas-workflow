@@ -103,21 +103,17 @@ class JudgePolicyTest(unittest.TestCase):
             with mock.patch("os.getcwd", return_value=os.path.join(self.root, "Pilot")):
                 self.assertTrue(judge_policy.project_local(cwd), repr(cwd))
 
-    def test_getcwd_failure_falls_back_to_process_start(self):
-        self.mark()
-        with mock.patch.object(judge_policy, "_PROCESS_START", os.path.join(self.root, "Pilot")), \
-                mock.patch("os.getcwd", side_effect=FileNotFoundError):
+    def test_getcwd_failure_means_local(self):
+        with mock.patch("os.getcwd", side_effect=FileNotFoundError):
             self.assertTrue(judge_policy.project_local(None))
 
     def test_getcwd_failure_with_unmarked_process_start_fails_closed(self):
-        with mock.patch.object(judge_policy, "_PROCESS_START", os.path.join(self.tmp, "elsewhere"), create=True), \
-                mock.patch.dict(os.environ), mock.patch("os.getcwd", side_effect=FileNotFoundError):
+        with mock.patch.dict(os.environ), mock.patch("os.getcwd", side_effect=FileNotFoundError):
             os.environ.pop("CLAUDE_PROJECT_DIR", None)
             self.assertTrue(judge_policy.project_local(None))
 
     def test_getcwd_failure_without_process_start_fails_closed(self):
-        with mock.patch.object(judge_policy, "_PROCESS_START", None), \
-                mock.patch.dict(os.environ), mock.patch("os.getcwd", side_effect=FileNotFoundError):
+        with mock.patch.dict(os.environ), mock.patch("os.getcwd", side_effect=FileNotFoundError):
             os.environ.pop("CLAUDE_PROJECT_DIR", None)
             self.assertTrue(judge_policy.project_local(None))
 
