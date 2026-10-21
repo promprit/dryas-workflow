@@ -143,21 +143,121 @@ class ReaSetupTest(unittest.TestCase):
         self.assertEqual(rs.install("claude_code", {}, yes=True, dry_run=False)["skill_dir"],
                          "/h/.claude/skills/reverse-engineer-anything")
 
-    def test_safe_skill_dir(self):
+    def _tree(self, t):
+        root = os.path.realpath(t)
+        good = Path(root) / "acct" / "skills" / "reverse-engineer-anything"
+        good.mkdir(parents=True)
+        return root, Path(root) / "acct", good
+
+    def test_safe_skill_dir_requires_root(self):
         with tempfile.TemporaryDirectory() as t:
-            good = Path(t) / "skills" / "reverse-engineer-anything"
-            good.mkdir(parents=True)
-            other = Path(t) / "skills" / "other"
+            _, acct, good = self._tree(t)
+            outside = Path(os.path.realpath(t)) / "elsewhere" / "reverse-engineer-anything"
+            outside.mkdir(parents=True)
+            other = acct / "skills" / "other"
             other.mkdir()
-            link = Path(t) / "link" / "reverse-engineer-anything"
+            link = acct / "skills" / "linked" / "reverse-engineer-anything"
             link.parent.mkdir()
-            os.symlink(str(good), str(link))
-            afile = Path(t) / "f" / "reverse-engineer-anything"
+            os.symlink(str(outside), str(link))
+            parent_link = acct / "viaparent"
+            os.symlink(str(outside.parent), str(parent_link))
+            afile = acct / "f" / "reverse-engineer-anything"
             afile.parent.mkdir()
             afile.write_text("x")
-            self.assertTrue(rs.safe_skill_dir(str(good)))
-            for p in (str(other), str(link), str(afile), None, "", str(Path(t) / "missing" / "reverse-engineer-anything")):
-                self.assertFalse(rs.safe_skill_dir(p), p)
+            self.assertTrue(rs.safe_skill_dir(str(good), acct))
+            self.assertTrue(rs.safe_skill_dir(str(good), str(acct)))
+            bad = [str(outside), str(other), str(link), str(afile), None, "",
+                   "skills/reverse-engineer-anything",
+                   str(parent_link / "reverse-engineer-anything"),
+                   str(acct / "missing" / "reverse-engineer-anything")]
+            for p in bad:
+                self.assertFalse(rs.safe_skill_dir(p, acct), p)
+            self.assertFalse(rs.safe_skill_dir(str(good), good))
+
+    def test_remove_skill(self):
+        with tempfile.TemporaryDirectory() as t:
+            _, acct, good = self._tree(t)
+            outside = Path(os.path.realpath(t)) / "elsewhere" / "reverse-engineer-anything"
+            outside.mkdir(parents=True)
+            self.assertEqual(rs.remove_skill({"skill_dir": str(outside)}, acct),
+                             "kept %s (not a plain reverse-engineer-anything folder inside %s); remove it by hand"
+                             % (outside, acct))
+            self.assertTrue(outside.is_dir())
+            self.assertEqual(rs.remove_skill({"skill_dir": str(good)}, acct), "removed %s" % good)
+            self.assertFalse(good.exists())
+            msg = "REA's skill folder was not recorded; remove its reverse-engineer-anything skill folder by hand"
+            self.assertEqual(rs.remove_skill({"skill_dir": None}, acct), msg)
+            self.assertEqual(rs.remove_skill(None, acct), msg)
+
+    def test_remove_skill_rmtree_error(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as t:
+            _, acct, good = self._tree(t)
+            orig = shutil.rmtree
+            def boom(p):
+                raise OSError("denied")
+            shutil.rmtree = boom
+            try:
+                got = rs.remove_skill({"skill_dir": str(good)}, acct)
+            finally:
+                shutil.rmtree = orig
+            self.assertEqual(got, "warning: could not remove %s (denied)" % good)
+
+    def test_plan_summary(self):
+        plan = json.dumps({"plannedActions": [
+            {"operation": "create", "kind": "install_skill", "target": "/h/skills/reverse-engineer-anything"},
+            {"kind": "configure_client"}]})
+        lines = rs.plan_summary("npm notice x\n" + plan)
+        self.assertEqual(lines, ["  create install_skill: /h/skills/reverse-engineer-anything",
+                                 "  ? configure_client: ?"])
+        self.assertEqual(rs.plan_summary("garbage"), [])
+        self.assertEqual(rs.plan_summary(""), [])
+
+    def test_install_skips_when_current(self):
+        f = self.use(Fake())
+        prior = {"version": "6.7.0", "client": "claude_code", "skill_dir": "/p/skills/reverse-engineer-anything"}
+        self.assertIs(rs.install("claude_code", {}, yes=False, dry_run=False, prior=prior), prior)
+        self.assertEqual([c[0] for c in f.calls], [rs.doctor_argv("claude_code")])
+        self.assertEqual(f.asked, [])
+
+    def test_install_reruns_when_prior_not_aligned(self):
+        f = self.use(Fake(doctor=DOCTOR_BAD))
+        prior = {"version": "6.7.0", "client": "claude_code", "skill_dir": None}
+        entry = rs.install("claude_code", {}, yes=False, dry_run=False, prior=prior)
+        self.assertIsNotNone(entry)
+        self.assertEqual(f.asked, ["Install REA?"])
+        self.assertEqual([c[0] for c in f.calls][:2], [rs.doctor_argv("claude_code"), rs.dry_run_argv("claude_code")])
+        self.assertIn(rs.setup_argv("claude_code"), [c[0] for c in f.calls])
+
+    def test_install_reruns_for_older_prior_version(self):
+        f = self.use(Fake())
+        rs.install("claude_code", {}, yes=True, dry_run=False, prior={"version": "6.0.0", "skill_dir": None})
+        self.assertIn(rs.setup_argv("claude_code"), [c[0] for c in f.calls])
+
+    def test_install_keeps_prior_skill_dir(self):
+        plan = json.dumps({"status": "planned", "plannedActions": [{"kind": "configure_client", "target": "x"}]})
+        self.use(Fake(plan=plan))
+        prior = {"version": "6.0.0", "client": "claude_code", "skill_dir": "/p/skills/reverse-engineer-anything"}
+        entry = rs.install("claude_code", {}, yes=True, dry_run=False, prior=prior)
+        self.assertEqual(entry["skill_dir"], "/p/skills/reverse-engineer-anything")
+
+    def test_install_prints_summary(self):
+        import io, contextlib
+        self.use(Fake())
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rs.install("claude_code", {}, yes=True, dry_run=False)
+        out = buf.getvalue()
+        self.assertIn("REA will change:", out)
+        self.assertIn("? install_skill: /h/.claude-x/skills/reverse-engineer-anything", out)
+
+    def test_install_doctor_no_state_warns(self):
+        import io, contextlib
+        self.use(Fake(doctor="nope"))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rs.install("claude_code", {}, yes=True, dry_run=False)
+        self.assertIn("warning: REA doctor gave no state (exit 0); run `", buf.getvalue())
 
     def test_never_uninstalls_globally(self):
         src = (HERE.parent / "rea_setup.py").read_text(encoding="utf-8")
