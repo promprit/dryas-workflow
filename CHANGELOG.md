@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## Unreleased
 
+- REA (reverse engineering) as an optional extra: setup installs [rea-agents](https://github.com/morluto/rea) 6.7.0 (MCP server `rea` + skill `reverse-engineer-anything`) per Claude config dir and Codex home, after showing what it will change and asking; `--no-rea` skips it, `--with-rea` adds it on an upgrade. Needs Node.js 22.19+, 24.11+ or 26+ (otherwise skipped with a warning; the install goes on). Uninstall removes it per account only, and deletes its skill folder only when that folder is inside the account's own directory; REA's own `rea uninstall` is never run. `release_check.py` reports REA's state (pass or warning, never a failure). Brainstorm proposes "investigate with REA first" when a request depends on software we don't have the source for; you can decline. Not on OpenCode or in cloud installs (spec docs/specs/2026-10-21-rea-integration-design.md).
+- Cross-account bridge: `list_peers` also finds `~/.claude*` accounts that are not in accounts.json (any with live sessions), so new accounts show up without setup; each peer has a `dryas` flag, and `send_message` refuses a peer whose account has no Dryas, with the install command. A message waiting when the recipient runs `/clear` now follows the session instead of being lost.
 - Project-local judge: a committed .dryas-judge marker keeps a project and everything below it on the local judge; /handoff and compaction now honour judge.provider; /handoff and compaction log jev_ok "local" when the provider is local (spec docs/specs/2026-10-19-project-local-judge-design.md).
 
 ## 2.3.2 - 2026-10-16
