@@ -82,6 +82,13 @@ class PruneTest(unittest.TestCase):
         self.assertFalse(os.path.exists(reused))
         self.assertTrue(os.path.exists(live))
 
+    def test_old_tmp_in_bypid_removed(self):
+        old = self.put(os.path.join(".bypid", ".tmp-0000aaaa"), 2 * 3600)
+        new = self.put(os.path.join(".bypid", ".tmp-0000bbbb"), 60)
+        bridge.prune(self.now)
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.exists(new))
+
     def test_prune_keeps_bypid_with_padded_day(self):
         pid = self.sb.child()
         live = os.path.join(self.root, ".bypid", "%d.json" % pid)

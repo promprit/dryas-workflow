@@ -95,7 +95,10 @@ def _read(path: str, d: str) -> Optional[Dict[str, Any]]:
 
 
 def read_sessions(dirs: List[str]) -> List[Dict[str, Any]]:
+    """Live-looking records of every dir, one per pid: a copied sessions folder lists the same process again, and
+    the first dir (listed before discovered) wins."""
     out = []
+    seen: Set[int] = set()
     for d in dirs:
         sd = os.path.join(d, "sessions")
         try:
@@ -105,7 +108,8 @@ def read_sessions(dirs: List[str]) -> List[Dict[str, Any]]:
         for n in names:
             if n.endswith(".json"):
                 s = _read(os.path.join(sd, n), d)
-                if s:
+                if s and s["pid"] not in seen:
+                    seen.add(s["pid"])
                     out.append(s)
     return out
 

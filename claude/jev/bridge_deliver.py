@@ -70,15 +70,13 @@ def _from_line(m: Dict[str, Any]) -> str:
     return line + ":"
 
 
-def _my_session(sid: str) -> Optional[Dict[str, Any]]:
-    """This session's record, read from this account's own sessions folder (no scan, no ps)."""
+def _my_session(names: List[str], sid: str) -> Optional[Dict[str, Any]]:
+    """This session's record: for each pointer name (<pid>.json), read that pid's file in this account's own
+    sessions folder (no scan of the folder, no ps); the first whose sessionId is sid."""
     import bridge_peers as bp  # only when a pointer exists: keeps the common path's imports small
-    d = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    sd = os.path.join(d, "sessions")
-    with os.scandir(sd) as it:
-        names = sorted(e.name for e in it if e.name.endswith(".json"))
+    d = bp.own_dir()
     for n in names:
-        s = bp._read(os.path.join(sd, n), d)
+        s = bp._read(os.path.join(d, "sessions", n), d)
         if s is not None and s["sessionId"] == sid:
             return s
     return None
@@ -102,20 +100,28 @@ def _move_all(old: str, sid: str) -> int:
 
 def _rehome(sid: str) -> int:
     """After /clear the process keeps its pid but gets a new session id: move messages waiting for its earlier
-    ids (listed in <inbox root>/.bypid/<pid>.json by the sender) into this session's inbox."""
+    ids (listed in <inbox root>/.bypid/<pid>.json by the sender) into this session's inbox. Read-only for the
+    pointer; moving from an empty old inbox is a no-op, so repeating is harmless."""
+    pointer = ""
     try:
         bypid = os.path.join(paths.inbox_root(), ".bypid")
         with os.scandir(bypid) as it:
-            if next(it, None) is None:
-                return 0
-        s = _my_session(sid)
+            names = sorted(e.name for e in it if e.name.endswith(".json") and e.name[:-5].isdigit())
+        if not names:
+            return 0
+        s = _my_session(names, sid)
         if s is None:
             return 0
         import bridge_peers as bp
+        want = bp._norm_time(s["procStart"])
+        if not want:
+            return 0
         pointer = os.path.join(bypid, "%d.json" % s["pid"])
         with open(pointer, encoding="utf-8") as f:
             ptr = json.load(f)
-        if bp._norm_time(ptr.get("procStart")) != bp._norm_time(s["procStart"]):
+        if not isinstance(ptr, dict):
+            raise ValueError("pointer is not an object")
+        if bp._norm_time(ptr.get("procStart")) != want:
             return 0
         total = 0
         for old in ptr.get("sids") or []:
@@ -125,15 +131,16 @@ def _rehome(sid: str) -> int:
             if n:
                 total += n
                 jevlog.append("bridge", {"event": "rehomed", "from": old, "to": sid, "files": n})
-        tmp = pointer + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"procStart": ptr.get("procStart"), "sids": [sid]}, f)
-        os.replace(tmp, pointer)
         return total
     except FileNotFoundError:
         return 0
     except Exception as e:
         jevlog.append("bridge", {"event": "rehome_error", "reason": type(e).__name__})
+        if isinstance(e, (ValueError, AttributeError)) and pointer:
+            try:
+                os.unlink(pointer)  # a corrupt pointer would log on every turn
+            except OSError:
+                pass
         return 0
 
 

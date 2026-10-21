@@ -26,7 +26,7 @@ REPLY_ID = re.compile(r"^m-[0-9a-f]{12}$")
 TOOLS = [
     {"name": "list_peers",
      "description": ("List live Claude Code sessions on this machine across every account in Dryas accounts.json and every other ~/.claude* config dir with live sessions; dryas=false peers cannot receive: "
-                     "name, sessionId, account, cwd, status, idle_for, same_account. For same-account peers prefer "
+                     "name, sessionId, account, cwd, status, idle_for, same_account, kind, dryas. For same-account peers prefer "
                      "native SendMessage (it reaches idle sessions); use send_message for other accounts."),
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "send_message",
@@ -99,6 +99,8 @@ def _label(s: Dict[str, Any]) -> str:
 def _record_pid(peer: Dict[str, Any], proc_start: str) -> None:
     """<inbox root>/.bypid/<pid>.json lists the sessions that process has had, so a /clear can be followed.
     Best effort: a failure never fails the send."""
+    if not proc_start:  # rehome refuses an empty start time, so a pointer would never be used
+        return
     try:
         d = os.path.join(paths.inbox_root(), ".bypid")
         _mkdir(d)
@@ -165,7 +167,7 @@ def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
         "v": 1, "id": mid, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
         "from": {"sessionId": me["sessionId"], "name": str(me["name"] or ""), "account": bp.account(me["_dir"]),
                  "cwd": str(me["cwd"] or "")},
-        "to": peer["sessionId"], "to_pid": peer["pid"], "to_proc_start": proc_start, "reply_to": reply_to,
+        "to": peer["sessionId"], "reply_to": reply_to,
         "text": text})
     _record_pid(peer, proc_start)
     jevlog.append("bridge", {"event": "sent", "id": mid, "from": me["sessionId"], "to": peer["sessionId"],
@@ -189,16 +191,27 @@ def _files(folder: str) -> List[Tuple[str, float]]:
     return out
 
 
-def _prune_bypid(folder: str) -> int:
+def _prune_bypid(folder: str, now: float) -> int:
     """Remove pointers of processes that ended, or whose pid now belongs to another process."""
-    pids = {}
-    for f in os.listdir(folder):
-        if f.endswith(".json") and f[:-5].isdigit():
-            pids[f] = int(f[:-5])
-    starts = bp.start_times([p for p in pids.values() if bp.pid_running(p)])
     n = 0
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return 0
+    for f in names:  # temp files of an interrupted pointer write
+        if f.startswith(".tmp"):
+            p = os.path.join(folder, f)
+            try:
+                if now - os.lstat(p).st_mtime > TMP_AGE:
+                    _unlink(p)
+                    n += 1
+            except OSError:
+                pass
+    pids = {f: int(f[:-5]) for f in names if f.endswith(".json") and f[:-5].isdigit()}
+    running = {f: bp.pid_running(p) for f, p in pids.items()}
+    starts = bp.start_times([p for f, p in pids.items() if running[f]])
     for f, pid in pids.items():
-        keep = bp.pid_running(pid)
+        keep = running[f]
         if keep and starts is not None:
             try:
                 with open(os.path.join(folder, f), encoding="utf-8") as fh:
@@ -241,7 +254,7 @@ def prune(now: Optional[float] = None) -> None:
                     files += 1
             continue
         if name == ".bypid":
-            files += _prune_bypid(p)
+            files += _prune_bypid(p, now)
             continue
         if not bd.UUID.match(name):
             continue

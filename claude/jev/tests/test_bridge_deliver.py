@@ -211,7 +211,7 @@ class DeliverTest(unittest.TestCase):
         self.put(1)
         os.makedirs(os.path.join(sb.root, "inbox", ".bypid"))
         with open(os.path.join(sb.root, "inbox", ".bypid", "%d.json" % pid), "w", encoding="utf-8") as f:
-            f.write(raw if raw is not None else json.dumps({"procStart": pointer_start or start, "sids": [SID]}))
+            f.write(raw if raw is not None else json.dumps({"procStart": start if pointer_start is None else pointer_start, "sids": [SID]}))
         bf.write_session(sb.acc1, pid, NEW, "p", proc_start=start)
         self.pid = pid
         return pid
@@ -229,7 +229,7 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(len(ev), 1)
         self.assertEqual((ev[0]["from"], ev[0]["to"], ev[0]["files"]), (SID, NEW, 1))
         with open(os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid), encoding="utf-8") as f:
-            self.assertEqual(json.load(f)["sids"], [NEW])
+            self.assertEqual(json.load(f)["sids"], [SID])  # the hook never rewrites the pointer
 
     def test_reused_pid_does_not_inherit(self):
         pid = self.cleared(pointer_start="Mon Jan  1 00:00:00 2001")
@@ -263,6 +263,49 @@ class DeliverTest(unittest.TestCase):
                 mock.patch.object(subprocess, "run", side_effect=AssertionError("ps")):
             self.assertEqual(bd.deliver(self.ev(session_id=SENDER)), "")
         self.assertFalse(os.path.exists(os.path.join(os.environ["JEV_LOG_DIR"], "bridge.jsonl")))  # no error logged
+
+    def test_hook_never_writes_pointer(self):
+        pid = self.cleared()
+        p = os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)
+        before = open(p, encoding="utf-8").read()
+        self.assertIn("1 message(s)", self.deliver_new(pid))
+        self.assertEqual(open(p, encoding="utf-8").read(), before)
+        self.assertEqual(self.deliver_new(pid), "")  # idempotent: the old inbox is empty
+
+    def test_empty_procstart_never_rehomes(self):
+        pid = self.cleared(pointer_start="")
+        bf.write_session(os.environ["CLAUDE_CONFIG_DIR"], pid, NEW, "p", proc_start="")
+        self.assertEqual(self.deliver_new(pid), "")
+        self.assertEqual(len(self.left()), 1)
+
+    def test_lookup_reads_own_pointer_only(self):
+        pid = self.cleared()
+        sd = os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "sessions")
+        for i in range(20):
+            bf.write_session(os.environ["CLAUDE_CONFIG_DIR"], pid + 1000 + i, "%08d-0000-4000-8000-000000000000" % i,
+                             "x%d" % i, proc_start="x")
+        for i in (1, 2, 3):
+            with open(os.path.join(self.root, "inbox", ".bypid", "%d.json" % (pid + 5000 + i)), "w") as f:
+                json.dump({"procStart": "x", "sids": []}, f)
+        real, seen = os.scandir, []
+
+        def spy(p="."):
+            seen.append(str(p))
+            return real(p)
+
+        with mock.patch.object(os, "scandir", spy), mock.patch.object(subprocess, "run", side_effect=AssertionError("ps")):
+            self.assertIn("1 message(s)", self.deliver_new(pid))
+        self.assertFalse([p for p in seen if p.startswith(sd)], seen)
+        self.assertEqual(len([p for p in seen if p.endswith(".bypid")]), 1)
+
+    def test_corrupt_pointer_logged_once(self):
+        pid = self.cleared(raw="{not json")
+        self.deliver_new(pid)
+        n = len([l for l in self.log() if l["event"] == "rehome_error"])
+        self.assertEqual(n, 1)
+        self.deliver_new(pid)
+        self.assertEqual(len([l for l in self.log() if l["event"] == "rehome_error"]), 1)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)))
 
     def test_rehome_error_never_raises(self):
         pid = self.cleared(raw="{not json")

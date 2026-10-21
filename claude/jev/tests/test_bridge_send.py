@@ -154,11 +154,19 @@ class SendTest(unittest.TestCase):
         self.assertFalse(os.path.exists(self.box()))
         self.assertEqual(bridge._recent_sends(bf.SID_ME, time.time()), [])
 
-    def test_message_records_recipient_pid(self):
+    def test_message_has_no_recipient_process_fields(self):
         self.assertFalse(self.send(to="peer-b", text="x")[1])
         [m] = self.msgs()
-        pid = self.pid_b
-        self.assertEqual((m["to_pid"], m["to_proc_start"]), (pid, bf.ps_start(pid)))
+        self.assertNotIn("to_pid", m)
+        self.assertNotIn("to_proc_start", m)
+
+    def test_no_pointer_without_procstart(self):
+        pid = self.sb.child()
+        bf.write_session(self.sb.acc2, pid, bf.SID_C, "peer-c", proc_start="")
+        with mock.patch.object(bp, "start_times", return_value=None):  # pid-only liveness
+            out, err = self.send(to="peer-c", text="x")
+        self.assertFalse(err, out)
+        self.assertFalse(os.path.exists(os.path.join(self.sb.root, "inbox", ".bypid", "%d.json" % pid)))
 
     def test_bypid_pointer_written_and_merged(self):
         pdir = os.path.join(self.sb.root, "inbox", ".bypid")

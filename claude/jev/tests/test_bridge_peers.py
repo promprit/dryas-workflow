@@ -1,6 +1,7 @@
 import builtins
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -30,6 +31,16 @@ class PeersTest(unittest.TestCase):
         self.assertEqual(p["account"], ".claude-two")
         self.assertFalse(p["same_account"])
         self.assertNotIn("note", out)
+
+    def test_copied_live_session_listed_once(self):
+        pid = self.sb.child()
+        bf.write_session(self.sb.acc2, pid, bf.SID_B, "peer-b")
+        bak = os.path.join(self.sb.d, ".claude.bak")
+        os.makedirs(os.path.join(bak, "sessions"))
+        shutil.copy(os.path.join(self.sb.acc2, "sessions", "%d.json" % pid), os.path.join(bak, "sessions"))
+        out = bp.list_peers()
+        self.assertEqual(self.names(out), ["peer-b"])
+        self.assertEqual(out["peers"][0]["account"], ".claude-two")
 
     def test_same_account_peer_marked(self):
         bf.write_session(self.sb.acc1, self.sb.child(), bf.SID_B, "peer-b")
