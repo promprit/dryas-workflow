@@ -217,8 +217,7 @@ class DeliverTest(unittest.TestCase):
         return pid
 
     def deliver_new(self, pid):
-        with mock.patch.object(os, "getppid", return_value=pid):
-            return bd.deliver(self.ev(session_id=NEW))
+        return bd.deliver(self.ev(session_id=NEW))
 
     def test_message_survives_clear(self):
         pid = self.cleared()
@@ -254,6 +253,16 @@ class DeliverTest(unittest.TestCase):
                 mock.patch.object(subprocess, "run", side_effect=AssertionError("ps")):
             self.assertIn("1 message(s)", bd.deliver(self.ev()))
         self.assertEqual([l for l in self.log() if l["event"] != "delivered"], [])
+
+    def test_pointer_for_other_process_costs_no_subprocess(self):
+        pid = self.cleared()
+        with open(os.path.join(self.root, "inbox", ".bypid", "%d.json" % (pid + 1)), "w", encoding="utf-8") as f:
+            json.dump({"procStart": "x", "sids": [SENDER]}, f)
+        with mock.patch.object(bridge_peers, "_ancestors", side_effect=AssertionError("ps")), \
+                mock.patch.object(bridge_peers, "discovered_dirs", side_effect=AssertionError("scan")), \
+                mock.patch.object(subprocess, "run", side_effect=AssertionError("ps")):
+            self.assertEqual(bd.deliver(self.ev(session_id=SENDER)), "")
+        self.assertEqual([l for l in self.log() if l["event"] == "rehome_error"], [])
 
     def test_rehome_error_never_raises(self):
         pid = self.cleared(raw="{not json")

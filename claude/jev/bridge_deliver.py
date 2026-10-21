@@ -71,19 +71,16 @@ def _from_line(m: Dict[str, Any]) -> str:
 
 
 def _my_session(sid: str) -> Optional[Dict[str, Any]]:
-    """This session's record, found from the hook's parent pid (or an ancestor's)."""
+    """This session's record, read from this account's own sessions folder (no scan, no ps)."""
     import bridge_peers as bp  # only when a pointer exists: keeps the common path's imports small
-    dirs = bp.account_dirs()[0]
-    pids, tried = [os.getppid()], False
-    while pids:
-        pid = pids.pop(0)
-        for d in dirs:
-            s = bp._read(os.path.join(d, "sessions", "%d.json" % pid), d)
-            if s is not None and s["sessionId"] == sid:
-                return s
-        if not tried:
-            tried = True
-            pids = bp._ancestors()[1:]
+    d = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    sd = os.path.join(d, "sessions")
+    with os.scandir(sd) as it:
+        names = sorted(e.name for e in it if e.name.endswith(".json"))
+    for n in names:
+        s = bp._read(os.path.join(sd, n), d)
+        if s is not None and s["sessionId"] == sid:
+            return s
     return None
 
 
