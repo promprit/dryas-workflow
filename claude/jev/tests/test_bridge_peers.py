@@ -1,6 +1,7 @@
 import builtins
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -31,6 +32,22 @@ class PeersTest(unittest.TestCase):
         self.assertFalse(p["same_account"])
         self.assertNotIn("note", out)
 
+    def test_copied_live_session_listed_once(self):
+        pid = self.sb.child()
+        bf.write_session(self.sb.acc2, pid, bf.SID_B, "peer-b")
+        bak = os.path.join(self.sb.d, ".claude.bak")
+        os.makedirs(os.path.join(bak, "sessions"))
+        shutil.copy(os.path.join(self.sb.acc2, "sessions", "%d.json" % pid), os.path.join(bak, "sessions"))
+        out = bp.list_peers()
+        self.assertEqual(self.names(out), ["peer-b"])
+        self.assertEqual(out["peers"][0]["account"], ".claude-two")
+
+    def test_stale_record_does_not_hide_live_session(self):
+        pid = self.sb.child()
+        bf.write_session(self.sb.acc1, pid, "33333333-3333-4333-8333-333333333333", "stale", proc_start="Mon Jan  1 00:00:00 2001")
+        bf.write_session(self.sb.acc2, pid, bf.SID_B, "peer-b")
+        self.assertEqual(self.names(), ["peer-b"])
+
     def test_same_account_peer_marked(self):
         bf.write_session(self.sb.acc1, self.sb.child(), bf.SID_B, "peer-b")
         self.assertTrue(bp.list_peers()["peers"][0]["same_account"])
@@ -58,6 +75,7 @@ class PeersTest(unittest.TestCase):
         bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_B, "peer-b")
         out = bp.list_peers()
         self.assertEqual(set(out["peers"][0]), set(bp.PEER_KEYS))
+        self.assertIn("dryas", bp.PEER_KEYS)
         self.assertNotIn(self.sb.acc2, json.dumps(out))
         self.assertNotIn("messagingSocketPath", json.dumps(out))
 
@@ -80,7 +98,7 @@ class PeersTest(unittest.TestCase):
         bf.write_session(self.sb.acc1, self.sb.child(), bf.SID_B, "here")
         bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_C, "elsewhere")
         out = bp.list_peers()
-        self.assertEqual(self.names(out), ["here"])
+        self.assertEqual(self.names(out), ["elsewhere", "here"])  # discovery finds .claude-two too
         self.assertIn("accounts.json unreadable", out["note"])
 
     def test_duplicate_account_dirs_listed_once(self):
@@ -109,6 +127,53 @@ class PeersTest(unittest.TestCase):
         out = bp.list_peers()
         self.assertEqual(self.names(out), [])
         self.assertIn("1 session(s) skipped", out["note"])
+
+    def test_finds_unlisted_account(self):
+        bot = os.path.join(self.sb.d, ".claude-bot")
+        bf.write_session(bot, self.sb.child(), bf.SID_B, "bot-peer")
+        bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_C, "listed")
+        out = bp.list_peers()
+        self.assertEqual(self.names(out), ["bot-peer", "listed"])
+        self.assertEqual([p["account"] for p in out["peers"] if p["name"] == "bot-peer"], [".claude-bot"])
+
+    def test_listed_and_discovered_not_duplicated(self):
+        dirs = bp.account_dirs()[0]
+        self.assertEqual(dirs[:2], [self.sb.acc1, self.sb.acc2])
+        self.assertEqual(len(dirs), 2)
+        bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_B, "peer-b")
+        self.assertEqual(self.names(), ["peer-b"])
+
+    def test_stale_backup_dir_not_listed(self):
+        bf.write_session(os.path.join(self.sb.d, ".claude.bak-1"), self.sb.dead_pid(), bf.SID_B, "old")
+        out = bp.list_peers()
+        self.assertEqual(self.names(out), [])
+        self.assertNotIn("note", out)
+
+    def test_unrelated_dirs_ignored(self):
+        bf.write_session(os.path.join(self.sb.d, ".claudex"), self.sb.child(), bf.SID_B, "x")
+        bf.write_session(os.path.join(self.sb.d, "claude"), self.sb.child(), bf.SID_C, "y")
+        self.assertEqual(self.names(), [])
+
+    def test_dryas_flag(self):
+        os.remove(os.path.join(self.sb.acc2, ".dryas-plugin.json"))
+        bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_B, "no-dryas")
+        bf.write_session(self.sb.acc1, self.sb.child(), bf.SID_C, "has-dryas")
+        got = {p["name"]: p["dryas"] for p in bp.list_peers()["peers"]}
+        self.assertEqual(got, {"no-dryas": False, "has-dryas": True})
+
+    def test_discovery_without_accounts_json(self):
+        os.remove(paths.accounts_file())
+        bf.write_session(os.path.join(self.sb.d, ".claude-bot"), self.sb.child(), bf.SID_B, "bot-peer")
+        bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_C, "elsewhere")
+        out = bp.list_peers()
+        self.assertEqual(self.names(out), ["bot-peer", "elsewhere"])
+        self.assertIn("scanning ~/.claude*", out["note"])
+
+    def test_symlinked_dir_not_followed(self):
+        real = os.path.join(self.sb.d, "elsewhere")
+        bf.write_session(real, self.sb.child(), bf.SID_B, "linked")
+        os.symlink(real, os.path.join(self.sb.d, ".claude-link"))
+        self.assertEqual(self.names(), [])
 
     def test_me_follows_session_id_change(self):
         dirs = bp.account_dirs()[0]

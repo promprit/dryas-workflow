@@ -17,7 +17,8 @@ class SendTest(unittest.TestCase):
     def setUp(self):
         self.sb = bf.Sandbox(self)
         self.sb.me()
-        bf.write_session(self.sb.acc2, self.sb.child(), bf.SID_B, "peer-b", status="idle")
+        self.pid_b = self.sb.child()
+        bf.write_session(self.sb.acc2, self.pid_b, bf.SID_B, "peer-b", status="idle")
 
     def box(self, sid=bf.SID_B):
         return os.path.join(self.sb.root, "inbox", sid)
@@ -142,6 +143,42 @@ class SendTest(unittest.TestCase):
         self.assertIn('"event":"sent"', log)
         self.assertIn('"event":"refused"', log)
         self.assertNotIn("private words", log)
+
+    def test_peer_without_dryas_refused(self):
+        os.remove(os.path.join(self.sb.acc2, ".dryas-plugin.json"))
+        out, err = self.send(to="peer-b", text="x")
+        self.assertTrue(err)
+        self.assertIn(".claude-two", out["error"])
+        self.assertIn("no Dryas", out["error"])
+        self.assertNotIn(self.sb.d, out["error"])
+        self.assertFalse(os.path.exists(self.box()))
+        self.assertEqual(bridge._recent_sends(bf.SID_ME, time.time()), [])
+
+    def test_message_has_no_recipient_process_fields(self):
+        self.assertFalse(self.send(to="peer-b", text="x")[1])
+        [m] = self.msgs()
+        self.assertNotIn("to_pid", m)
+        self.assertNotIn("to_proc_start", m)
+
+    def test_no_pointer_without_procstart(self):
+        pid = self.sb.child()
+        bf.write_session(self.sb.acc2, pid, bf.SID_C, "peer-c", proc_start="")
+        with mock.patch.object(bp, "start_times", return_value=None):  # pid-only liveness
+            out, err = self.send(to="peer-c", text="x")
+        self.assertFalse(err, out)
+        self.assertFalse(os.path.exists(os.path.join(self.sb.root, "inbox", ".bypid", "%d.json" % pid)))
+
+    def test_bypid_pointer_written_and_merged(self):
+        pdir = os.path.join(self.sb.root, "inbox", ".bypid")
+        self.send(to="peer-b", text="x")
+        self.send(to="peer-b", text="y")
+        with open(os.path.join(pdir, "%d.json" % self.pid_b), encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"procStart": bf.ps_start(self.pid_b), "sids": [bf.SID_B]})
+        self.assertEqual(os.stat(pdir).st_mode & 0o777, 0o700)
+        pid_c = self.sb.child()
+        bf.write_session(self.sb.acc2, pid_c, bf.SID_C, "peer-c")
+        self.assertFalse(self.send(to="peer-c", text="z")[1])
+        self.assertEqual(sorted(os.listdir(pdir)), sorted(["%d.json" % self.pid_b, "%d.json" % pid_c]))
 
     def test_list_peers_tool(self):
         out, err = bridge.call("list_peers", {})

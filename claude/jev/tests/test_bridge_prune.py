@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import time
@@ -66,6 +67,35 @@ class PruneTest(unittest.TestCase):
         live = self.put(os.path.join(".rate", bf.SID_B + ".json"), 60)
         bridge.prune(self.now)
         self.assertFalse(os.path.exists(ended))
+        self.assertTrue(os.path.exists(live))
+
+    def test_prune_drops_dead_bypid(self):
+        dead = self.put(os.path.join(".bypid", "%d.json" % self.sb.dead_pid()), 60)
+        pid = self.sb.child()
+        live = os.path.join(self.root, ".bypid", "%d.json" % pid)
+        reused = os.path.join(self.root, ".bypid", "%d.json" % os.getpid())
+        for p, ps in ((live, bf.ps_start(pid)), (reused, "Mon Jan  1 00:00:00 2001")):
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"procStart": ps, "sids": []}, f)
+        bridge.prune(self.now)
+        self.assertFalse(os.path.exists(dead))
+        self.assertFalse(os.path.exists(reused))
+        self.assertTrue(os.path.exists(live))
+
+    def test_old_tmp_in_bypid_removed(self):
+        old = self.put(os.path.join(".bypid", ".tmp-0000aaaa"), 2 * 3600)
+        new = self.put(os.path.join(".bypid", ".tmp-0000bbbb"), 60)
+        bridge.prune(self.now)
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.exists(new))
+
+    def test_prune_keeps_bypid_with_padded_day(self):
+        pid = self.sb.child()
+        live = os.path.join(self.root, ".bypid", "%d.json" % pid)
+        os.makedirs(os.path.dirname(live), exist_ok=True)
+        with open(live, "w", encoding="utf-8") as f:
+            json.dump({"procStart": bf.ps_start(pid).replace(" ", "  "), "sids": []}, f)
+        bridge.prune(self.now)
         self.assertTrue(os.path.exists(live))
 
     def test_at_most_once_an_hour(self):
