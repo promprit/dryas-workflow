@@ -114,6 +114,8 @@ def install(client: str, env: dict, yes: bool, dry_run: bool, prior: Optional[di
         _, out = di.capture(doctor_argv(client), env=env, timeout=600)
         if skill_state(out) == "aligned":
             print("REA %s already set up; skipped" % VERSION)
+            if prior.get("skill_dir") is None and client == "claude_code":
+                return dict(prior, skill_dir=_config_skill_dir(env))
             return prior
     rc, plan = di.capture(dry_run_argv(client), env=env, timeout=600)
     if rc != 0:

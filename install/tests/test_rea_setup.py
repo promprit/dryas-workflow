@@ -254,6 +254,19 @@ class ReaSetupTest(unittest.TestCase):
         self.assertEqual([c[0] for c in f.calls], [rs.doctor_argv("claude_code")])
         self.assertEqual(f.asked, [])
 
+    def test_install_current_fills_missing_skill_dir(self):
+        # recorded before the config-dir fallback existed: the skip path must still fill the path in
+        f = self.use(Fake())
+        prior = {"version": "6.7.0", "client": "claude_code", "skill_dir": None}
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t) / "skills" / rs.SKILL_NAME
+            d.mkdir(parents=True)
+            entry = rs.install("claude_code", {"CLAUDE_CONFIG_DIR": t}, yes=False, dry_run=False, prior=prior)
+            self.assertEqual(entry["skill_dir"], str(d))
+        self.assertEqual([c[0] for c in f.calls], [rs.doctor_argv("claude_code")])
+        self.assertEqual(f.asked, [])
+        self.assertIsNone(prior["skill_dir"])
+
     def test_install_reruns_when_prior_not_aligned(self):
         f = self.use(Fake(doctor=DOCTOR_BAD))
         prior = {"version": "6.7.0", "client": "claude_code", "skill_dir": None}
