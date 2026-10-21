@@ -439,6 +439,11 @@ class ChainWatchTest(unittest.TestCase):
         self.assertIn("Context 63% — run /handoff", c)
         self.assertLess(c.index("Jev route"), c.index("Context 63%"))
 
+    def test_real_usage_watch_stage_is_inproc_with_context(self):
+        with open(os.path.join(HERE, "chain.json"), encoding="utf-8") as f:
+            st = next(s for s in json.load(f)["prompt"] if s["name"] == "usage-watch")
+        self.assertEqual((st.get("inproc"), st.get("context")), ("usage_watch", True))
+
     def test_real_chain_json_order(self):
         with open(os.path.join(HERE, "chain.json"), encoding="utf-8") as f:
             names = [s["name"] for s in json.load(f)["prompt"]]

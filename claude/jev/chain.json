@@ -8,7 +8,7 @@
   "prompt": [
     {"name": "jev-route", "harness": ["claude", "codex", "opencode"], "component": "jev", "cmd": ["$PY", "-X", "utf8", "$CD/jev/route.py"], "timeout": 5},
     {"name": "context-watch", "harness": ["claude", "opencode"], "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/context_watch.py"], "timeout": 2},
-    {"name": "usage-watch", "harness": ["claude"], "component": "core", "cmd": ["$PY", "-X", "utf8", "$CD/jev/usage_watch.py"], "timeout": 2},
+    {"name": "usage-watch", "harness": ["claude"], "component": "core", "inproc": "usage_watch", "context": true, "cmd": ["$PY", "-X", "utf8", "$CD/jev/usage_watch.py"], "timeout": 2},
     {"name": "bridge-deliver", "harness": ["claude"], "component": "core", "inproc": "bridge_deliver", "context": true, "cmd": ["$PY", "-X", "utf8", "$CD/jev/bridge_deliver.py"], "timeout": 1},
     {"name": "flowobserve", "component": "flowobserve", "enabled": false, "cmd": ["$PY", "-X", "utf8", "-S", "$HOME/.flowobserve/bin/fo_hook.py"], "timeout": 1, "observe": true}
   ],

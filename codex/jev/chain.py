@@ -6,9 +6,10 @@ after a deny only observe stages run. UserPromptSubmit: additionalContext is con
 Any failure of a stage is skipped, except a "fail_closed" stage while a task is active
 (.orchestrate/active.json): its timeout, crash or unparseable output becomes a deny.
 The chain itself always exits 0.
-A stage with `inproc` runs in this process (only the known modules: `scope_lock`, `gate_outcome`, `bridge_deliver`);
-its `cmd` stays for tools that run stages one by one. Only `bridge_deliver` returns text: in `prompt` and `post` a
-stage marked `"context": true` adds it as additionalContext (UserPromptSubmit / PostToolUse).
+A stage with `inproc` runs in this process (only the known modules: `scope_lock`, `gate_outcome`, `bridge_deliver`,
+`usage_watch`); its `cmd` stays for tools that run stages one by one. Only `bridge_deliver` and `usage_watch` return
+text: in `prompt` and `post` a stage marked `"context": true` adds it as additionalContext (UserPromptSubmit /
+PostToolUse).
 """
 import json
 import os
@@ -325,13 +326,16 @@ def observe(event: Dict[str, Any], raw: str, stages: List[Dict[str, Any]], kind:
 
 def _inproc(stage: Dict[str, Any], event: Dict[str, Any]) -> Optional[str]:
     """A stage with an "inproc" module runs in this process (no subprocess). Only known modules; anything else is
-    skipped. Only bridge_deliver returns text."""
+    skipped. Only bridge_deliver and usage_watch return text."""
     if stage["inproc"] == "gate_outcome":
         import gate_outcome
         gate_outcome.record(event)
     elif stage["inproc"] == "bridge_deliver":
         import bridge_deliver
         return bridge_deliver.deliver(event) or None
+    elif stage["inproc"] == "usage_watch":
+        import usage_watch
+        return usage_watch.run(event) or None
     return None
 
 
