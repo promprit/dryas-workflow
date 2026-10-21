@@ -33,6 +33,13 @@ class ReaRulesTest(unittest.TestCase):
         self.assertIn("not set up for OpenCode", oc)
         self.assertNotIn("investigate with REA first", oc)
 
+    def test_big_rea_tools_named(self):
+        sect = lambda p: self.read(p).split("Exploring approaches")[1].split("\n## ")[0]
+        for p in ("claude/skills/brainstorm/reference.md", "codex/skills/brainstorm/reference.md"):
+            for tool in ("compare_web_captures", "inspect_analysis_view"):
+                self.assertIn(tool, sect(p), p)
+        self.assertNotIn("compare_web_captures", sect("opencode/skill/dryas-brainstorm/reference.md"))
+
     def test_plan_carries_evidence(self):
         self.assertIn("REA finding", self.read("claude/skills/plan/SKILL.md"))
 
