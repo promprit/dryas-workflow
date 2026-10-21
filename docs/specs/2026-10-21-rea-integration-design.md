@@ -37,9 +37,11 @@ Out of scope: Hopper, Ghidra or IDA installation (REA's own separate opt-in); ex
 
 New line directly after the design line:
 
-`- Reverse-engineering work (how an app, binary or site you don't have the source for does something): use REA (`rea` MCP + skill). Brainstorm says when it recommends REA; you can decline.`
+`- Reverse-engineering work (how software you don't have the source for does something): use REA; brainstorm says when it recommends it, the user can decline.`
 
-Synced to `codex/` and `opencode/` with the existing sync tools, as every template change is. `docs/template-coverage.md` gets a row for the rule.
+Kept short: the Claude template is at its byte budget (`install/tests/test_template_budget.py`), which this change raises deliberately.
+
+Added to `codex/AGENTS.md.template` too; the process-skill changes are rendered to `codex/` and `opencode/` by `tools/sync_codex_plugin.py`. `docs/template-coverage.md` is not changed: it maps the frozen pre-2.0 lines only.
 
 ### 3.2 Brainstorm (`claude/skills/brainstorm/reference.md` § Exploring approaches)
 
@@ -87,7 +89,7 @@ Existing accounts on this Mac (`~/.claude`, `~/.claude-team`, `~/.claude-team2`,
 
 1. Node check (`node_ok`). Failing: print `warning: REA needs Node.js 22.19+, 24.11+ or 26+; skipped (install Node, then re-run with --with-rea).`, return `None`.
 2. `--dry-run` of our installer: print the `setup_argv` it would run, run nothing, return `None`.
-3. Run `dry_run_argv` and print its output, then ask `Install REA? [Y/n]` (`dryas_install.confirm`). This is REA's own prompt, separate from and after the batch "Run these?" of `thirdparty`, so REA's planned changes are always shown before they are approved. `--yes` skips the question (the dry run is still printed). Declined: `skipped REA`, return `None`.
+3. Run `dry_run_argv` and print its output, then ask `Install REA? [y/N]` (`dryas_install.confirm`, the installer's usual prompt). This is REA's own prompt, separate from and after the batch "Run these?" of `thirdparty`, so REA's planned changes are always shown before they are approved. `--yes` skips the question (the dry run is still printed). Declined: `skipped REA`, return `None`.
 4. Run `setup_argv`. Non-zero exit: `warning: REA setup failed (exit N); REA is optional, Dryas setup continues`, return `None`. REA's setup backs up the configuration it edits and pins its MCP registration to the exact version.
 5. The skill path is the `target` of the `install_skill` action in step 3's dry-run JSON. Missing or unparsable: `skill_dir` is `null`. Then run `doctor_argv` and require `identity.skill.state == "aligned"`; otherwise warn (still record, so uninstall can clean up).
 6. Return the record entry `{"version": "6.7.0", "client": "claude_code", "skill_dir": "<path>" | null}`.
@@ -135,7 +137,7 @@ In the existing `install/tests` style, with REA's commands mocked (no network in
 - Uninstall: the two removal commands with the right env, the recorded skill dir removed, `rea uninstall` never appears in any argv; `--keep-extras` runs nothing.
 - Cloud: `rea` never selected.
 - Release check: recorded and ready → ok; not ready → warning; not recorded → skipped.
-- Template coverage test passes with the new rule row; sync to `codex/` and `opencode/` passes its existing check.
+- Template budget test passes with the raised Claude budget; `tools/sync_codex_plugin.py --check` passes.
 - Existing tests whose expected component lists change (`test_providers_install.py`, `test_plugin_setup.py`, `test_launch_docs.py` flag list) are updated to include `rea` where fresh defaults apply.
 
 ## 6. Risks
