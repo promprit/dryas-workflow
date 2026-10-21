@@ -262,7 +262,7 @@ class DeliverTest(unittest.TestCase):
                 mock.patch.object(bridge_peers, "discovered_dirs", side_effect=AssertionError("scan")), \
                 mock.patch.object(subprocess, "run", side_effect=AssertionError("ps")):
             self.assertEqual(bd.deliver(self.ev(session_id=SENDER)), "")
-        self.assertEqual([l for l in self.log() if l["event"] == "rehome_error"], [])
+        self.assertFalse(os.path.exists(os.path.join(os.environ["JEV_LOG_DIR"], "bridge.jsonl")))  # no error logged
 
     def test_rehome_error_never_raises(self):
         pid = self.cleared(raw="{not json")
