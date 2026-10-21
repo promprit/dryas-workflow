@@ -309,7 +309,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                         print("Legacy Ruflo pieces (each asked separately):")
                     for label, _, _ in legacy:
                         print("  " + label)
-        rc = max(cps.uninstall(cdx) if want_codex else 0, ocs.uninstall(od) if want_oc else 0)
+        cextras = cps.rea_extras(cdx) if want_codex else []
+        if cextras and a.keep_extras:
+            print("kept REA for Codex; to remove it: %s" % "; ".join("CODEX_HOME=%s %s" % (cdx, " ".join(c)) for c in cextras))
+            cextras = []
+        elif cextras:
+            print("Third-party tools setup installed for %s (kept with --keep-extras):" % cdx)
+            for argv in cextras:
+                print("  CODEX_HOME=%s %s" % (cdx, " ".join(argv)))
+            if not (a.yes or di.confirm("Remove them too?")):
+                cextras = []
+        rc = max(cps.uninstall(cdx, extras=cextras) if want_codex else 0, ocs.uninstall(od) if want_oc else 0)
         if rc:
             return rc
         if want_claude:
@@ -346,7 +356,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("preflight ok")
         return 0
     if want_codex:
-        rc = cps.setup(repo, cdx, codex_comps, yes=a.yes, dry=a.dry_run)
+        rc = cps.setup(repo, cdx, list(codex_comps), yes=a.yes, dry=a.dry_run)
         if rc:
             return rc
     if want_oc:

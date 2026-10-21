@@ -292,7 +292,7 @@ class MainTest(unittest.TestCase):
         st = MainStubs(self)
         import codex_plugin_setup as cps
         from unittest import mock
-        with mock.patch.object(cps, "uninstall", lambda cdx: 1):
+        with mock.patch.object(cps, "uninstall", lambda cdx, extras=None: 1):
             self.assertEqual(self.main("--uninstall", "--purge", "--harness", "both"), 1)
         self.assertEqual(st.steps(), [])
 
