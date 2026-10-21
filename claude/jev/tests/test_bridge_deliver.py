@@ -11,8 +11,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 JEV = os.path.dirname(HERE)
 sys.path.insert(0, JEV)
 import bridge_deliver as bd  # noqa: E402
+import bridge_fixture as bf  # noqa: E402
+import bridge_peers  # noqa: E402
 
 SID = "44444444-4444-4444-8444-444444444444"
+NEW = "66666666-6666-4666-8666-666666666666"
 SENDER = "55555555-5555-4555-8555-555555555555"
 
 
@@ -44,7 +47,7 @@ class DeliverTest(unittest.TestCase):
         return sorted(n for n in os.listdir(self.box) if n.endswith(".json"))
 
     def log(self):
-        with open(os.path.join(self.root, "logs", "bridge.jsonl"), encoding="utf-8") as f:
+        with open(os.path.join(os.environ["JEV_LOG_DIR"], "bridge.jsonl"), encoding="utf-8") as f:
             return [json.loads(l) for l in f]
 
     def test_no_folder_or_empty_gives_nothing(self):
@@ -197,6 +200,65 @@ class DeliverTest(unittest.TestCase):
         hso = json.loads(r.stdout)["hookSpecificOutput"]
         self.assertEqual(hso["hookEventName"], "PostToolUse")
         self.assertIn("[Dryas bridge] 1 message(s)", hso["additionalContext"])
+
+    def cleared(self, pointer_start=None, raw=None):
+        """Session SID of a live process P had a message waiting; P now runs NEW (a /clear). Returns P."""
+        sb = bf.Sandbox(self)
+        self.root = sb.root
+        self.box = os.path.join(sb.root, "inbox", SID)
+        pid = sb.child()
+        start = bf.ps_start(pid)
+        self.put(1)
+        os.makedirs(os.path.join(sb.root, "inbox", ".bypid"))
+        with open(os.path.join(sb.root, "inbox", ".bypid", "%d.json" % pid), "w", encoding="utf-8") as f:
+            f.write(raw if raw is not None else json.dumps({"procStart": pointer_start or start, "sids": [SID]}))
+        bf.write_session(sb.acc1, pid, NEW, "p", proc_start=start)
+        self.pid = pid
+        return pid
+
+    def deliver_new(self, pid):
+        with mock.patch.object(os, "getppid", return_value=pid):
+            return bd.deliver(self.ev(session_id=NEW))
+
+    def test_message_survives_clear(self):
+        pid = self.cleared()
+        out = self.deliver_new(pid)
+        self.assertIn("1 message(s)", out)
+        self.assertEqual(self.left(), [])
+        self.assertTrue(os.path.isdir(os.path.join(self.root, "inbox", NEW, "delivered")))
+        ev = [l for l in self.log() if l["event"] == "rehomed"]
+        self.assertEqual(len(ev), 1)
+        self.assertEqual((ev[0]["from"], ev[0]["to"], ev[0]["files"]), (SID, NEW, 1))
+        with open(os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["sids"], [NEW])
+
+    def test_reused_pid_does_not_inherit(self):
+        pid = self.cleared(pointer_start="Mon Jan  1 00:00:00 2001")
+        self.assertEqual(self.deliver_new(pid), "")
+        self.assertEqual(len(self.left()), 1)
+
+    def test_padded_day_still_matches(self):
+        pid = self.cleared()
+        p = os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)
+        with open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        d["procStart"] = d["procStart"].replace(" ", "  ")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(d, f)
+        self.assertIn("1 message(s)", self.deliver_new(pid))
+
+    def test_no_pointer_no_ps(self):
+        self.put(1)
+        os.makedirs(os.path.join(self.root, "inbox", ".bypid"))
+        with mock.patch.object(bridge_peers, "_ancestors", side_effect=AssertionError("ps")), \
+                mock.patch.object(subprocess, "run", side_effect=AssertionError("ps")):
+            self.assertIn("1 message(s)", bd.deliver(self.ev()))
+        self.assertEqual([l for l in self.log() if l["event"] != "delivered"], [])
+
+    def test_rehome_error_never_raises(self):
+        pid = self.cleared(raw="{not json")
+        self.assertEqual(self.deliver_new(pid), "")
+        self.assertEqual(len(self.left()), 1)
 
 
 if __name__ == "__main__":

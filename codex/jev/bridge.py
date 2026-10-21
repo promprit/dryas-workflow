@@ -205,7 +205,7 @@ def _prune_bypid(folder: str) -> int:
                     want = json.load(fh).get("procStart")
             except (OSError, ValueError, AttributeError):
                 want = None
-            keep = bool(want) and starts.get(pid) == want
+            keep = bool(want) and starts.get(pid) == bp._norm_time(want)
         if not keep:
             _unlink(os.path.join(folder, f))
             n += 1

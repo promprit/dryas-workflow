@@ -82,6 +82,15 @@ class PruneTest(unittest.TestCase):
         self.assertFalse(os.path.exists(reused))
         self.assertTrue(os.path.exists(live))
 
+    def test_prune_keeps_bypid_with_padded_day(self):
+        pid = self.sb.child()
+        live = os.path.join(self.root, ".bypid", "%d.json" % pid)
+        os.makedirs(os.path.dirname(live), exist_ok=True)
+        with open(live, "w", encoding="utf-8") as f:
+            json.dump({"procStart": bf.ps_start(pid).replace(" ", "  "), "sids": []}, f)
+        bridge.prune(self.now)
+        self.assertTrue(os.path.exists(live))
+
     def test_at_most_once_an_hour(self):
         self.put(".last_prune", 600)
         old = self.put(os.path.join(bf.SID_B, "delivered", "a.json"), 8 * DAY)

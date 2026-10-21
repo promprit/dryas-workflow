@@ -70,6 +70,76 @@ def _from_line(m: Dict[str, Any]) -> str:
     return line + ":"
 
 
+def _my_session(sid: str) -> Optional[Dict[str, Any]]:
+    """This session's record, found from the hook's parent pid (or an ancestor's)."""
+    import bridge_peers as bp  # only when a pointer exists: keeps the common path's imports small
+    dirs = bp.account_dirs()[0]
+    pids, tried = [os.getppid()], False
+    while pids:
+        pid = pids.pop(0)
+        for d in dirs:
+            s = bp._read(os.path.join(d, "sessions", "%d.json" % pid), d)
+            if s is not None and s["sessionId"] == sid:
+                return s
+        if not tried:
+            tried = True
+            pids = bp._ancestors()[1:]
+    return None
+
+
+def _move_all(old: str, sid: str) -> int:
+    src = paths.inbox_dir(old)
+    if os.path.islink(src):
+        return 0
+    n = 0
+    for name in waiting(src):
+        dest = paths.inbox_dir(sid)
+        os.makedirs(dest, mode=0o700, exist_ok=True)
+        try:
+            os.replace(os.path.join(src, name), os.path.join(dest, name))
+            n += 1
+        except FileNotFoundError:
+            pass
+    return n
+
+
+def _rehome(sid: str) -> int:
+    """After /clear the process keeps its pid but gets a new session id: move messages waiting for its earlier
+    ids (listed in <inbox root>/.bypid/<pid>.json by the sender) into this session's inbox."""
+    try:
+        bypid = os.path.join(paths.inbox_root(), ".bypid")
+        with os.scandir(bypid) as it:
+            if next(it, None) is None:
+                return 0
+        s = _my_session(sid)
+        if s is None:
+            return 0
+        import bridge_peers as bp
+        pointer = os.path.join(bypid, "%d.json" % s["pid"])
+        with open(pointer, encoding="utf-8") as f:
+            ptr = json.load(f)
+        if bp._norm_time(ptr.get("procStart")) != bp._norm_time(s["procStart"]):
+            return 0
+        total = 0
+        for old in ptr.get("sids") or []:
+            if old == sid or not isinstance(old, str) or not UUID.match(old):
+                continue
+            n = _move_all(old, sid)
+            if n:
+                total += n
+                jevlog.append("bridge", {"event": "rehomed", "from": old, "to": sid, "files": n})
+        tmp = pointer + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"procStart": ptr.get("procStart"), "sids": [sid]}, f)
+        os.replace(tmp, pointer)
+        return total
+    except FileNotFoundError:
+        return 0
+    except Exception as e:
+        jevlog.append("bridge", {"event": "rehome_error", "reason": type(e).__name__})
+        return 0
+
+
 def _deliver(event: Any) -> str:
     if not isinstance(event, dict) or event.get("agent_id") or paths.copy_root():
         return ""
@@ -79,6 +149,7 @@ def _deliver(event: Any) -> str:
     folder = paths.inbox_dir(sid)
     if os.path.islink(folder):
         return ""
+    _rehome(sid)
     names = waiting(folder)
     if not names:
         return ""
