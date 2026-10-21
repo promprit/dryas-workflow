@@ -27,7 +27,7 @@ LABEL_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
 
 def fetch_json(url: str, timeout: float) -> Optional[Dict[str, Any]]:
     """GET a JSON object from http://127.0.0.1 within `timeout` seconds in total; None on any problem (another host,
-    a non-2xx status, a chunked body, a body over 64 KiB). A plain socket, so never a proxy and no urllib.request
+    a non-2xx status, any Transfer-Encoding, a body over 64 KiB). A plain socket, so never a proxy and no urllib.request
     (~20 ms of imports on every prompt). Each read waits only for what is left of the budget, so a server that
     drip-feeds bytes cannot hold the prompt past it."""
     try:
@@ -131,7 +131,8 @@ def _write_tier(sfile: str, tier: int, use: float) -> None:
 
 def _due(sid: str, now: float) -> bool:
     """True when this session's last check is CHECK_EVERY_S old or more, missing, or in the future (a clock set
-    back), and then records `now` as the last check; a failed or empty fetch counts as a check too."""
+    back), and then records `now` as the last check; a failed or empty fetch counts as a check too. If the
+    marker cannot be written, every prompt checks (fails open: slower, never silent about a limit)."""
     d = os.path.join(paths.handoff_dir(), ".usage-warned")
     mark = os.path.join(d, "checked-" + sid) if SAFE_SID_RE.fullmatch(sid) else _state_file(sid) + ".checked"
     try:

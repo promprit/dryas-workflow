@@ -192,6 +192,21 @@ class WatchTest(unittest.TestCase):
         url = self.serve_once(b'{"accounts": [], "switchAt": 0.9}', 0)
         self.assertEqual(usage_watch.fetch_json(url, 0.3), {"accounts": [], "switchAt": 0.9})
 
+    def test_run_with_drip_feeding_server_stays_in_budget(self):
+        url = self.serve_once(b'{"label": "team", "dir": "~/.claude-team"}', 0.05)
+        os.environ["FO_PORT"] = url.split(":")[2].split("/")[0]
+        t = time.monotonic()
+        self.assertIsNone(usage_watch.run(self.ev()))
+        self.assertLess(time.monotonic() - t, 0.4)
+
+    def test_run_slow_fetches_share_one_budget(self):
+        def slow(url, timeout):
+            time.sleep(min(timeout, 0.25))
+            return {"label": "team", "dir": "~/.claude-team"} if "session=" in url else None
+        t = time.monotonic()
+        self.assertIsNone(usage_watch.run(self.ev(), slow))
+        self.assertLess(time.monotonic() - t, 0.4)
+
     def test_error_status_returns_none(self):
         url = self.serve_once(b'{"error":"unknown session"}', 0, head=b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
         self.assertIsNone(usage_watch.fetch_json(url, 0.3))
