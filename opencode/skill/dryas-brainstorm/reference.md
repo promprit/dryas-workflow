@@ -64,7 +64,7 @@ digraph brainstorm {
 - Lead with the recommended option and say why.
 - YAGNI ruthlessly: remove unnecessary features from every approach and design.
 
-**Software we don't have the source for.** When the request depends on how an app, binary, APK, Electron app or website we do not own behaves ("how does X do Y", "copy this feature from that app"), one proposed approach is "investigate with REA first" (the `rea` MCP tools and the `reverse-engineer-anything` skill), and you say why it fits; your partner can decline. REA's findings, with their evidence and stated limitations, go into the design artifact: the written spec, the in-chat design, or the spike's findings. If the `rea` MCP tools are not in this session, say so and give the install command (`install/install.sh --with-rea`, then restart) instead of failing; the other approaches stay on the table.
+**Software we don't have the source for.** When the request depends on how an app, binary, APK, Electron app or website we do not own behaves, REA is not set up for OpenCode, so do not offer to investigate with it. Say so, and propose the other approaches (for example asking your partner for documentation, a spec or the source).
 
 ## Presenting the design
 

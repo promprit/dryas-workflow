@@ -20,6 +20,14 @@ class ReaRulesTest(unittest.TestCase):
         for want in ("investigate with REA first", "install.sh --with-rea", "evidence"):
             self.assertIn(want, sect)
 
+    def test_install_hint_per_harness(self):
+        sect = lambda p: self.read(p).split("Exploring approaches")[1].split("\n## ")[0]
+        self.assertIn("install/install.sh --with-rea", sect("claude/skills/brainstorm/reference.md"))
+        self.assertIn("install/install.sh --harness codex --with-rea", sect("codex/skills/brainstorm/reference.md"))
+        oc = sect("opencode/skill/dryas-brainstorm/reference.md")
+        self.assertIn("not set up for OpenCode", oc)
+        self.assertNotIn("investigate with REA first", oc)
+
     def test_plan_carries_evidence(self):
         self.assertIn("REA finding", self.read("claude/skills/plan/SKILL.md"))
 
