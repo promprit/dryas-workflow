@@ -10,6 +10,11 @@ class ReaDocsTest(unittest.TestCase):
                      "rea uninstall", "reverse-engineer-anything"):
             self.assertIn(want, t, want)
 
+    def test_skipped_first_install_not_recorded(self):
+        t = (ROOT / "docs/install.md").read_text(encoding="utf-8")
+        paras = [x for x in t.split("\n\n") if "not recorded" in x]
+        self.assertTrue(any("--with-rea" in x for x in paras))
+
     def test_workflow_doc(self):
         t = (ROOT / "docs/workflow.md").read_text(encoding="utf-8")
         self.assertIn("**Reverse-engineering work.**", t)

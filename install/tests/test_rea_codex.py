@@ -114,11 +114,21 @@ class ReaCodexTest(unittest.TestCase):
         self.assertTrue(sd.exists())
         self.assertIn("remove it by hand", out)
 
-    def test_dry_run_prints_rea(self):
+    def _dry(self, node):
         e = Env(self)
-        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True, dry=True)
+        with mock.patch.object(rea_setup, "node_ok", return_value=node):
+            rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True, dry=True)
         self.assertEqual(rc, 0)
-        self.assertIn("would run: npx -y rea-agents@6.7.0 setup --client codex", out)
+        return out
+
+    def test_dry_run_prints_rea(self):
+        out = self._dry(None)
+        self.assertEqual(out.count("would run: npx -y rea-agents@6.7.0 setup --client codex"), 1)
+
+    def test_dry_run_honours_node_check(self):
+        out = self._dry(rea_setup.NODE_WARNING)
+        self.assertIn(rea_setup.NODE_WARNING, out)
+        self.assertNotIn("would run: npx -y rea-agents", out)
 
     def test_uninstall_without_extras_runs_nothing(self):
         e = Env(self)

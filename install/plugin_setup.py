@@ -385,7 +385,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
                 print("%s%s" % (env_prefix(cd), " ".join(argv)))
         repair_stale_jev(cd, env, dry)
         if "rea" in comps:
-            print("would run: " + " ".join(rea_setup.setup_argv("claude_code")))
+            rea_setup.install("claude_code", child_env(cd), yes, True)
         return 0
     entry = upgrade_if_stale(cd, env, repo, plugin_entry(cd))
     if entry is None:

@@ -14,6 +14,11 @@ class ReaRulesTest(unittest.TestCase):
             self.assertIn(LINE, t, p)
             self.assertLess(t.index(anchor), t.index(LINE), p)
 
+    def test_opencode_rule_says_unavailable(self):
+        t = self.read("opencode/dryas/AGENTS.md.template")
+        self.assertNotIn("use REA;", t)
+        self.assertIn("REA is not set up for OpenCode", t)
+
     def test_brainstorm_offers_rea(self):
         t = self.read("claude/skills/brainstorm/reference.md")
         sect = t.split("Exploring approaches")[1].split("\n## ")[0]

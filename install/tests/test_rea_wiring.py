@@ -114,10 +114,23 @@ class ReaWiringTest(unittest.TestCase):
         ps.rea_step(Path(tempfile.mkdtemp()), ["rea"], {"rea": "junk"}, True, False)
         self.assertEqual(seen, [self.PRIOR, None])
 
-    def test_dry_run_prints_rea(self):
+    def _dry(self, node):
         e = Env(self)
-        out = _out(lambda: ps.setup(REPO, e.home / ".claude", COMPS + ["rea"], yes=True, key="", flowobserve=False, dry=True))
-        self.assertIn("would run: npx -y rea-agents@6.7.0 setup", out)
+        orig = rs.node_ok
+        rs.node_ok = lambda *a, **k: node
+        try:
+            return _out(lambda: ps.setup(REPO, e.home / ".claude", COMPS + ["rea"], yes=True, key="", flowobserve=False, dry=True))
+        finally:
+            rs.node_ok = orig
+
+    def test_dry_run_prints_rea(self):
+        out = self._dry(None)
+        self.assertEqual(out.count("would run: npx -y rea-agents@6.7.0 setup"), 1)
+
+    def test_dry_run_honours_node_check(self):
+        out = self._dry(rs.NODE_WARNING)
+        self.assertIn(rs.NODE_WARNING, out)
+        self.assertNotIn("would run: npx -y rea-agents", out)
 
     def test_remove_skill_outside_account_kept(self):
         di.run = lambda argv, cwd=None, env=None: 0

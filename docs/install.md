@@ -108,6 +108,8 @@ Manual route, inside Claude Code:
 
 > Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`. (Applies to the Ruflo and Superpowers rows above.)
 
+A first install that skips REA (no suitable Node, declined, or a failed setup) leaves it out of the record; it is not recorded, so later upgrades don't offer it again: add it with `--with-rea`.
+
 Dryas installs the latest version of each component. If Dryas's Ruflo patches do not apply to the latest Ruflo, the installer falls back to the tested version. A weekly CI job checks the latest Ruflo.
 
 You need [Claude Code](https://docs.claude.com/en/docs/claude-code), the Codex CLI, or both, installed first.

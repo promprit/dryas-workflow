@@ -97,7 +97,10 @@ def render_agent(executor: str, tier: str) -> str:
 
 def render_rules(codex_rules: str) -> str:
     text = re.sub(r"## Not available in Codex\n.*\Z", "", codex_rules, flags=re.S).rstrip() + "\n\n"
-    return names(text) + RULES_TAIL
+    text = names(text).replace(
+        "use REA; brainstorm says when it recommends it, the user can decline.",
+        "REA is not set up for OpenCode; say so and propose other approaches.")
+    return text + RULES_TAIL
 
 
 def plan(repo: Path) -> Dict[str, Union[Path, str]]:

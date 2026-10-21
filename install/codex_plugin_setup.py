@@ -460,7 +460,7 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     if dry:
         migrate_legacy(cdx, Path.home(), dry=True)
         if "rea" in comps:
-            print("would run: " + " ".join(rea_setup.setup_argv("codex")))
+            rea_setup.install("codex", child_env(cdx), yes, True)
         return 0
     rc, out = di.capture(["codex", "plugin", "add", ID, "--json"], env=child_env(cdx), timeout=300)
     try:
