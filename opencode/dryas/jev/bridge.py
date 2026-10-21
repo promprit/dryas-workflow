@@ -25,7 +25,7 @@ REPLY_ID = re.compile(r"^m-[0-9a-f]{12}$")
 
 TOOLS = [
     {"name": "list_peers",
-     "description": ("List live Claude Code sessions on this machine across every account in Dryas accounts.json: "
+     "description": ("List live Claude Code sessions on this machine across every account in Dryas accounts.json and every other ~/.claude* config dir with live sessions; dryas=false peers cannot receive: "
                      "name, sessionId, account, cwd, status, idle_for, same_account. For same-account peers prefer "
                      "native SendMessage (it reaches idle sessions); use send_message for other accounts."),
      "inputSchema": {"type": "object", "properties": {}}},
@@ -96,6 +96,27 @@ def _label(s: Dict[str, Any]) -> str:
     return str(s["name"] or s["sessionId"][:8])
 
 
+def _record_pid(peer: Dict[str, Any], proc_start: str) -> None:
+    """<inbox root>/.bypid/<pid>.json lists the sessions that process has had, so a /clear can be followed.
+    Best effort: a failure never fails the send."""
+    try:
+        d = os.path.join(paths.inbox_root(), ".bypid")
+        _mkdir(d)
+        name = "%d.json" % peer["pid"]
+        sids: List[str] = []
+        try:
+            with open(os.path.join(d, name), encoding="utf-8") as f:
+                raw = json.load(f).get("sids")
+            sids = [x for x in raw if isinstance(x, str)] if isinstance(raw, list) else []
+        except (OSError, ValueError, AttributeError):
+            pass
+        if peer["sessionId"] not in sids:
+            sids.append(peer["sessionId"])
+        _write(d, name, {"procStart": proc_start, "sids": sids})
+    except (OSError, ValueError, TypeError):
+        pass
+
+
 def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     text = args.get("text")
     if not isinstance(text, str) or not text.strip():
@@ -119,6 +140,10 @@ def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
         if to == me["name"] or (len(to) >= 8 and me["sessionId"].startswith(to.lower())):
             return _refuse("that is this session")
         return _refuse(err or "no peer", **{"from": me["sessionId"]})
+    if not bp.has_dryas(peer["_dir"]):
+        return _refuse("%s runs on %s, which has no Dryas, so it cannot receive bridge messages; install Dryas there "
+                       "(install/install.sh --claude-dir <that config dir>)" % (_label(peer), bp.account(peer["_dir"])),
+                       to=peer["sessionId"])
     reply_to = args.get("reply_to")
     if reply_to is not None and (not isinstance(reply_to, str) or not REPLY_ID.match(reply_to)):
         return _refuse("bad reply_to")
@@ -134,12 +159,15 @@ def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     rate = os.path.join(paths.inbox_root(), ".rate")
     _mkdir(rate)
     _write(rate, me["sessionId"] + ".json", (recent + [now])[-RATE_N:])  # counted first: a failed write still costs
+    proc_start = str(peer["procStart"] or "")
     mid = "m-" + secrets.token_hex(6)
     _write(folder, "%d-%s.json" % (int(now * 1000), secrets.token_hex(4)), {
         "v": 1, "id": mid, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
         "from": {"sessionId": me["sessionId"], "name": str(me["name"] or ""), "account": bp.account(me["_dir"]),
                  "cwd": str(me["cwd"] or "")},
-        "to": peer["sessionId"], "reply_to": reply_to, "text": text})
+        "to": peer["sessionId"], "to_pid": peer["pid"], "to_proc_start": proc_start, "reply_to": reply_to,
+        "text": text})
+    _record_pid(peer, proc_start)
     jevlog.append("bridge", {"event": "sent", "id": mid, "from": me["sessionId"], "to": peer["sessionId"],
                              "bytes": size, "reply_to": reply_to})
     out = {"id": mid, "to": {"name": peer["name"], "sessionId": peer["sessionId"], "account": bp.account(peer["_dir"])},
@@ -159,6 +187,29 @@ def _files(folder: str) -> List[Tuple[str, float]]:
             except OSError:
                 pass
     return out
+
+
+def _prune_bypid(folder: str) -> int:
+    """Remove pointers of processes that ended, or whose pid now belongs to another process."""
+    pids = {}
+    for f in os.listdir(folder):
+        if f.endswith(".json") and f[:-5].isdigit():
+            pids[f] = int(f[:-5])
+    starts = bp.start_times([p for p in pids.values() if bp.pid_running(p)])
+    n = 0
+    for f, pid in pids.items():
+        keep = bp.pid_running(pid)
+        if keep and starts is not None:
+            try:
+                with open(os.path.join(folder, f), encoding="utf-8") as fh:
+                    want = json.load(fh).get("procStart")
+            except (OSError, ValueError, AttributeError):
+                want = None
+            keep = bool(want) and starts.get(pid) == want
+        if not keep:
+            _unlink(os.path.join(folder, f))
+            n += 1
+    return n
 
 
 def prune(now: Optional[float] = None) -> None:
@@ -188,6 +239,9 @@ def prune(now: Optional[float] = None) -> None:
                 if f[:-5] not in alive:
                     _unlink(os.path.join(p, f))
                     files += 1
+            continue
+        if name == ".bypid":
+            files += _prune_bypid(p)
             continue
         if not bd.UUID.match(name):
             continue

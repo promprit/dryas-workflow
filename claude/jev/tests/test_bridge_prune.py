@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import time
@@ -66,6 +67,19 @@ class PruneTest(unittest.TestCase):
         live = self.put(os.path.join(".rate", bf.SID_B + ".json"), 60)
         bridge.prune(self.now)
         self.assertFalse(os.path.exists(ended))
+        self.assertTrue(os.path.exists(live))
+
+    def test_prune_drops_dead_bypid(self):
+        dead = self.put(os.path.join(".bypid", "%d.json" % self.sb.dead_pid()), 60)
+        pid = self.sb.child()
+        live = os.path.join(self.root, ".bypid", "%d.json" % pid)
+        reused = os.path.join(self.root, ".bypid", "%d.json" % os.getpid())
+        for p, ps in ((live, bf.ps_start(pid)), (reused, "Mon Jan  1 00:00:00 2001")):
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"procStart": ps, "sids": []}, f)
+        bridge.prune(self.now)
+        self.assertFalse(os.path.exists(dead))
+        self.assertFalse(os.path.exists(reused))
         self.assertTrue(os.path.exists(live))
 
     def test_at_most_once_an_hour(self):
