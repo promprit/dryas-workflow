@@ -151,8 +151,8 @@ class WatchTest(unittest.TestCase):
         finally:
             s.close()
 
-    def serve_once(self, body, delay):
-        """A one-shot local HTTP server that sends `body` one byte every `delay` seconds."""
+    def serve_once(self, body, delay, head=b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n"):
+        """A one-shot local HTTP server that sends `head`, then `body` one byte every `delay` seconds."""
         s = socket.socket()
         s.bind(("127.0.0.1", 0))
         s.listen(1)
@@ -162,7 +162,7 @@ class WatchTest(unittest.TestCase):
             try:
                 c, _ = s.accept()
                 c.recv(1024)
-                c.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n")
+                c.sendall(head)
                 for ch in body:
                     if stop.is_set():
                         break
@@ -186,6 +186,28 @@ class WatchTest(unittest.TestCase):
     def test_fast_server_returns_the_object(self):
         url = self.serve_once(b'{"accounts": [], "switchAt": 0.9}', 0)
         self.assertEqual(usage_watch.fetch_json(url, 0.3), {"accounts": [], "switchAt": 0.9})
+
+    def test_error_status_returns_none(self):
+        url = self.serve_once(b'{"error":"unknown session"}', 0, head=b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+        self.assertIsNone(usage_watch.fetch_json(url, 0.3))
+
+    def test_chunked_body_returns_none(self):
+        url = self.serve_once(b"5\r\n{\"a\":\r\n0\r\n\r\n", 0,
+                              head=b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+        self.assertIsNone(usage_watch.fetch_json(url, 0.3))
+
+    def test_http11_close_delimited_body(self):
+        url = self.serve_once(b'{"switchAt": 0.8}', 0, head=b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n"
+                                                         b"Connection: close\r\n\r\n")
+        self.assertEqual(usage_watch.fetch_json(url, 0.3), {"switchAt": 0.8})
+
+    def test_fetch_never_loads_urllib_request(self):
+        import subprocess
+        url = self.serve_once(b'{"switchAt": 0.8}', 0)
+        code = ("import sys; sys.path.insert(0, %r); import usage_watch; v = usage_watch.fetch_json(%r, 0.3); "
+                "print(v, 'urllib.request' in sys.modules)" % (HERE, url))
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
+        self.assertEqual(out, "{'switchAt': 0.8} False")
 
     def test_invalid_calm_label_is_skipped(self):
         line = usage_watch.run(self.ev(), server(acct("team", 0.95), acct("x y", 0.01), acct("a" * 33, 0.02),

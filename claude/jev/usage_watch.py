@@ -8,11 +8,10 @@ import hashlib
 import json
 import os
 import re
+import socket
 import sys
-import threading
 import time
 import urllib.parse
-import urllib.request
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -22,26 +21,41 @@ BUDGET_S = 0.3
 STEP = 0.05
 DEFAULT_SWITCH = 0.9
 MAX_SID = 64
+MAX_REPLY = 65536 + 4096  # body plus headers
 LABEL_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
 
 
 def fetch_json(url: str, timeout: float) -> Optional[Dict[str, Any]]:
-    """GET a local JSON object within `timeout` seconds in total, never through a proxy; None on any problem.
-    The request runs in a daemon thread, so a server that drip-feeds bytes cannot hold the prompt past the budget."""
-    box: List[Optional[Dict[str, Any]]] = [None]
-
-    def get() -> None:
-        try:
-            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(url, timeout=max(timeout, 0.01)) as r:
-                v = json.loads(r.read(65536).decode("utf-8"))
-            box[0] = v if isinstance(v, dict) else None
-        except Exception:
-            pass
+    """GET a JSON object from http://127.0.0.1 within `timeout` seconds in total; None on any problem (another host,
+    a non-2xx status, a chunked body, a body over 64 KiB). A plain socket, so never a proxy and no urllib.request
+    (~20 ms of imports on every prompt). Each read waits only for what is left of the budget, so a server that
+    drip-feeds bytes cannot hold the prompt past it."""
     try:
-        t = threading.Thread(target=get, daemon=True)
-        t.start()
-        t.join(max(timeout, 0.01))
-        return None if t.is_alive() else box[0]
+        u = urllib.parse.urlsplit(url)
+        if u.scheme != "http" or u.hostname != "127.0.0.1" or not u.port:
+            return None
+        end = time.monotonic() + max(timeout, 0.01)
+        target = (u.path or "/") + ("?" + u.query if u.query else "")
+        buf = b""
+        with socket.create_connection(("127.0.0.1", u.port), timeout=max(timeout, 0.01)) as s:
+            s.sendall(("GET %s HTTP/1.0\r\nHost: 127.0.0.1:%d\r\nAccept: application/json\r\n\r\n"
+                       % (target, u.port)).encode("ascii"))
+            while len(buf) <= MAX_REPLY:
+                left = end - time.monotonic()
+                if left <= 0:
+                    return None
+                s.settimeout(left)
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                buf += chunk
+        head, sep, body = buf.partition(b"\r\n\r\n")
+        lines = head.decode("latin-1").split("\r\n")
+        if (not sep or len(buf) > MAX_REPLY or not re.match(r"HTTP/1\.[01] 2\d\d(?: |$)", lines[0])
+                or any(h.lower().startswith("transfer-encoding:") for h in lines[1:])):
+            return None
+        v = json.loads(body.decode("utf-8"))
+        return v if isinstance(v, dict) else None
     except Exception:
         return None
 
