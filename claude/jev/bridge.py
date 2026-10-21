@@ -167,8 +167,7 @@ def send(args: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
         "v": 1, "id": mid, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
         "from": {"sessionId": me["sessionId"], "name": str(me["name"] or ""), "account": bp.account(me["_dir"]),
                  "cwd": str(me["cwd"] or "")},
-        "to": peer["sessionId"], "reply_to": reply_to,
-        "text": text})
+        "to": peer["sessionId"], "reply_to": reply_to, "text": text})
     _record_pid(peer, proc_start)
     jevlog.append("bridge", {"event": "sent", "id": mid, "from": me["sessionId"], "to": peer["sessionId"],
                              "bytes": size, "reply_to": reply_to})

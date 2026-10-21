@@ -42,6 +42,12 @@ class PeersTest(unittest.TestCase):
         self.assertEqual(self.names(out), ["peer-b"])
         self.assertEqual(out["peers"][0]["account"], ".claude-two")
 
+    def test_stale_record_does_not_hide_live_session(self):
+        pid = self.sb.child()
+        bf.write_session(self.sb.acc1, pid, "33333333-3333-4333-8333-333333333333", "stale", proc_start="Mon Jan  1 00:00:00 2001")
+        bf.write_session(self.sb.acc2, pid, bf.SID_B, "peer-b")
+        self.assertEqual(self.names(), ["peer-b"])
+
     def test_same_account_peer_marked(self):
         bf.write_session(self.sb.acc1, self.sb.child(), bf.SID_B, "peer-b")
         self.assertTrue(bp.list_peers()["peers"][0]["same_account"])

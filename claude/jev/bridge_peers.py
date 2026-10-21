@@ -95,10 +95,10 @@ def _read(path: str, d: str) -> Optional[Dict[str, Any]]:
 
 
 def read_sessions(dirs: List[str]) -> List[Dict[str, Any]]:
-    """Live-looking records of every dir, one per pid: a copied sessions folder lists the same process again, and
-    the first dir (listed before discovered) wins."""
+    """Live-looking records of every dir, one per pid and start time: a copied sessions folder lists the same process
+    again, and the first dir (listed before discovered) wins."""
     out = []
-    seen: Set[int] = set()
+    seen: Set[Tuple[int, str]] = set()
     for d in dirs:
         sd = os.path.join(d, "sessions")
         try:
@@ -108,8 +108,9 @@ def read_sessions(dirs: List[str]) -> List[Dict[str, Any]]:
         for n in names:
             if n.endswith(".json"):
                 s = _read(os.path.join(sd, n), d)
-                if s and s["pid"] not in seen:
-                    seen.add(s["pid"])
+                key = (s["pid"], _norm_time(s["procStart"])) if s else None
+                if s and key not in seen:
+                    seen.add(key)
                     out.append(s)
     return out
 

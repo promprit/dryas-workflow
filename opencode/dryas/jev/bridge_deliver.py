@@ -70,10 +70,9 @@ def _from_line(m: Dict[str, Any]) -> str:
     return line + ":"
 
 
-def _my_session(names: List[str], sid: str) -> Optional[Dict[str, Any]]:
+def _my_session(bp: Any, names: List[str], sid: str) -> Optional[Dict[str, Any]]:
     """This session's record: for each pointer name (<pid>.json), read that pid's file in this account's own
     sessions folder (no scan of the folder, no ps); the first whose sessionId is sid."""
-    import bridge_peers as bp  # only when a pointer exists: keeps the common path's imports small
     d = bp.own_dir()
     for n in names:
         s = bp._read(os.path.join(d, "sessions", n), d)
@@ -109,10 +108,10 @@ def _rehome(sid: str) -> int:
             names = sorted(e.name for e in it if e.name.endswith(".json") and e.name[:-5].isdigit())
         if not names:
             return 0
-        s = _my_session(names, sid)
+        import bridge_peers as bp  # only when a pointer exists: keeps the common path's imports small
+        s = _my_session(bp, names, sid)
         if s is None:
             return 0
-        import bridge_peers as bp
         want = bp._norm_time(s["procStart"])
         if not want:
             return 0
@@ -123,8 +122,11 @@ def _rehome(sid: str) -> int:
             raise ValueError("pointer is not an object")
         if bp._norm_time(ptr.get("procStart")) != want:
             return 0
+        sids = ptr.get("sids") or []
+        if not isinstance(sids, list):
+            raise ValueError("sids is not a list")
         total = 0
-        for old in ptr.get("sids") or []:
+        for old in sids:
             if old == sid or not isinstance(old, str) or not UUID.match(old):
                 continue
             n = _move_all(old, sid)

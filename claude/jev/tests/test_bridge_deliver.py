@@ -201,7 +201,7 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(hso["hookEventName"], "PostToolUse")
         self.assertIn("[Dryas bridge] 1 message(s)", hso["additionalContext"])
 
-    def cleared(self, pointer_start=None, raw=None):
+    def cleared(self, pointer_start=None, raw=None, sids=None):
         """Session SID of a live process P had a message waiting; P now runs NEW (a /clear). Returns P."""
         sb = bf.Sandbox(self)
         self.root = sb.root
@@ -211,7 +211,7 @@ class DeliverTest(unittest.TestCase):
         self.put(1)
         os.makedirs(os.path.join(sb.root, "inbox", ".bypid"))
         with open(os.path.join(sb.root, "inbox", ".bypid", "%d.json" % pid), "w", encoding="utf-8") as f:
-            f.write(raw if raw is not None else json.dumps({"procStart": start if pointer_start is None else pointer_start, "sids": [SID]}))
+            f.write(raw if raw is not None else json.dumps({"procStart": start if pointer_start is None else pointer_start, "sids": [SID] if sids is None else sids}))
         bf.write_session(sb.acc1, pid, NEW, "p", proc_start=start)
         self.pid = pid
         return pid
@@ -303,6 +303,13 @@ class DeliverTest(unittest.TestCase):
         self.deliver_new(pid)
         n = len([l for l in self.log() if l["event"] == "rehome_error"])
         self.assertEqual(n, 1)
+        self.deliver_new(pid)
+        self.assertEqual(len([l for l in self.log() if l["event"] == "rehome_error"]), 1)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)))
+
+    def test_sids_not_a_list_is_corrupt_pointer(self):
+        pid = self.cleared(sids=5)
+        self.deliver_new(pid)
         self.deliver_new(pid)
         self.assertEqual(len([l for l in self.log() if l["event"] == "rehome_error"]), 1)
         self.assertFalse(os.path.exists(os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)))

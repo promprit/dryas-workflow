@@ -264,7 +264,7 @@ Differences from the sections above, decided during the run:
 - Delivery (§6.3) quotes every body line with `> `, flattens sender fields to one line with length caps, rejects malformed ids, ends with `[Dryas bridge] end of messages`, isolates each message's errors, and sends files over 64 KB to `bad/`.
 - A `prompt` inproc stage returns text only when marked `"context": true`, as in `post` (§6.2).
 - `tools/compare_release.py` takes `--old DIR` (default: the newest cached older release) instead of `--ref` (§9.3); the release check reports a skipped comparison as SKIP.
-- Known limit: a message still waiting when the recipient runs `/clear` is not delivered.
+- Superseded by the 2026-10-21 addendum: messages follow /clear.
 
 ## Addendum 2026-10-21
 
@@ -272,4 +272,4 @@ Discovery: `list_peers` searches the config dirs in `accounts.json` and also eve
 
 Dryas flag and refusal: each peer carries `dryas`, true when its config dir has `.dryas-plugin.json`. `send_message` to a peer with `dryas` false is refused before anything is written, and the error names the account and the install command (`install/install.sh --claude-dir <that config dir>`), not the full path. `dryas` means the install record exists: a plugin enabled without `install.sh` shows false, a disabled plugin still shows true. A peer's account can therefore never receive a message it cannot show.
 
-`/clear` survival: the sender records the recipient's pid and `procStart` in `<inbox root>/.bypid/<pid>.json`, with every session id that process has been sent to. On the next delivery, the recipient's hook reads its own record from its own account's sessions folder and, only if the `procStart` matches, moves the waiting messages from the earlier session ids into its inbox. This replaces the known limit above: a message is lost only if the recipient process ends before its next turn. Pointers of ended processes are pruned with the rest of the bridge data.
+`/clear` survival: the sender records the recipient's pid and `procStart` in `<inbox root>/.bypid/<pid>.json`, with every session id that process has been sent to. On the next delivery, the recipient's hook reads its own record from its own account's sessions folder and, only if the `procStart` matches, moves the waiting messages from the earlier session ids into its inbox. This replaces the known limit above: a message is lost only if the recipient process ends before its next turn. Pointers of ended processes are pruned with the rest of the bridge data. Limits: the hook never creates or edits a pointer (it only deletes a corrupt one for its own process); once a process has a pointer, each prompt and Bash/Write/Edit call reads one small session file per pointer until prune removes pointers of ended processes (hourly, when a bridge tool is used); a pointer's session list grows with each `/clear` until pruned; two senders writing the same pointer at once can drop one entry (soft, like the other limits).
