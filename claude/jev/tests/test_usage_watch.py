@@ -131,8 +131,10 @@ class WatchTest(unittest.TestCase):
         usage_watch.run(self.ev(), server(acct("team", 0.92), acct("team2", 0.1)))
         d = os.path.join(self.tmp, ".usage-warned")
         self.assertEqual(stat.S_IMODE(os.stat(d).st_mode), 0o700)
-        (f,) = os.listdir(d)
-        self.assertEqual(stat.S_IMODE(os.stat(os.path.join(d, f)).st_mode), 0o600)
+        names = os.listdir(d)
+        self.assertEqual(len(names), 2)  # the tier and the last-check marker
+        for f in names:
+            self.assertEqual(stat.S_IMODE(os.stat(os.path.join(d, f)).st_mode), 0o600)
 
     def test_unreachable_port_returns_fast(self):
         s = socket.socket()
@@ -287,15 +289,16 @@ class ThrottleTest(unittest.TestCase):
         for n in os.listdir(d):
             self.assertEqual(stat.S_IMODE(os.stat(os.path.join(d, n)).st_mode), 0o600)
 
-    def test_throttled_prompt_loads_no_socket_or_hashlib(self):
+    def test_throttled_prompt_loads_no_socket_hashlib_or_urllib(self):
         import subprocess
         code = ("import os, sys, time; sys.path.insert(0, %r); os.environ['JEV_HANDOFF_DIR'] = %r; import usage_watch; "
                 "usage_watch.run({'session_id': 'sess-9'}, lambda u, t: None); "
-                "[sys.modules.pop(m, None) for m in ('socket', 'hashlib')]; "
-                "usage_watch.run({'session_id': 'sess-9'}); print('socket' in sys.modules, 'hashlib' in sys.modules)"
+                "[sys.modules.pop(m, None) for m in ('socket', 'hashlib', 'urllib.parse')]; "
+                "usage_watch.run({'session_id': 'sess-9'}); "
+                "print('socket' in sys.modules, 'hashlib' in sys.modules, 'urllib.parse' in sys.modules)"
                 % (HERE, self.tmp))
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
-        self.assertEqual(out.stdout.strip(), "False False", out.stderr)
+        self.assertEqual(out.stdout.strip(), "False False False", out.stderr)
 
 
 if __name__ == "__main__":
