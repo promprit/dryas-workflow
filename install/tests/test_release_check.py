@@ -11,6 +11,7 @@ from test_codex_plugin_setup import Env, quiet
 REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / "tools"))
 import release_check
+import rea_setup
 
 
 class ReleaseCheckTest(unittest.TestCase):
@@ -475,6 +476,82 @@ class BridgeReleaseCheckTest(unittest.TestCase):
         rep = self.Rec()
         release_check.bridge(rep, self.root, self.env)
         self.assertEqual(rep.said["bridge delivery stage"], "FAIL")
+
+
+class ReleaseCheckReaTest(unittest.TestCase):
+    class Rec:
+        def __init__(self):
+            self.lines = []
+            self.fails = 0
+
+        def say(self, status, name, detail=""):
+            self.lines.append((status, name, detail))
+            if status == "FAIL":
+                self.fails += 1
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, str(self.tmp), True)
+        self.cd = self.tmp / "claude-a"
+        self.cd.mkdir()
+        self.rep = self.Rec()
+        self.calls = []
+
+    def write_record(self, data):
+        (self.cd / release_check.RECORD).write_text(json.dumps(data), encoding="utf-8")
+
+    def capture_returning(self, rc, out):
+        def fake(argv, env=None):
+            self.calls.append(argv)
+            return rc, out
+        return fake
+
+    def never(self, argv, env=None):
+        self.fail("capture must not run when REA is not recorded")
+
+    def test_no_record_skips(self):
+        release_check.rea(self.rep, self.cd, {}, capture=self.never)
+        self.assertEqual(self.rep.lines, [("SKIP", "REA", "not set up in %s" % self.cd)])
+
+    def test_record_without_rea_key_skips(self):
+        self.write_record({"components": ["ruflo"]})
+        release_check.rea(self.rep, self.cd, {}, capture=self.never)
+        self.assertEqual([s for s, _, _ in self.rep.lines], ["SKIP"])
+
+    def test_rea_aligned_passes(self):
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+        release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(0, '{"identity": {"skill": {"state": "aligned"}}}'))
+        self.assertEqual([s for s, _, _ in self.rep.lines], ["PASS"])
+        self.assertEqual(self.rep.fails, 0)
+
+    def test_rea_skill_missing_warns_without_fail(self):
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+        release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(0, '{"identity": {"skill": {"state": "missing"}}}'))
+        status, _, detail = self.rep.lines[0]
+        self.assertEqual(status, "WARN")
+        self.assertIn("missing", detail)
+        self.assertEqual(self.rep.fails, 0)
+
+    def test_doctor_nonzero_exit_warns_without_fail(self):
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+        release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(1, ""))
+        self.assertEqual([s for s, _, _ in self.rep.lines], ["WARN"])
+        self.assertEqual(self.rep.fails, 0)
+
+    def test_doctor_cannot_run_warns_without_fail(self):
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+
+        def broken(argv, env=None):
+            raise OSError("npx not found")
+
+        release_check.rea(self.rep, self.cd, {}, capture=broken)
+        self.assertEqual([s for s, _, _ in self.rep.lines], ["WARN"])
+        self.assertEqual(self.rep.fails, 0)
+
+    def test_doctor_runs_the_claude_code_doctor_argv(self):
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+        release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(0, '{"identity": {"skill": {"state": "aligned"}}}'))
+        self.assertEqual(self.calls, [rea_setup.doctor_argv("claude_code")])
 
 
 if __name__ == "__main__":
