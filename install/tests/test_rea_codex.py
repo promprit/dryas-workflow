@@ -27,7 +27,7 @@ class ReaCodexTest(unittest.TestCase):
     def setup_with(self, e, cdx, result, comps=COMPS):
         seen = []
 
-        def fake(client, env, yes, dry):
+        def fake(client, env, yes, dry, prior=None):
             seen.append((client, env))
             return result
         with mock.patch.object(rea_setup, "install", fake):
@@ -77,7 +77,7 @@ class ReaCodexTest(unittest.TestCase):
 
     def test_uninstall_offers_codex_remove(self):
         e = Env(self)
-        sd = e.t / "agents" / "skills" / rea_setup.SKILL_NAME
+        sd = e.a / "skills" / rea_setup.SKILL_NAME
         sd.mkdir(parents=True)
         (sd / "SKILL.md").write_text("x", encoding="utf-8")
         ran, _ = self.uninstall_with(e, str(sd))
@@ -86,11 +86,39 @@ class ReaCodexTest(unittest.TestCase):
 
     def test_uninstall_keeps_unsafe_skill_dir(self):
         e = Env(self)
-        sd = e.t / "precious"
-        sd.mkdir()
+        sd = e.a / "precious"
+        sd.mkdir(parents=True)
         _, out = self.uninstall_with(e, str(sd))
         self.assertTrue(sd.exists())
         self.assertIn("remove it by hand", out)
+
+    def test_decline_keeps_prior_record(self):
+        e = Env(self)
+        self.setup_with(e, e.a, entry("/old/x"))
+        seen = []
+
+        def fake(client, env, yes, dry, prior=None):
+            seen.append(prior)
+        with mock.patch.object(rea_setup, "install", fake):
+            quiet(cps.setup, REPO, e.a, COMPS, yes=True)
+        rec = record(e.a)
+        self.assertEqual(seen, [entry("/old/x")])
+        self.assertEqual(rec["rea"], entry("/old/x"))
+        self.assertIn("rea", rec["components"])
+
+    def test_uninstall_keeps_skill_outside_home(self):
+        e = Env(self)
+        sd = e.t / "agents" / "skills" / rea_setup.SKILL_NAME
+        sd.mkdir(parents=True)
+        _, out = self.uninstall_with(e, str(sd))
+        self.assertTrue(sd.exists())
+        self.assertIn("remove it by hand", out)
+
+    def test_dry_run_prints_rea(self):
+        e = Env(self)
+        rc, out = quiet(cps.setup, REPO, e.a, COMPS, yes=True, dry=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("would run: npx -y rea-agents@6.7.0 setup --client codex", out)
 
     def test_uninstall_without_extras_runs_nothing(self):
         e = Env(self)

@@ -384,6 +384,8 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
             for argv in (["claude", "plugin", "marketplace", "update", MARKET], ["claude", "plugin", "update", ID]):
                 print("%s%s" % (env_prefix(cd), " ".join(argv)))
         repair_stale_jev(cd, env, dry)
+        if "rea" in comps:
+            print("would run: " + " ".join(rea_setup.setup_argv("claude_code")))
         return 0
     entry = upgrade_if_stale(cd, env, repo, plugin_entry(cd))
     if entry is None:
@@ -416,7 +418,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     if rc:
         _save_json(rec_path, rec)  # a partial run is still recorded
         return rc
-    rea_step(cd, comps, rec, yes, dry)
+    rea_step(cd, comps, rec, yes, dry, rec_path)
     mapping = _mapping(plugin_root, comps_all, detected)  # covers old components too, so stale entries render
     if "ruflo" in comps:
         wrote = _ruflo_files(repo, root, mapping, yes)
@@ -542,14 +544,7 @@ def _remove_extras(cd: Path, rec: dict, extras: List[List[str]]) -> None:
             print("warning: `%s` failed (exit %d); remove it by hand" % (" ".join(argv), rc))
     rea = rec.get("rea") if isinstance(rec.get("rea"), dict) else None
     if rea and rea_setup.remove_argv("claude_code") in extras:
-        sd = rea.get("skill_dir")
-        if rea_setup.safe_skill_dir(sd):
-            shutil.rmtree(str(sd), onerror=_rm_error)
-            print("removed %s" % sd)
-        elif sd:
-            print("kept %s (not a plain %s folder); remove it by hand" % (sd, rea_setup.SKILL_NAME))
-        else:
-            print("REA's skill folder was not recorded; remove <config dir>/skills/%s by hand" % rea_setup.SKILL_NAME)
+        print(rea_setup.remove_skill(rea, cd))
     left = [c for c in extras_commands(rec, False) if c not in extras]
     if left:
         print("kept the third-party plugins setup installed; to remove them:")
@@ -616,15 +611,18 @@ def purge_shared() -> bool:
     return True
 
 
-def rea_step(cd: Path, comps: List[str], rec: dict, yes: bool, dry: bool) -> None:
-    """REA (not a plugin, so not thirdparty): set up for cd when selected; on success record rec["rea"],
-    else drop "rea" from comps so the record does not claim it."""
+def rea_step(cd: Path, comps: List[str], rec: dict, yes: bool, dry: bool, rec_path: Optional[Path] = None) -> None:
+    """REA (not a plugin, so not thirdparty): set up for cd when selected; on success record rec["rea"] (saved at
+    once), else drop "rea" from comps unless an earlier record exists, which stays as it was."""
     if "rea" not in comps:
         return
-    entry = rea_setup.install("claude_code", child_env(cd), yes, dry)
+    prior = rec.get("rea") if isinstance(rec.get("rea"), dict) else None
+    entry = rea_setup.install("claude_code", child_env(cd), yes, dry, prior=prior)
     if entry:
         rec["rea"] = entry
-    elif not (dry and isinstance(rec.get("rea"), dict)):
+        if rec_path:
+            _save_json(rec_path, rec)
+    elif prior is None:
         comps.remove("rea")
 
 

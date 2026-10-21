@@ -6,6 +6,7 @@ import dryas_install as di
 import plugin_setup as ps
 import rea_setup as rs
 import run_cmd
+from test_plugin_setup import Env, REPO, COMPS, _out
 
 RM = ["claude", "mcp", "remove", "--scope", "user", "rea"]
 
@@ -24,7 +25,7 @@ class ReaWiringTest(unittest.TestCase):
         self.assertNotIn(RM, ps.extras_commands({"rea": "junk"}, False))
 
     def test_rea_step_records_on_success(self):
-        rs.install = lambda client, env, yes, dry_run: self.calls.append((client, env, yes, dry_run)) or \
+        rs.install = lambda client, env, yes, dry_run, prior=None: self.calls.append((client, env, yes, dry_run)) or \
             {"version": "6.7.0", "client": client, "skill_dir": "/x/skills/reverse-engineer-anything"}
         rec = {"components": ["core"]}
         cd = Path(tempfile.mkdtemp())
@@ -66,7 +67,8 @@ class ReaWiringTest(unittest.TestCase):
 
     def test_remove_skill_dir(self):
         di.run = lambda argv, cwd=None, env=None: 0
-        with tempfile.TemporaryDirectory() as t:
+        with tempfile.TemporaryDirectory() as t0:
+            t = os.path.realpath(t0)
             d = Path(t) / "skills" / "reverse-engineer-anything"
             d.mkdir(parents=True)
             ps._remove_extras(Path(t), {"rea": {"skill_dir": str(d)}}, [RM])
@@ -74,7 +76,8 @@ class ReaWiringTest(unittest.TestCase):
 
     def test_remove_skill_dir_refuses_unsafe(self):
         di.run = lambda argv, cwd=None, env=None: 0
-        with tempfile.TemporaryDirectory() as t:
+        with tempfile.TemporaryDirectory() as t0:
+            t = os.path.realpath(t0)
             real = Path(t) / "real" / "reverse-engineer-anything"
             real.mkdir(parents=True)
             link = Path(t) / "skills" / "reverse-engineer-anything"
@@ -86,9 +89,48 @@ class ReaWiringTest(unittest.TestCase):
                 ps._remove_extras(Path(t), {"rea": {"skill_dir": p}}, [RM])
             self.assertTrue(real.exists() and other.exists() and os.path.islink(str(link)))
 
+    PRIOR = {"version": "6.7.0", "client": "claude_code", "skill_dir": "/old/reverse-engineer-anything"}
+
+    def test_rea_step_saves_record_immediately(self):
+        rs.install = lambda *a, **k: {"version": "6.7.0", "client": "claude_code", "skill_dir": "/x"}
+        with tempfile.TemporaryDirectory() as t:
+            rp = Path(t) / "rec.json"
+            rec = {}
+            ps.rea_step(Path(t), ["core", "rea"], rec, True, False, rec_path=rp)
+            self.assertEqual(json.loads(rp.read_text())["rea"]["skill_dir"], "/x")
+
+    def test_rea_step_keeps_prior_on_decline(self):
+        rs.install = lambda *a, **k: None
+        rec = {"rea": dict(self.PRIOR)}
+        comps = ["core", "rea"]
+        ps.rea_step(Path(tempfile.mkdtemp()), comps, rec, True, False)
+        self.assertIn("rea", comps)
+        self.assertEqual(rec["rea"], self.PRIOR)
+
+    def test_rea_step_passes_prior(self):
+        seen = []
+        rs.install = lambda client, env, yes, dry_run, prior=None: seen.append(prior)
+        ps.rea_step(Path(tempfile.mkdtemp()), ["rea"], {"rea": dict(self.PRIOR)}, True, False)
+        ps.rea_step(Path(tempfile.mkdtemp()), ["rea"], {"rea": "junk"}, True, False)
+        self.assertEqual(seen, [self.PRIOR, None])
+
+    def test_dry_run_prints_rea(self):
+        e = Env(self)
+        out = _out(lambda: ps.setup(REPO, e.home / ".claude", COMPS + ["rea"], yes=True, key="", flowobserve=False, dry=True))
+        self.assertIn("would run: npx -y rea-agents@6.7.0 setup", out)
+
+    def test_remove_skill_outside_account_kept(self):
+        di.run = lambda argv, cwd=None, env=None: 0
+        with tempfile.TemporaryDirectory() as t0, tempfile.TemporaryDirectory() as o0:
+            cd, d = Path(os.path.realpath(t0)), Path(os.path.realpath(o0)) / "reverse-engineer-anything"
+            d.mkdir()
+            ps._remove_extras(cd, {"rea": {"skill_dir": str(d)}}, [RM])
+            self.assertTrue(d.exists())
+
     def test_keep_extras_removes_nothing(self):
         di.run = lambda argv, cwd=None, env=None: self.fail("ran %s" % argv)
-        with tempfile.TemporaryDirectory() as t:
+        with tempfile.TemporaryDirectory() as t0:
+            t = os.path.realpath(t0)
             d = Path(t) / "skills" / "reverse-engineer-anything"
             d.mkdir(parents=True)
             ps._remove_extras(Path(t), {"rea": {"skill_dir": str(d)}}, [])

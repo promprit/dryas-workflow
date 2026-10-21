@@ -460,6 +460,8 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     print("CODEX_HOME=%s codex plugin add %s --json" % (cdx, ID))
     if dry:
         migrate_legacy(cdx, Path.home(), dry=True)
+        if "rea" in comps:
+            print("would run: " + " ".join(rea_setup.setup_argv("codex")))
         return 0
     rc, out = di.capture(["codex", "plugin", "add", ID, "--json"], env=child_env(cdx), timeout=300)
     try:
@@ -503,10 +505,11 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
         print("note: python3 3.9+ is not on PATH; Jev MCP runs with %s (re-run setup after each update)" % fallback)
     trust_hooks(cdx, rec, yes)
     if "rea" in comps:
-        rea = rea_setup.install("codex", child_env(cdx), yes, dry)
+        prior = rec.get("rea") if isinstance(rec.get("rea"), dict) else None
+        rea = rea_setup.install("codex", child_env(cdx), yes, dry, prior=prior)
         if rea:
             rec["rea"] = rea
-        else:
+        elif prior is None:
             comps.remove("rea")
     ps._save_json(rec_path, rec)  # trust is written: uninstall must be able to remove it even if a later step fails
     ps.write_workflow_doc(repo, root)
@@ -574,14 +577,7 @@ def _remove_extras(cdx: Path, rec: dict, extras: List[List[str]]) -> None:
             print("warning: `%s` failed (exit %d); remove it by hand" % (" ".join(argv), rc))
     rea = rec.get("rea") if isinstance(rec.get("rea"), dict) else None
     if rea and rea_setup.remove_argv("codex") in extras:
-        sd = rea.get("skill_dir")
-        if rea_setup.safe_skill_dir(sd):
-            shutil.rmtree(str(sd), onerror=ps._rm_error)
-            print("removed %s" % sd)
-        elif sd:
-            print("kept %s (not a plain %s folder); remove it by hand" % (sd, rea_setup.SKILL_NAME))
-        else:
-            print("REA's skill folder was not recorded; remove <agents skills dir>/%s by hand" % rea_setup.SKILL_NAME)
+        print(rea_setup.remove_skill(rea, cdx))
 
 
 def uninstall(cdx: Path, extras: Optional[List[List[str]]] = None) -> int:
