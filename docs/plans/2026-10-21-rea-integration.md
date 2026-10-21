@@ -452,6 +452,7 @@ Scope:
 - install/plugin_setup.py
 - install/tests/test_rea_wiring.py
 - install/tests/test_plugin_setup.py
+- install/tests/test_e2e_install.py
 Done:
 - `python3 -m pytest -q install/tests/test_rea_wiring.py install/tests/test_plugin_setup.py install/tests/test_install_uninstall.py` passes
 - `python3 -m pytest -q install/tests` passes
@@ -612,14 +613,15 @@ if __name__ == "__main__":
     ```
     The existing `left = [c for c in extras_commands(rec, False) if c not in extras]` then already prints the REA removal command when `--keep-extras` left it.
   - Chain "off" list (line ~163): `loc["off"] = sorted(c for c in OPTIONAL if c not in comps and c not in run_cmd.NO_STAGES)`.
-- [ ] **Step 4: Run the tests.** Run: `python3 -m pytest -q install/tests/test_rea_wiring.py install/tests/test_plugin_setup.py install/tests/test_install_uninstall.py`. Expected: PASS (`test_chain_local_components` stays `["design", "pstack-picks", "ruflo", "superpowers"]` thanks to `NO_STAGES`). Then `python3 -m pytest -q install/tests`. Expected: PASS. If an e2e test (`test_e2e_install.py`) now reaches `rea_setup` and tries `npx`, add `--no-rea` next to its existing `--no-design` (line ~51), as the other extras are handled there.
-- [ ] **Step 5: Commit** the Scope paths (plus `install/tests/test_e2e_install.py` if changed): `feat(install): set up and uninstall REA per Claude account (task 3)`.
+- [ ] **Step 4: Run the tests.** Run: `python3 -m pytest -q install/tests/test_rea_wiring.py install/tests/test_plugin_setup.py install/tests/test_install_uninstall.py`. Expected: PASS (`test_chain_local_components` stays `["design", "pstack-picks", "ruflo", "superpowers"]` thanks to `NO_STAGES`). Then `python3 -m pytest -q install/tests`. Expected: PASS. In `install/tests/test_e2e_install.py` add `"--no-rea"` next to its existing `"--no-design"` (line ~51) so it never reaches the real `npx`. Then `grep -n "run_cmd.main\|ps.setup(" install/tests/*.py` and check each call: one that passes fresh defaults (no explicit component list) and is not stubbing `rea_setup.install` gets `--no-rea` (or a `rea_setup.install = lambda *a, **k: None` stub in its setUp); name each in the report.
+- [ ] **Step 5: Commit** the Scope paths : `feat(install): set up and uninstall REA per Claude account (task 3)`.
 
 ## Task 4: Codex wiring
 
 Goal: `--harness codex|both|all` sets up REA for the Codex home with `--client codex` and records it in the Codex record; Codex uninstall offers `codex mcp remove rea` and the safe skill folder.
 Scope:
 - install/codex_plugin_setup.py
+- install/run_cmd.py
 - install/tests/test_rea_codex.py
 Done:
 - `python3 -m pytest -q install/tests/test_rea_codex.py install/tests/test_codex_plugin_setup.py` passes
@@ -628,7 +630,7 @@ Failing test first: install/tests/test_rea_codex.py :: ReaCodexTest.test_setup_r
 
 **Interfaces:**
 - Consumes: `rea_setup.install("codex", env, yes, dry_run)`, `rea_setup.remove_argv("codex")`, `rea_setup.safe_skill_dir`; `codex_plugin_setup.setup(repo, cdx, comps, yes, dry=False) -> int`, `codex_plugin_setup.RECORD`.
-- Produces: `codex_plugin_setup.codex_env(cdx) -> dict` (os.environ with `CODEX_HOME=str(cdx)`, if no such helper exists already; reuse an existing one if present); Codex record key `"rea"` with the same entry shape.
+- Produces: `codex_plugin_setup.codex_env(cdx) -> dict` (os.environ with `CODEX_HOME=str(cdx)`, if no such helper exists already; reuse an existing one if present); Codex record key `"rea"` with the same entry shape; `codex_plugin_setup.rea_extras(cdx) -> List[List[str]]` (`[rea_setup.remove_argv("codex")]` when the Codex record has a dict `"rea"`, else `[]`); `codex_plugin_setup.uninstall(cdx: Path, extras: Optional[List[List[str]]] = None) -> int` (new keyword, default keeps today's behaviour).
 
 - [ ] **Step 1: Read first.** Read `install/codex_plugin_setup.py` `setup` (line ~424) and its uninstall function to find where the record is saved and where removal commands run. Run `codex mcp --help` if `codex` is on PATH and confirm `remove <name>` exists; if `codex` is not installed (as on the authoring Mac), keep `["codex", "mcp", "remove", "rea"]` and say so in the report.
 - [ ] **Step 2: Write the failing test.** Create `install/tests/test_rea_codex.py` in the style of `install/tests/test_codex_plugin_setup.py` (copy its temp Codex home fixture). Tests:
@@ -636,7 +638,25 @@ Failing test first: install/tests/test_rea_codex.py :: ReaCodexTest.test_setup_r
   - `test_setup_failure_not_recorded`: stub returns `None`; record has no `"rea"` and its components exclude `"rea"`.
   - `test_uninstall_offers_codex_remove`: a Codex record with `"rea"` makes the uninstall's removal list contain `["codex", "mcp", "remove", "rea"]`, run with `CODEX_HOME` set; a safe skill folder is deleted, an unsafe one kept (same cases as Task 3).
 - [ ] **Step 3: Run it to see it fail.** Run: `python3 -m pytest -q install/tests/test_rea_codex.py`. Expected: the setup test fails (`rea_setup.install` never called).
-- [ ] **Step 4: Implement.** In `codex_plugin_setup.setup`, after its third-party/plugin step and before the record is saved: if `"rea"` in `comps`, call `rea_setup.install("codex", codex_env(cdx), yes, dry)`; on an entry set `rec["rea"] = entry`, else remove `"rea"` from the components recorded. In the Codex uninstall: when `rec.get("rea")` is a dict, add `rea_setup.remove_argv("codex")` to what it offers/runs (same confirm, `--yes`, `--keep-extras` handling as the Claude side; read how the Codex uninstall receives `keep_extras`/`extras` from `run_cmd.main`), run it with `codex_env(cdx)`, then delete `skill_dir` only if `rea_setup.safe_skill_dir` is true, else print the manual step.
+- [ ] **Step 4: Implement.**
+  - `codex_plugin_setup.setup`: first line `comps = list(comps)` (never mutate the caller's list). After its plugin step and before the record is saved: if `"rea"` in `comps`, `entry = rea_setup.install("codex", codex_env(cdx), yes, dry)`; on an entry set `rec["rea"] = entry`, else `comps.remove("rea")` before the components are recorded.
+  - `run_cmd.main` setup path (line ~345): pass `list(codex_comps)` to `cps.setup`, so a Codex REA decline or failure cannot drop `rea` from the Claude run's `comps` under `--harness both|all`.
+  - `run_cmd.main` uninstall path: after the `if want_claude:` extras block, add a Codex block:
+    ```python
+    cextras = cps.rea_extras(cdx) if want_codex else []
+    if cextras and a.keep_extras:
+        print("kept REA for Codex; to remove it: %s" % "; ".join("CODEX_HOME=%s %s" % (cdx, " ".join(c)) for c in cextras))
+        cextras = []
+    elif cextras:
+        print("Third-party tools setup installed for %s (kept with --keep-extras):" % cdx)
+        for argv in cextras:
+            print("  CODEX_HOME=%s %s" % (cdx, " ".join(argv)))
+        if not (a.yes or di.confirm("Remove them too?")):
+            cextras = []
+    ```
+    and change the call to `cps.uninstall(cdx, extras=cextras)`.
+  - `codex_plugin_setup.uninstall(cdx, extras=None)`: read the record before it is deleted; for each argv in `extras or []` run `di.run(argv, env=codex_env(cdx))` (non-zero exit: warning, go on); when `rea_setup.remove_argv("codex")` was among them, delete `rec["rea"]["skill_dir"]` only if `rea_setup.safe_skill_dir` is true, else print the manual step (same messages as Task 3's `_remove_extras`).
+  - Add to `test_rea_codex.py`: `test_shared_comps_not_mutated` — call `cps.setup` with a list containing `"rea"` and `rea_setup.install` stubbed to return `None`; assert the caller's list still contains `"rea"`. `test_keep_extras_codex` — through `run_cmd.main(["--uninstall", "--harness", "codex", "--keep-extras", "--yes", "--codex-dir", str(cdx)])` (with the other side effects stubbed as `test_codex_plugin_setup.py` does), no `codex mcp remove` runs.
 - [ ] **Step 5: Run the tests.** Run: `python3 -m pytest -q install/tests/test_rea_codex.py install/tests/test_codex_plugin_setup.py && python3 -m pytest -q install/tests`. Expected: PASS.
 - [ ] **Step 6: Commit** the Scope paths: `feat(install): REA for Codex homes (task 4)`.
 
@@ -652,14 +672,14 @@ Done:
 Failing test first: install/tests/test_release_check.py :: ReleaseCheckReaTest.test_rea_aligned_passes
 
 **Interfaces:**
-- Consumes: `rea_setup.doctor_argv("claude_code")`, `rea_setup.skill_state(stdout)`; `release_check.RECORD`; the report object `rep` with `rep.say(status, label, detail)` (statuses used in the file: `"PASS"`, `"FAIL"`, `"SKIP"`; check for an existing `"WARN"` and use it, else use `"SKIP"` with detail `"warning: ..."` and say which in the report); `pu.claude_env(cd)` for the env.
+- Consumes: `rea_setup.doctor_argv("claude_code")`, `rea_setup.skill_state(stdout)`; `release_check.RECORD`; the report object `rep` with `rep.say(status, label, detail)` (statuses: `"PASS"`, `"FAIL"`, `"SKIP"`, `"WARN"`; a `"WARN"` is not counted in `rep.fails`); `pu.claude_env(cd)` for the env.
 - Produces: `release_check.rea(rep, cd, env, capture=None) -> None`, called in `_checks` right after `ruflo(...)`.
 
 - [ ] **Step 1: Write the failing test.** Append class `ReleaseCheckReaTest` to `install/tests/test_release_check.py`, following how that file builds `rep` and imports `release_check` (read its top). Cases, each with a temp `cd`:
   - no `.dryas-plugin.json` or no `"rea"` key → one `SKIP` line `"REA"`, `capture` never called.
   - `{"rea": {...}}` and `capture` returning `(0, '{"identity": {"skill": {"state": "aligned"}}}')` → `PASS`.
-  - `capture` returning `(0, '{"identity": {"skill": {"state": "missing"}}}')` → the warning status, detail contains `missing`; `rep.fails` unchanged.
-  - `capture` raising `OSError` or returning `(1, "")` → the warning status; `rep.fails` unchanged.
+  - `capture` returning `(0, '{"identity": {"skill": {"state": "missing"}}}')` → `WARN`, detail contains `missing`; `rep.fails` unchanged.
+  - `capture` raising `OSError` or returning `(1, "")` → `WARN`; `rep.fails` unchanged.
   - `capture` receives `rea_setup.doctor_argv("claude_code")`.
 - [ ] **Step 2: Run it to see it fail.** Run: `python3 -m pytest -q install/tests/test_release_check.py -k Rea`. Expected: `AttributeError: module 'release_check' has no attribute 'rea'`.
 - [ ] **Step 3: Implement.** In `tools/release_check.py`, add after `ruflo`:
@@ -682,10 +702,21 @@ def rea(rep, cd, env, capture=None):
     state = rea_setup.skill_state(out) if rc == 0 else None
     if state == "aligned":
         return rep.say("PASS", "REA skill and MCP ready", "")
-    rep.say(WARN, "REA skill and MCP ready", "doctor says %s; run `%s`" % (state or "nothing (exit %s)" % rc, " ".join(argv)))
+    rep.say("WARN", "REA skill and MCP ready", "doctor says %s; run `%s`" % (state or "nothing (exit %s)" % rc, " ".join(argv)))
 ```
 
-  where `WARN` is the existing warning status name in the file (or `"SKIP"`), `_capture` is a small helper `subprocess.run(argv, capture_output=True, universal_newlines=True, encoding="utf-8", env=env, timeout=600)` returning `(returncode, stdout)` if the file has none, and `rea_setup` is importable because `install/` is on `sys.path` (check how `release_check` imports `platform_util as pu` and do the same). Call `rea(rep, cd, env)` in `_checks` right after the `ruflo(...)` call.
+  plus this helper above it:
+
+```python
+def _capture(argv, env=None):
+    try:
+        r = subprocess.run(argv, capture_output=True, universal_newlines=True, encoding="utf-8", env=env, timeout=600)
+    except subprocess.TimeoutExpired:
+        return 1, ""
+    return r.returncode, r.stdout
+```
+
+  `rea_setup` must be importable because `install/` is on `sys.path` (check how `release_check` imports `platform_util as pu` and do the same). Call `rea(rep, cd, env)` in `_checks` right after the `ruflo(...)` call.
 - [ ] **Step 4: Run the tests.** Run: `python3 -m pytest -q install/tests/test_release_check.py && python3 -m pytest -q install/tests`. Expected: PASS.
 - [ ] **Step 5: Commit** the Scope paths: `feat(release-check): report REA state for accounts that have it (task 5)`.
 
@@ -725,10 +756,10 @@ class ReaRulesTest(unittest.TestCase):
         return (ROOT / p).read_text(encoding="utf-8")
 
     def test_template_rule(self):
-        for p in ("claude/CLAUDE.md.template", "codex/AGENTS.md.template"):
+        for p, anchor in (("claude/CLAUDE.md.template", "- Design work"), ("codex/AGENTS.md.template", "- Brainstorm first")):
             t = self.read(p)
             self.assertIn(LINE, t, p)
-            self.assertLess(t.index("Design work"), t.index(LINE), p)
+            self.assertLess(t.index(anchor), t.index(LINE), p)
 
     def test_brainstorm_offers_rea(self):
         t = self.read("claude/skills/brainstorm/reference.md")
@@ -746,7 +777,7 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run it to see it fail.** Run: `python3 -m pytest -q install/tests/test_rea_rules.py`. Expected: 3 failures (`LINE` not found, etc.).
 - [ ] **Step 3: Implement.**
-  - `claude/CLAUDE.md.template`: insert `LINE` (exact text above) as a new line directly after the line starting `- Design work (UI/UX`. Same in `codex/AGENTS.md.template` after its design line (if it has none, after the brainstorm line).
+  - `claude/CLAUDE.md.template`: insert `LINE` (exact text above) as a new line directly after the line starting `- Design work (UI/UX`. In `codex/AGENTS.md.template` (it has no design line) insert it directly after the line starting `- Brainstorm first`.
   - `install/tests/test_template_budget.py`: the Claude template was 3523 bytes against a 3526 budget. Measure with `wc -c claude/CLAUDE.md.template codex/AGENTS.md.template` after the edit and set `BUDGET["claude/CLAUDE.md.template"]` to the new size rounded up to the next multiple of 50, keeping Codex's 2575 if it still fits; update the comment to `# measured <new claude> and <new codex> on 2026-10-21 (REA rule added); claude has no headroom by design`. This is a deliberate budget raise for an approved rule: say so in the report.
   - `claude/skills/brainstorm/reference.md` § Exploring approaches: append this paragraph:
     > **Software we don't have the source for.** When the request depends on how an app, binary, APK, Electron app or website we do not own behaves ("how does X do Y", "copy this feature from that app"), one proposed approach is "investigate with REA first" (the `rea` MCP tools and the `reverse-engineer-anything` skill), and you say why it fits; your partner can decline. REA's findings, with their evidence and stated limitations, go into the design artifact: the written spec, the in-chat design, or the spike's findings. If the `rea` MCP tools are not in this session, say so and give the install command (`install/install.sh --with-rea`, then restart) instead of failing; the other approaches stay on the table.
