@@ -39,6 +39,11 @@ class ImportCostTest(unittest.TestCase):
         self.assertFalse(loaded("import bridge_deliver; bridge_deliver.deliver({'session_id': "
                                 "'44444444-4444-4444-8444-444444444444'})", "bridge"))
 
+    def test_usage_watch_loads_urllib_request_only_to_fetch(self):
+        self.assertFalse(loaded("import chain, usage_watch", "urllib.request"))
+        self.assertFalse(loaded("import usage_watch; usage_watch.run({'session_id': 's'}, fetch=lambda u, t: None)",
+                                "urllib.request"))
+
 
 if __name__ == "__main__":
     unittest.main()
