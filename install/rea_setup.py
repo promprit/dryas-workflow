@@ -93,6 +93,13 @@ def plan_summary(stdout: str) -> List[str]:
             for a in acts if isinstance(a, dict)]
 
 
+def _config_skill_dir(env: dict) -> Optional[str]:
+    """<config dir>/skills/SKILL_NAME when it exists: REA's dry run plans nothing once it is installed."""
+    cd = (env or {}).get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+    p = os.path.join(cd, "skills", SKILL_NAME)
+    return p if os.path.isdir(p) else None
+
+
 def install(client: str, env: dict, yes: bool, dry_run: bool, prior: Optional[dict] = None) -> Optional[dict]:
     """Show REA's dry run, ask (unless yes), run setup, check doctor. The record entry, or None (skipped/failed).
     A prior entry at VERSION whose doctor says aligned is kept as is: no plan, no prompt."""
@@ -131,6 +138,8 @@ def install(client: str, env: dict, yes: bool, dry_run: bool, prior: Optional[di
     skill_dir = skill_dir_from_plan(plan)
     if skill_dir is None and isinstance(prior, dict):
         skill_dir = prior.get("skill_dir")
+    if skill_dir is None and client == "claude_code":
+        skill_dir = _config_skill_dir(env)
     return {"version": VERSION, "client": client, "skill_dir": skill_dir}
 
 

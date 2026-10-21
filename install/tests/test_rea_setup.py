@@ -133,7 +133,41 @@ class ReaSetupTest(unittest.TestCase):
 
     def test_install_no_skill_in_plan(self):
         self.use(Fake(plan="not json"))
-        self.assertEqual(rs.install("claude_code", {}, yes=True, dry_run=False)["skill_dir"], None)
+        with tempfile.TemporaryDirectory() as t:
+            env = {"CLAUDE_CONFIG_DIR": t}
+            self.assertEqual(rs.install("claude_code", env, yes=True, dry_run=False)["skill_dir"], None)
+
+    def test_install_empty_plan_falls_back_to_config_skill_dir(self):
+        # REA already installed: its dry run plans nothing, so the skill path comes from the config dir
+        self.use(Fake(plan=json.dumps({"status": "planned", "plannedActions": []})))
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t) / "skills" / rs.SKILL_NAME
+            d.mkdir(parents=True)
+            entry = rs.install("claude_code", {"CLAUDE_CONFIG_DIR": t}, yes=True, dry_run=False)
+            self.assertEqual(entry["skill_dir"], str(d))
+
+    def test_install_empty_plan_default_config_dir(self):
+        self.use(Fake(plan=json.dumps({"status": "planned", "plannedActions": []})))
+        with tempfile.TemporaryDirectory() as t:
+            d = Path(t) / ".claude" / "skills" / rs.SKILL_NAME
+            d.mkdir(parents=True)
+            orig = os.environ.get("HOME")
+            os.environ["HOME"] = t
+            try:
+                entry = rs.install("claude_code", {}, yes=True, dry_run=False)
+            finally:
+                if orig is None:
+                    os.environ.pop("HOME", None)
+                else:
+                    os.environ["HOME"] = orig
+            self.assertEqual(entry["skill_dir"], str(d))
+
+    def test_install_empty_plan_codex_stays_none(self):
+        self.use(Fake(plan=json.dumps({"status": "planned", "plannedActions": []})))
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "skills" / rs.SKILL_NAME).mkdir(parents=True)
+            entry = rs.install("codex", {"CLAUDE_CONFIG_DIR": t, "CODEX_HOME": t}, yes=True, dry_run=False)
+            self.assertIsNone(entry["skill_dir"])
 
     def test_install_records_when_already_present(self):
         # REA installed by hand earlier: its dry run plans an update, setup is idempotent and succeeds
