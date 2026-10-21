@@ -33,6 +33,7 @@ sys.path.insert(0, str(REPO / "install"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_appserver as ca  # noqa: E402  (stdlib only; tools never import tests)
 import platform_util as pu  # noqa: E402
+import dryas_install as di  # noqa: E402
 import rea_setup  # noqa: E402
 import release_check_opencode as rco  # noqa: E402
 PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
@@ -498,14 +499,6 @@ def ruflo(rep, cd, root_dir, env, run_env):
     rep.say("PASS" if ok else "FAIL", "Ruflo helper runs silently", why)
 
 
-def _capture(argv, env=None):
-    try:
-        r = subprocess.run(argv, capture_output=True, universal_newlines=True, encoding="utf-8", env=env, timeout=600)
-    except subprocess.TimeoutExpired:
-        return 1, ""
-    return r.returncode, r.stdout
-
-
 def rea(rep, cd, env, capture=None):
     """REA is an optional extra: report its doctor state; never a FAIL."""
     try:
@@ -516,7 +509,7 @@ def rea(rep, cd, env, capture=None):
         return rep.say("SKIP", "REA", "not set up in %s" % cd)
     argv = rea_setup.doctor_argv("claude_code")
     try:
-        rc, out = (capture or _capture)(argv, env=pu.claude_env(cd, env))
+        rc, out = (capture or (lambda argv, env=None: di.capture(argv, env=env, timeout=600)))(argv, env=pu.claude_env(cd, env))
     except OSError as ex:
         rc, out = 1, str(ex)
     state = rea_setup.skill_state(out) if rc == 0 else None

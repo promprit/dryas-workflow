@@ -553,6 +553,21 @@ class ReleaseCheckReaTest(unittest.TestCase):
         release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(0, '{"identity": {"skill": {"state": "aligned"}}}'))
         self.assertEqual(self.calls, [rea_setup.doctor_argv("claude_code")])
 
+    def test_default_capture_is_installer_capture(self):
+        import dryas_install as di
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+        seen = []
+
+        def stub(argv, input_text=None, env=None, timeout=None):
+            seen.append(argv)
+            return 0, '{"identity": {"skill": {"state": "aligned"}}}'
+
+        with mock.patch.object(di, "capture", stub):
+            release_check.rea(self.rep, self.cd, {})
+        self.assertEqual([s for s, _, _ in self.rep.lines], ["PASS"])
+        self.assertEqual(seen, [rea_setup.doctor_argv("claude_code")])
+        self.assertFalse(hasattr(release_check, "_capture"))
+
 
 if __name__ == "__main__":
     unittest.main()
