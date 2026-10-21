@@ -34,6 +34,7 @@
   "component:optional:jev": "copy: the gate and route stages and the jev MCP server; local judge by default",
   "component:optional:memory": "copy: Dryas memory in .dryas/state/; notes in the repo with --persist-memory",
   "component:optional:pstack-picks": "copy: .dryas/pstack/ and the pstack-picks rule blocks",
+  "component:optional:rea": "exclude: REA needs Node and local reverse-engineering tools; not in cloud installs",
   "component:optional:ruflo": "exclude: Ruflo needs Node and npm",
   "component:optional:superpowers": "exclude: the Dryas process skills replace it",
   "component:ruflo": "exclude: Ruflo needs Node and npm",
