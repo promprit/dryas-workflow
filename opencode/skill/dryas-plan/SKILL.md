@@ -94,6 +94,8 @@ Failing test first: <test file :: test name>   (or `none (review)` / `none (clea
 - [ ] **Step 5: Commit** (explicit paths, conventional message) when the dispatch prompt allows it; otherwise report and the orchestrator commits.
 ````
 
+A task that depends on a REA finding carries that finding's evidence in its own section; executors do not call REA.
+
 When filling in Scope, Interfaces or the steps, read `<dryas-root>/../skill/dryas-plan/reference.md` § Task fields (exact paths, Consumes and Produces, what each step shows, non-overlapping Scope for parallel tasks).
 
 ## No placeholders

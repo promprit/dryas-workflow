@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PRE = ROOT / "install/tests/fixtures/template-pre-2.0"
 PAIRS = (("claude/CLAUDE.md.template", "CLAUDE.md.template"), ("codex/AGENTS.md.template", "AGENTS.md.template"))
-BUDGET = {"claude/CLAUDE.md.template": 3526, "codex/AGENTS.md.template": 2575}  # measured 3206 and 2341, plus 10%
+BUDGET = {"claude/CLAUDE.md.template": 3700, "codex/AGENTS.md.template": 2575}  # measured 3681 and 2546 on 2026-10-21 (REA rule added); claude has no headroom by design
 
 
 def rows(text, title):

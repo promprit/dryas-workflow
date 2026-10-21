@@ -5,6 +5,7 @@
 # Workflow rules
 - Brainstorm first, always (dryas:brainstorm); build or dispatch only after the user approves the design.
 - Design work (UI/UX, layout, visual style, components, on-screen copy): use `ui-ux-pro-max` and `impeccable`.
+- Reverse-engineering work (how software you don't have the source for does something): use REA; brainstorm says when it recommends it, the user can decline.
 - Single-file fix: plain Claude on the strong tier. Multi-step: `/orchestrate <task>` on the approved design.
 - Every multi-step task runs in its own git worktree. One agent per worktree: never two sessions in one worktree; parallel loops each get their own worktree and branch. Merge after `/wreview` and dryas:verify.
 - Layers: Jev decides (gates, routing; local judge or Jev model) and never writes code or plans; Dryas memory learns; Dryas skills are the process. Superpowers and Ruflo are optional extras; name the Dryas skills even when they are installed.
