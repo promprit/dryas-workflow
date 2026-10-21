@@ -14,7 +14,7 @@ import plugin_setup as ps
 import run_cmd
 
 P = run_cmd.parse
-UP_1X = ["core", "jev", "ruflo", "superpowers", "design", "pstack-picks"]
+UP_1X = ["core", "jev", "ruflo", "superpowers", "design", "pstack-picks", "rea"]
 
 
 class SelectTest(unittest.TestCase):
@@ -25,11 +25,11 @@ class SelectTest(unittest.TestCase):
         self.addCleanup(p.stop)
 
     def test_fresh_defaults_owned_core(self):
-        self.assertEqual(run_cmd.select(P([]), None), ["core", "jev", "memory", "design", "pstack-picks"])
+        self.assertEqual(run_cmd.select(P([]), None), ["core", "jev", "memory", "design", "pstack-picks", "rea"])
 
     def test_with_flags_add_extras(self):
         self.assertEqual(run_cmd.select(P(["--with-ruflo", "--with-superpowers"]), None),
-                         ["core", "jev", "memory", "ruflo", "superpowers", "design", "pstack-picks"])
+                         ["core", "jev", "memory", "ruflo", "superpowers", "design", "pstack-picks", "rea"])
 
     def test_upgrade_without_flags_keeps_extras_and_providers(self):
         comps = run_cmd.select(P([]), UP_1X)
