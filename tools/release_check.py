@@ -33,6 +33,8 @@ sys.path.insert(0, str(REPO / "install"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import codex_appserver as ca  # noqa: E402  (stdlib only; tools never import tests)
 import platform_util as pu  # noqa: E402
+import dryas_install as di  # noqa: E402
+import rea_setup  # noqa: E402
 import release_check_opencode as rco  # noqa: E402
 PLAN = "## Task 1: a\nGoal: g\nScope:\n- src/feature/**\nDone:\n- d\n"
 MANUAL = """Manual checks (needs the app open):
@@ -497,6 +499,25 @@ def ruflo(rep, cd, root_dir, env, run_env):
     rep.say("PASS" if ok else "FAIL", "Ruflo helper runs silently", why)
 
 
+def rea(rep, cd, env, capture=None):
+    """REA is an optional extra: report its doctor state; never a FAIL."""
+    try:
+        rec = json.loads((cd / RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        rec = {}
+    if not isinstance(rec, dict) or not isinstance(rec.get("rea"), dict):
+        return rep.say("SKIP", "REA", "not set up in %s" % cd)
+    argv = rea_setup.doctor_argv("claude_code")
+    try:
+        rc, out = (capture or (lambda argv, env=None: di.capture(argv, env=env, timeout=600)))(argv, env=pu.claude_env(cd, env))
+    except OSError as ex:
+        rc, out = 1, str(ex)
+    state = rea_setup.skill_state(out) if rc == 0 else None
+    if state == "aligned":
+        return rep.say("PASS", "REA skill and MCP ready", "")
+    rep.say("WARN", "REA skill and MCP ready", "doctor says %s; run `%s`" % (state or "nothing (exit %s)" % rc, " ".join(argv)))
+
+
 def better_than_previous(rep):
     """REL-1: replay the corpus through every cached older Dryas release and this checkout (tools/compare_v1.py)."""
     name = "better than previous releases"
@@ -612,6 +633,7 @@ def _checks(rep, cds, cdxs, env, bash, tmp, ods=()):
         jev_route(rep, chain, penv)
         bridge(rep, root, penv)
         ruflo(rep, cd, root, penv, dict(hook_env, CLAUDE_PLUGIN_ROOT=fwd(root)))
+        rea(rep, cd, env)
     for cdx in cdxs:
         codex_plugin(rep, cdx, shutil.which("codex"), bash, hook_env)
     for od in ods:

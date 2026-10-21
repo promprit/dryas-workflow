@@ -1,7 +1,7 @@
 """Installer entry used by install.sh and install.ps1: flags, preflight, then codex -> migrate -> setup -> verify.
 
   dryas_install.py run [--repo PATH] [--judge local|jev] [--memory dryas|ruflo|none] [--with-ruflo] [--with-superpowers] [--with-design]
-                       [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks]
+                       [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-rea] [--with-rea] [--no-pstack-picks]
                        [--yes] [--force] [--dry-run] [--uninstall] [--purge] [--keep-extras] [--preflight-only]
                        [--harness claude|codex|both|opencode|all] [--claude-dir DIR] [--codex-dir DIR] [--opencode-dir DIR]
                        [--tier-fast|--tier-standard|--tier-strong|--tier-frontier PROVIDER/MODEL]
@@ -27,9 +27,11 @@ import platform_util as pu
 
 HERE = Path(__file__).resolve().parent
 TIERS = ("fast", "standard", "strong", "frontier")  # executor tiers; opencode_setup reuses it
-OPTIONAL = ("jev", "memory", "ruflo", "superpowers", "design", "pstack-picks")
+OPTIONAL = ("jev", "memory", "ruflo", "superpowers", "design", "pstack-picks", "rea")
 EXTRAS = ("ruflo", "superpowers")  # off unless selected or already installed
-FRESH = ("jev", "memory", "design", "pstack-picks")
+FRESH = ("jev", "memory", "design", "pstack-picks", "rea")
+WITH = ("ruflo", "superpowers", "design", "rea")
+NO_STAGES = ("rea",)
 HARNESSES = ("claude", "codex", "both", "opencode", "all")
 CLAUDE_H, CODEX_H, OPENCODE_H = ("claude", "both", "all"), ("codex", "both", "all"), ("opencode", "all")
 NO_SPACE_RUFLO = ("Your Python, Dryas data folder or Dryas plugin path contains a space and has no short form; "
@@ -53,7 +55,7 @@ def parse(argv: List[str]) -> argparse.Namespace:
     ap.add_argument("--repo", default=str(HERE.parent))
     for c in OPTIONAL:
         ap.add_argument("--no-" + c, action="store_true")
-    for c in ("ruflo", "superpowers", "design"):
+    for c in WITH:
         ap.add_argument("--with-" + c, action="store_true")
     ap.add_argument("--judge", default=None, choices=("local", "jev"))
     ap.add_argument("--memory", default=None, choices=("dryas", "ruflo", "none"))
@@ -70,7 +72,7 @@ def parse(argv: List[str]) -> argparse.Namespace:
         ap.add_argument("--tier-" + t, default=None, metavar="PROVIDER/MODEL")
     ap.add_argument("--openrouter-key", default="")  # explicit only: it reaches the `claude plugin install` argv
     a = ap.parse_args(argv)
-    for c in ("ruflo", "superpowers", "design"):
+    for c in WITH:
         if getattr(a, "with_" + c) and getattr(a, "no_" + c):
             ap.error("--with-%s and --no-%s together" % (c, c))
     for bad, why in ((a.judge == "local" and a.openrouter_key, "--judge local with --openrouter-key"),
@@ -92,7 +94,7 @@ def select(a: argparse.Namespace, recorded: Optional[List[str]]) -> List[str]:
         have = set(FRESH)
     else:
         have = set(recorded)
-    for c in ("ruflo", "superpowers", "design"):
+    for c in WITH:
         if getattr(a, "with_" + c):
             have.add(c)
     for c in OPTIONAL:
@@ -261,11 +263,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     tiers = {t: getattr(a, "tier_" + t) for t in TIERS}
     cdx = cps.codex_home(a.codex_dir)
     legacy = cps.legacy_components(cdx)
-    no_flags = not (any(_no(a, c) for c in OPTIONAL) or any(getattr(a, "with_" + c) for c in ("ruflo", "superpowers", "design"))
+    no_flags = not (any(_no(a, c) for c in OPTIONAL) or any(getattr(a, "with_" + c) for c in WITH)
                     or a.judge or a.memory)
     codex_comps = legacy if (legacy is not None and no_flags) else comps
     if a.harness in ("codex", "opencode") and not a.uninstall and ("superpowers" in comps or "design" in comps):
         print("note: superpowers and design are Claude Code plugins; skipped for %s." % ("Codex" if a.harness == "codex" else "OpenCode"))
+    if a.harness == "opencode" and not a.uninstall and "rea" in comps:
+        print("note: REA is not set up for OpenCode; skipped.")
     if a.uninstall:  # Codex first: Claude's --purge then sees whether a CODEX_HOME still uses the data root
         plan = []
         if want_codex and (cdx / cps.RECORD).exists():
@@ -305,7 +309,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                         print("Legacy Ruflo pieces (each asked separately):")
                     for label, _, _ in legacy:
                         print("  " + label)
-        rc = max(cps.uninstall(cdx) if want_codex else 0, ocs.uninstall(od) if want_oc else 0)
+        cextras = cps.rea_extras(cdx) if want_codex else []
+        if cextras and a.keep_extras:
+            print("kept REA for Codex; to remove it: %s" % "; ".join("CODEX_HOME=%s %s" % (cdx, " ".join(c)) for c in cextras))
+            cextras = []
+        elif cextras:
+            print("Third-party tools setup installed for %s (kept with --keep-extras):" % cdx)
+            for argv in cextras:
+                print("  CODEX_HOME=%s %s" % (cdx, " ".join(argv)))
+            if not (a.yes or di.confirm("Remove them too?")):
+                cextras = []
+        rc = max(cps.uninstall(cdx, extras=cextras) if want_codex else 0, ocs.uninstall(od) if want_oc else 0)
         if rc:
             return rc
         if want_claude:
@@ -342,7 +356,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("preflight ok")
         return 0
     if want_codex:
-        rc = cps.setup(repo, cdx, codex_comps, yes=a.yes, dry=a.dry_run)
+        rc = cps.setup(repo, cdx, list(codex_comps), yes=a.yes, dry=a.dry_run)
         if rc:
             return rc
     if want_oc:

@@ -41,7 +41,7 @@ class LaunchDocsTest(unittest.TestCase):
     def test_moved_reference_material(self):
         i = read("docs/install.md")
         for s in ("## Reference stack", "### Manual plugin route", "/plugin marketplace add promprit/dryas-workflow",
-                  "--no-design", "--no-pstack-picks", "--keep-extras"):
+                  "--no-design", "--no-rea", "--with-rea", "--no-pstack-picks", "--keep-extras"):
             self.assertIn(s, i, s)
 
 

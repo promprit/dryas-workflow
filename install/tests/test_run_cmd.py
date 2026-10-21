@@ -17,8 +17,8 @@ class RunCmdTest(unittest.TestCase):
         pu.which, pu.space_free = self.orig
 
     def test_components(self):
-        self.assertEqual(run_cmd.components(run_cmd.parse(["--no-ruflo"])), ["core", "jev", "memory", "design", "pstack-picks"])
-        self.assertEqual(run_cmd.components(run_cmd.parse([])), ["core", "jev", "memory", "design", "pstack-picks"])
+        self.assertEqual(run_cmd.components(run_cmd.parse(["--no-ruflo"])), ["core", "jev", "memory", "design", "pstack-picks", "rea"])
+        self.assertEqual(run_cmd.components(run_cmd.parse([])), ["core", "jev", "memory", "design", "pstack-picks", "rea"])
 
     def test_preflight_missing_lists_tools(self):
         pu.which = lambda n: ""
@@ -292,7 +292,7 @@ class MainTest(unittest.TestCase):
         st = MainStubs(self)
         import codex_plugin_setup as cps
         from unittest import mock
-        with mock.patch.object(cps, "uninstall", lambda cdx: 1):
+        with mock.patch.object(cps, "uninstall", lambda cdx, extras=None: 1):
             self.assertEqual(self.main("--uninstall", "--purge", "--harness", "both"), 1)
         self.assertEqual(st.steps(), [])
 

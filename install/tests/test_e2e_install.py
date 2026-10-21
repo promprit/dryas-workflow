@@ -48,7 +48,7 @@ class E2ETest(unittest.TestCase):
     def installer(self, *args, yes=True, answer=""):
         """answer: stdin text for the installer's questions when run without --yes."""
         return subprocess.run([sys.executable, str(REPO / "install" / "dryas_install.py"), "run", "--repo", str(REPO)]
-                              + (["--yes"] if yes else []) + ["--no-ruflo", "--no-superpowers", "--no-design"] + list(args),
+                              + (["--yes"] if yes else []) + ["--no-ruflo", "--no-superpowers", "--no-design", "--no-rea"] + list(args),
                               capture_output=True, text=True, env=self.env, timeout=900, input=answer)
 
     def installed(self):

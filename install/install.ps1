@@ -1,5 +1,5 @@
 # Dryas Workflow installer for native Windows. Finds Python >= 3.9 and runs install\dryas_install.py.
-# Usage: .\install\install.ps1 [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-pstack-picks] [--yes] [--force]
+# Usage: .\install\install.ps1 [--no-jev] [--no-ruflo] [--no-superpowers] [--no-design] [--no-rea] [--with-rea] [--no-pstack-picks] [--yes] [--force]
 #        [--dry-run] [--uninstall] [--purge] [--preflight-only] [--harness claude|codex|both|opencode|all]
 #        [--claude-dir DIR] [--codex-dir DIR] [--opencode-dir DIR] [--tier-fast|--tier-standard|--tier-strong|--tier-frontier PROVIDER/MODEL]
 #        [--flowobserve|--no-flowobserve] [--openrouter-key KEY]   See docs\install.md.

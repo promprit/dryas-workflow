@@ -64,6 +64,8 @@ digraph brainstorm {
 - Lead with the recommended option and say why.
 - YAGNI ruthlessly: remove unnecessary features from every approach and design.
 
+**Software we don't have the source for.** When the request depends on how an app, binary, APK, Electron app or website we do not own behaves, REA is not set up for OpenCode, so do not offer to investigate with it. Say so, and propose the other approaches (for example asking your partner for documentation, a spec or the source).
+
 ## Presenting the design
 
 - Once you believe you understand what you are building, present the design.

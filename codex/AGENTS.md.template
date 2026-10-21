@@ -3,6 +3,7 @@ Process rules for coding sessions on this machine. Full reference: `~/.dryas/doc
 
 ## Always
 - Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`).
+- Reverse-engineering work (how software you don't have the source for does something): use REA; brainstorm says when it recommends it, the user can decline.
 - Multi-step work runs in its own git worktree (`$dryas:worktree`); merge after review and verification (`$dryas:verify`).
 - One agent per worktree: never run two sessions in the same worktree. Parallel loops each get their own worktree and branch.
 - Plans are files: `.orchestrate/PLAN.md` in the worktree, sections `## Task N:` with Goal, Scope (globs), Done and Failing test first. Never commit `.orchestrate/`.

@@ -75,6 +75,8 @@ Last updated: 2026-10-05.
    Nothing is dispatched to executors before you approve.
 
    **Design work.** Anything that needs design (UI, UX, layout, visual style, components, pages, design systems, copy on screen) uses both design skills: `ui-ux-pro-max` for design intelligence (style, palette, font pairing, UX guidelines, stack-specific patterns) and `impeccable` to shape, critique and polish the result. Use them while designing and again as a review pass before `/wreview`. Design executors get the same instruction in their task section.
+
+   **Reverse-engineering work.** When a request depends on how software we don't have the source for behaves (an app, binary, APK, Electron app or website), brainstorm proposes "investigate with REA first" and says why; you can decline. REA ([morluto/rea](https://github.com/morluto/rea), installed by setup as an optional extra) returns findings with evidence and limitations, which go into the spec or the in-chat design. Executors never call REA: a task that needs a finding carries its evidence in its plan section.
 2. **Route.** On every prompt, the Jev route hook may add one line such as `Jev route: swarm (0.82); opus: no (0.91)`. This is advisory, and it's silent below 0.7.
    - Single-file fix: plain Claude on the `strong` tier.
    - Multi-step: `/orchestrate <task>`.
@@ -281,6 +283,7 @@ The process skills Dryas uses are its own (`dryas:brainstorm`, `dryas:worktree`,
 | skills `stack-nextjs-ts`, `stack-supabase-postgres`, `stack-swift-ios`, `stack-python` | Conventions, test commands and pitfalls, scanned from the real projects |
 | plugin `typesafe@typesafe-ai` | Official Jev/TypeSafe docs skill |
 | skills `impeccable`, `ui-ux-pro-max` | Design pair, required for any task that involves design (§4 step 1) |
+| MCP `rea` + skill `reverse-engineer-anything` | Reverse engineering of software without source; optional extra (§4 step 1) |
 | `~/.claude/release/export.sh` (maintainer only) | One-way export of `~/.claude` to the public `dryas-workflow` repo: allowlist `public-manifest.txt`, path/name rewrites `rewrites.tsv`, deny-term and secret scans, Jev tests on the staged tree, FlowObserve stages shipped disabled. `--dry-run` first. Never edit `claude/` in the public repo; change `~/.claude` and re-export |
 
 ## 10. Where things live

@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dryas_install as di  # noqa: E402
 import platform_util as pu  # noqa: E402
+import rea_setup  # noqa: E402
 import ruflo_helpers  # noqa: E402
 import ruflo_runtime  # noqa: E402
 import run_cmd  # noqa: E402
@@ -160,7 +161,7 @@ def write_chain_local(root: Path, comps: List[str], flowobserve: Optional[bool],
     p = Path(root) / "chain.local.json"
     loc = _load_json(p, {})
     old = loc.get("off")
-    loc["off"] = sorted(c for c in OPTIONAL if c not in comps)
+    loc["off"] = sorted(c for c in OPTIONAL if c not in comps and c not in run_cmd.NO_STAGES)
     if providers is not None:
         loc["providers"] = providers
     _shared_warning(root, old, loc["off"], cd)
@@ -383,6 +384,8 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
             for argv in (["claude", "plugin", "marketplace", "update", MARKET], ["claude", "plugin", "update", ID]):
                 print("%s%s" % (env_prefix(cd), " ".join(argv)))
         repair_stale_jev(cd, env, dry)
+        if "rea" in comps:
+            rea_setup.install("claude_code", child_env(cd), yes, True)
         return 0
     entry = upgrade_if_stale(cd, env, repo, plugin_entry(cd))
     if entry is None:
@@ -415,6 +418,7 @@ def setup(repo: Path, cd: Path, comps: List[str], yes: bool, key: str, flowobser
     if rc:
         _save_json(rec_path, rec)  # a partial run is still recorded
         return rc
+    rea_step(cd, comps, rec, yes, dry, rec_path)
     mapping = _mapping(plugin_root, comps_all, detected)  # covers old components too, so stale entries render
     if "ruflo" in comps:
         wrote = _ruflo_files(repo, root, mapping, yes)
@@ -538,6 +542,9 @@ def _remove_extras(cd: Path, rec: dict, extras: List[List[str]]) -> None:
         rc = di.run(argv, env=child_env(cd))
         if rc != 0:
             print("warning: `%s` failed (exit %d); remove it by hand" % (" ".join(argv), rc))
+    rea = rec.get("rea") if isinstance(rec.get("rea"), dict) else None
+    if rea and rea_setup.remove_argv("claude_code") in extras:
+        print(rea_setup.remove_skill(rea, cd))
     left = [c for c in extras_commands(rec, False) if c not in extras]
     if left:
         print("kept the third-party plugins setup installed; to remove them:")
@@ -604,6 +611,21 @@ def purge_shared() -> bool:
     return True
 
 
+def rea_step(cd: Path, comps: List[str], rec: dict, yes: bool, dry: bool, rec_path: Optional[Path] = None) -> None:
+    """REA (not a plugin, so not thirdparty): set up for cd when selected; on success record rec["rea"] (saved at
+    once), else drop "rea" from comps unless an earlier record exists, which stays as it was."""
+    if "rea" not in comps:
+        return
+    prior = rec.get("rea") if isinstance(rec.get("rea"), dict) else None
+    entry = rea_setup.install("claude_code", child_env(cd), yes, dry, prior=prior)
+    if entry:
+        rec["rea"] = entry
+        if rec_path:
+            _save_json(rec_path, rec)
+    elif prior is None:
+        comps.remove("rea")
+
+
 def shown(cd: Path, argv: List[str]) -> str:
     """A command line as printed: `claude` ones carry the CLAUDE_CONFIG_DIR prefix of cd."""
     return "%s%s" % (env_prefix(cd) if argv[:1] == ["claude"] else "", " ".join(argv))
@@ -623,6 +645,8 @@ def extras_commands(rec: dict, last_account: bool) -> List[List[str]]:
         for c in ran:
             if c[:3] == ["npm", "install", "-g"] and len(c) > 3 and ["npm", "uninstall", "-g", c[3]] not in out:
                 out.append(["npm", "uninstall", "-g", c[3]])
+    if isinstance(rec.get("rea"), dict):
+        out.append(rea_setup.remove_argv("claude_code"))
     return out
 
 

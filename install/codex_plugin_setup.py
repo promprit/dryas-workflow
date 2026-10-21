@@ -20,6 +20,7 @@ import dryas_install as di  # noqa: E402
 import migrate  # noqa: E402
 import platform_util as pu  # noqa: E402
 import plugin_setup as ps  # noqa: E402
+import rea_setup  # noqa: E402
 import ruflo_runtime  # noqa: E402
 import settings_merge as sm  # noqa: E402
 
@@ -422,6 +423,7 @@ def _say_run(argv: List[str], cdx: Path, dry: bool) -> int:
 
 
 def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False) -> int:
+    comps = list(comps)
     repo, cdx, root = Path(repo).resolve(), codex_home(str(cdx)), ps.data_root()
     rc, out = di.capture(["codex", "--version"], env=child_env(cdx), timeout=60)
     ver = codex_version(out)
@@ -457,6 +459,8 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     print("CODEX_HOME=%s codex plugin add %s --json" % (cdx, ID))
     if dry:
         migrate_legacy(cdx, Path.home(), dry=True)
+        if "rea" in comps:
+            rea_setup.install("codex", child_env(cdx), yes, True)
         return 0
     rc, out = di.capture(["codex", "plugin", "add", ID, "--json"], env=child_env(cdx), timeout=300)
     try:
@@ -499,6 +503,13 @@ def setup(repo: Path, cdx: Path, comps: List[str], yes: bool, dry: bool = False)
     if fallback:
         print("note: python3 3.9+ is not on PATH; Jev MCP runs with %s (re-run setup after each update)" % fallback)
     trust_hooks(cdx, rec, yes)
+    if "rea" in comps:
+        prior = rec.get("rea") if isinstance(rec.get("rea"), dict) else None
+        rea = rea_setup.install("codex", child_env(cdx), yes, dry, prior=prior)
+        if rea:
+            rec["rea"] = rea
+        elif prior is None:
+            comps.remove("rea")
     ps._save_json(rec_path, rec)  # trust is written: uninstall must be able to remove it even if a later step fails
     ps.write_workflow_doc(repo, root)
     ps.write_chain_local(root, comps, None, repo, cdx)  # the shared-choices warning names the other accounts only
@@ -549,7 +560,26 @@ def _remove_config(cfg: Path, rec: dict) -> bool:
     return True
 
 
-def uninstall(cdx: Path) -> int:
+def rea_extras(cdx: Path) -> List[List[str]]:
+    """The REA removal command when the Codex record says setup installed REA there."""
+    rec = ps._load_json(codex_home(str(cdx)) / RECORD, {})
+    return [rea_setup.remove_argv("codex")] if isinstance(rec, dict) and isinstance(rec.get("rea"), dict) else []
+
+
+def _remove_extras(cdx: Path, rec: dict, extras: List[List[str]]) -> None:
+    """Run the confirmed removal commands (a failure warns, the uninstall goes on), then REA's skill folder when it
+    is a plain one."""
+    for argv in extras:
+        print("CODEX_HOME=%s %s" % (cdx, " ".join(argv)))
+        rc = di.run(argv, env=child_env(cdx))
+        if rc != 0:
+            print("warning: `%s` failed (exit %d); remove it by hand" % (" ".join(argv), rc))
+    rea = rec.get("rea") if isinstance(rec.get("rea"), dict) else None
+    if rea and rea_setup.remove_argv("codex") in extras:
+        print(rea_setup.remove_skill(rea, cdx))
+
+
+def uninstall(cdx: Path, extras: Optional[List[List[str]]] = None) -> int:
     """Dryas out of one CODEX_HOME: the plugin, the marketplace (when setup added it), the recorded hook trust and
     the config tables setup wrote, the accounts.json entry, the record. A legacy Codex copy install there goes the
     way setup migrates it (a live Claude copy install is kept). Other CODEX_HOMEs and the data root stay."""
@@ -572,6 +602,7 @@ def uninstall(cdx: Path) -> int:
     if not rec or not isinstance(rec.get("trusted", {}), dict):
         print("error: %s cannot be read; nothing removed (fix or remove it and re-run)" % rec_path)
         return 1
+    _remove_extras(cdx, rec, extras or [])
     rc = _say_run(["codex", "plugin", "remove", ID], cdx, False)
     if rc:
         print("warning: `codex plugin remove` failed (exit %d); remove %s by hand (codex plugin remove %s)"

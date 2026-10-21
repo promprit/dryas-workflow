@@ -70,6 +70,8 @@ If an old Codex copy install still runs from that dir's runtime files, a `--harn
 
 The third-party plugins setup installed for that dir (the Ruflo plugins `ruflo-core`, `ruflo-swarm`, `ruflo-testgen` and `ruflo-jujutsu`, Impeccable and UI UX Pro Max) are recorded in the dir's `.dryas-plugin.json` as setup ran them. `--uninstall` lists the `claude plugin uninstall <id>` commands that undo them and asks `Remove them too?`; `--yes` runs them, `--keep-extras` leaves them without asking (the commands are printed for later). The global `npm uninstall -g ruflo` is offered only on the last account, when no other Claude config dir or Codex home is listed in `accounts.json` (every account and Codex share the npm package). Their marketplaces (`ruflo`, `impeccable`, `ui-ux-pro-max-skill`) are never removed, since you may have installed other plugins from them; the `claude plugin marketplace remove` commands are printed. A failed removal is a warning; the uninstall goes on.
 
+REA (when setup recorded it for that dir) is removed with `claude mcp remove --scope user rea` run against that config dir (Codex: `codex mcp remove rea` with that Codex home). Then its recorded `reverse-engineer-anything` skill folder is deleted, if it is a real directory; if no folder was recorded, the uninstall prints the path to remove by hand. The commands are listed and confirmed like the other extras; `--keep-extras` leaves REA and prints them. `rea uninstall` is never run, because it removes REA from every client, not just this one.
+
 **Legacy cleanup.** For an account Dryas set up (its record exists in that dir), uninstall also offers the pre-2.0 Ruflo pieces still on the machine, offered by default and skipped with `--keep-extras`, each asked separately (under `--uninstall --yes` only the extras Dryas installed, listed above, are removed; every other legacy item is printed with its command and left for you to run): the Ruflo plugins, the global `npm uninstall -g ruflo` (last account only) and the `ruflo` folder under the data root. The folder is offered only on the last account and when no other account's install record lists Ruflo; the Ruflo folder is never removed by `--yes` (the exact `rm -rf` command is printed), and if `dryas.db` has no rows imported from Ruflo the prompt says the memory was never imported and names `dryas memory import-ruflo`. A dir Dryas never set up is not offered any of it.
 
 `--purge` also removes the entries Dryas owns in `~/.dryas` (`accounts.json`, `chain.local.json`, `docs`, `jev`, `ruflo`), and only when `accounts.json` lists no other Claude config dir and no Codex home (`claude_dirs` and `codex_dirs`) and no old Codex copy install uses it (uninstall each Codex home first, or in the same run with `--harness both`). That deletes your Jev logs, your `/tune` thresholds, saved handoffs and Ruflo memory. It keeps your Dryas memory (`dryas.db` is not among the entries Dryas removes) and your notes in `~/.dryas/docs/dryas-local.md`. It refuses when `accounts.json` is missing or unreadable or the dir's record cannot be read (that dir then stays listed), and it never removes files Dryas did not create.
@@ -101,9 +103,12 @@ Manual route, inside Claude Code:
 | Ruflo (optional extra) | Alternative memory provider and its hooks and plugins ([ruvnet/ruflo](https://github.com/ruvnet/ruflo), latest; tested 3.53.0). Needs Node and npm | off by default; `--with-ruflo` adds, `--no-ruflo` skips |
 | Superpowers (optional extra) | The upstream process skills ([obra/superpowers](https://github.com/obra/superpowers), from the `claude-plugins-official` marketplace; plugin tested 6.4.1) | off by default; `--with-superpowers` adds, `--no-superpowers` skips |
 | Design skills | [Impeccable](https://github.com/pbakaus/impeccable) (latest; tested 4.5.0) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | `--no-design` skips |
+| REA (optional extra) | [rea-agents](https://github.com/morluto/rea) 6.7.0 (pinned): MCP server `rea` + skill `reverse-engineer-anything`, per Claude config dir (and Codex home with `--harness codex\|both\|all`); not for OpenCode or cloud. Needs Node.js 22.19+, 24.11+ or 26+ (else skipped with a warning). Setup shows REA's own dry run and asks before it changes the account's config; REA keeps its own backup of that config | `--no-rea` skips; `--with-rea` adds on an upgrade |
 | pstack picks | Interrogate review, cleanup, benchmark checklist and principles, adapted from [pstack-claude](https://github.com/michael-denyer/pstack-claude) (see NOTICE.md) | `--no-pstack-picks` skips |
 
 > Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`. (Applies to the Ruflo and Superpowers rows above.)
+
+A first install that skips REA (no suitable Node, declined, or a failed setup) leaves it out of the record; it is not recorded, so later upgrades don't offer it again: add it with `--with-rea`.
 
 Dryas installs the latest version of each component. If Dryas's Ruflo patches do not apply to the latest Ruflo, the installer falls back to the tested version. A weekly CI job checks the latest Ruflo.
 
@@ -144,6 +149,7 @@ These are the reference implementation's bindings, not part of the method; each 
 | [Ruflo](https://github.com/ruvnet/ruflo) | Optional memory and orchestration | `--with-ruflo` (`--memory ruflo`) |
 | [Superpowers](https://github.com/obra/superpowers) | Optional alternative process skills | `--with-superpowers` |
 | [Impeccable](https://github.com/pbakaus/impeccable) and [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Design skills, installed by default | skip with `--no-design` |
+| [REA](https://github.com/morluto/rea) (`rea-agents` 6.7.0, optional extra) | Reverse-engineering MCP server and skill, for software without source. Needs Node.js 22.19+, 24.11+ or 26+ | installed by default; skip with `--no-rea` |
 | [pstack](https://github.com/michael-denyer/pstack-claude) picks | Interrogate review, cleanup, benchmark checklist, executor principles (vendored, adapted) | skip with `--no-pstack-picks` |
 
 > Deprecated: removed in a future release. Dryas memory and the Dryas skills replace them. Bring 1.x Ruflo memory across with `dryas memory import-ruflo`. (Applies to the Ruflo and Superpowers rows above.)
@@ -159,18 +165,20 @@ Optional, installed separately: [FlowObserve](https://github.com/promprit/flowob
 | `--with-ruflo` | Add the Ruflo extra (needs Node and npm) |
 | `--with-superpowers` | Add the Superpowers extra |
 | `--with-design` | Add the design skills (they are on by default; this keeps them on an upgrade that dropped them) |
+| `--with-rea` | Add REA on an upgrade that does not have it |
 | `--no-memory` | Do not use Dryas memory |
 | `--no-jev` | Alias for `--judge local`: the gate stays on with the local judge. On a flag-less upgrade of an install that had no Jev, the gates stay off; passing `--no-jev` or `--judge` turns them on |
 | `--no-ruflo` | Do not install Ruflo, or drop it on an upgrade |
 | `--no-superpowers` | Do not install Superpowers, or drop it on an upgrade. Codex never installs it |
 | `--no-design` | Do not install Impeccable or UI UX Pro Max |
+| `--no-rea` | Do not set up REA, or drop it on an upgrade |
 | `--no-pstack-picks` | Do not install the pstack picks |
 | `--yes` | Answer yes to every question: the third-party installs, the settings merge, the uninstall and purge confirmation, the removal of the third-party plugins and, for Codex, the hook trust |
 | `--force` | No effect: Claude Code and Codex both install a plugin, so there are no copied files to replace (kept so older scripts still run) |
 | `--dry-run` | Print the plan and the settings diff, change nothing (skips third-party installs and verify) |
 | `--uninstall` | Remove Dryas from one Claude config dir, or with `--harness codex\|both` from one Codex home (`--codex-dir`) |
 | `--purge` | With `--uninstall`: also remove Dryas's entries in `~/.dryas` (logs, `/tune` thresholds, handoffs; keeps `dryas-local.md`) when no other Claude config dir or Codex home uses it. The paths are listed and confirmed first |
-| `--keep-extras` | With `--uninstall`: leave the third-party plugins setup installed (Ruflo plugins, Impeccable, UI UX Pro Max, the global `ruflo` npm package) in place without asking |
+| `--keep-extras` | With `--uninstall`: leave the third-party plugins setup installed (Ruflo plugins, Impeccable, UI UX Pro Max, the global `ruflo` npm package) and REA in place without asking; REA's removal commands are printed |
 | `--preflight-only` | Run the prerequisite checks and stop |
 | `--harness claude\|codex\|both\|opencode\|all` | Choose what to install for. Claude Code is the default. `both` is Claude Code and Codex; `all` adds OpenCode |
 | `--claude-dir DIR` | The Claude config dir to set up (default `$CLAUDE_CONFIG_DIR`, else `~/.claude`) |

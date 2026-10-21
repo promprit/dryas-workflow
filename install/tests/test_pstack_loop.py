@@ -69,7 +69,15 @@ def plugin_form(t):
                  ("reason naming what Opus could not resolve). If Fable is unavailable", "reason naming what the strong tier could not resolve). If the frontier tier is unavailable"),
                  ("5. A Fable failure comes", "5. A frontier failure comes")):
         t = t.replace(a, b)
-    return t
+    return with_rea_line(t, "- Design work")
+
+
+REA_LINE = "- Reverse-engineering work (how software you don't have the source for does something): use REA; brainstorm says when it recommends it, the user can decline."
+
+
+def with_rea_line(t, anchor):
+    """The REA rule came after the fixtures: insert it on its own line right after the anchor line."""
+    return re.sub(r"^(%s.*\n)" % re.escape(anchor), lambda m: m.group(1) + REA_LINE + "\n", t, count=1, flags=re.M)
 
 
 CODEX_SKILLS = re.compile(r"\$(benchmark-checklist|orchestrate|interrogate|wreview|commit|wplan|tune)(?![A-Za-z0-9_-])")
@@ -82,9 +90,10 @@ def codex_form(t, rel):
     (given by the rules hook); AGENTS.md keeps {{CD}} (rendered by the hook) and points at ~/.dryas/docs."""
     t = CODEX_SKILLS.sub(r"$dryas:\1", t)
     if rel.endswith("AGENTS.md.template"):
-        return t.replace("Full reference: `{{CD}}/docs/dryas-workflow.md`.",
-                         "Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: "
-                         "`~/.dryas/docs/dryas-local.md`).")
+        t = t.replace("Full reference: `{{CD}}/docs/dryas-workflow.md`.",
+                      "Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: "
+                      "`~/.dryas/docs/dryas-local.md`).")
+        return with_rea_line(t, "- Brainstorm first")
     for a, b in (('"{{PY}}" -X utf8 "{{CD}}/jev/', '"<dryas-py>" -X utf8 "<dryas-root>/jev/'),
                  ("{{CD}}/jev/thresholds.json", "~/.dryas/jev/thresholds.json"), ("{{CD}}/", "<dryas-root>/")):
         t = t.replace(a, b)
