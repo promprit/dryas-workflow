@@ -40,8 +40,11 @@ class WatchTest(unittest.TestCase):
         self.old = {k: os.environ.get(k) for k in ("JEV_HANDOFF_DIR", "FO_PORT")}
         os.environ["JEV_HANDOFF_DIR"] = self.tmp
         os.environ.pop("FO_PORT", None)
+        self.every = usage_watch.CHECK_EVERY_S
+        usage_watch.CHECK_EVERY_S = 0  # these tests check every prompt; ThrottleTest covers the interval
 
     def tearDown(self):
+        usage_watch.CHECK_EVERY_S = self.every
         for k, v in self.old.items():
             if v is None:
                 os.environ.pop(k, None)
@@ -218,6 +221,81 @@ class WatchTest(unittest.TestCase):
 
     def test_invalid_own_label_is_silent(self):
         self.assertIsNone(usage_watch.run(self.ev(), server(acct("te am", 0.95), acct("team2", 0.1), me="te am")))
+
+
+class ThrottleTest(unittest.TestCase):
+    """FlowObserve is asked at most once per CHECK_EVERY_S per session; other prompts only read a file's age."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.old = os.environ.get("JEV_HANDOFF_DIR")
+        os.environ["JEV_HANDOFF_DIR"] = self.tmp
+        self.t = 1_800_000_000.0
+
+    def tearDown(self):
+        if self.old is None:
+            os.environ.pop("JEV_HANDOFF_DIR", None)
+        else:
+            os.environ["JEV_HANDOFF_DIR"] = self.old
+
+    def run_at(self, dt, f, sid=SID):
+        return usage_watch.run({"session_id": sid}, f, now=lambda: self.t + dt)
+
+    def test_interval_is_a_minute(self):
+        self.assertEqual(usage_watch.CHECK_EVERY_S, 60)
+
+    def test_second_prompt_within_a_minute_does_not_fetch(self):
+        f = server(acct("team", 0.5), acct("team2", 0.1))
+        self.run_at(0, f)
+        n = len(f.calls)
+        self.assertIsNone(self.run_at(59, f))
+        self.assertEqual(len(f.calls), n)
+
+    def test_after_a_minute_fetches_and_warns(self):
+        self.run_at(0, server(acct("team", 0.5), acct("team2", 0.1)))
+        f = server(acct("team", 0.92), acct("team2", 0.1))
+        self.assertIsNotNone(self.run_at(60, f))
+        self.assertTrue(f.calls)
+
+    def test_failed_fetch_also_waits(self):
+        calls = []
+        self.run_at(0, lambda u, t: calls.append(u))
+        self.run_at(30, lambda u, t: calls.append(u))
+        self.assertEqual(len(calls), 1)
+
+    def test_sessions_are_throttled_apart(self):
+        self.run_at(0, server(acct("team", 0.5), acct("team2", 0.1)))
+        f = server(acct("team", 0.92), acct("team2", 0.1), me="team")
+        self.assertIsNotNone(self.run_at(1, f, sid="sess-2"))
+
+    def test_clock_set_back_checks_again(self):
+        self.run_at(0, server(acct("team", 0.5), acct("team2", 0.1)))
+        f = server(acct("team", 0.92), acct("team2", 0.1))
+        self.assertIsNotNone(self.run_at(-3600, f))
+
+    def test_unsafe_session_id_is_throttled_by_hash(self):
+        calls = []
+        self.run_at(0, lambda u, t: calls.append(u), sid="a b/c")
+        self.run_at(1, lambda u, t: calls.append(u), sid="a b/c")
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(any("/" in n or " " in n for n in os.listdir(os.path.join(self.tmp, ".usage-warned"))))
+
+    def test_marker_is_private(self):
+        self.run_at(0, lambda u, t: None)
+        d = os.path.join(self.tmp, ".usage-warned")
+        self.assertEqual(stat.S_IMODE(os.stat(d).st_mode), 0o700)
+        for n in os.listdir(d):
+            self.assertEqual(stat.S_IMODE(os.stat(os.path.join(d, n)).st_mode), 0o600)
+
+    def test_throttled_prompt_loads_no_socket_or_hashlib(self):
+        import subprocess
+        code = ("import os, sys, time; sys.path.insert(0, %r); os.environ['JEV_HANDOFF_DIR'] = %r; import usage_watch; "
+                "usage_watch.run({'session_id': 'sess-9'}, lambda u, t: None); "
+                "[sys.modules.pop(m, None) for m in ('socket', 'hashlib')]; "
+                "usage_watch.run({'session_id': 'sess-9'}); print('socket' in sys.modules, 'hashlib' in sys.modules)"
+                % (HERE, self.tmp))
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        self.assertEqual(out.stdout.strip(), "False False", out.stderr)
 
 
 if __name__ == "__main__":
