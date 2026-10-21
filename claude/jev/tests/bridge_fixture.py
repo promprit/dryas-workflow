@@ -37,10 +37,10 @@ def write_session(cd, pid, sid, name, proc_start=None, kind="interactive", statu
 
 
 class Sandbox:
-    """A temp data root whose accounts.json lists two fake config dirs (.claude, .claude-two); env patched for the
+    """A temp data root whose accounts.json lists two fake config dirs (.claude, .claude-two); HOME is the temp dir, so discovery never scans the real home; env patched for the
     test; child processes killed and the folder removed at cleanup."""
 
-    def __init__(self, test):
+    def __init__(self, test, dryas=True):
         import bridge_peers
         if os.getppid() <= 1:
             test.skipTest("the caller's session is found from the parent pid; this test runs under pid 1")
@@ -50,9 +50,14 @@ class Sandbox:
         os.makedirs(self.root)
         self.acc1 = os.path.join(self.d, ".claude")
         self.acc2 = os.path.join(self.d, ".claude-two")
+        if dryas:
+            for a in (self.acc1, self.acc2):
+                os.makedirs(a, exist_ok=True)
+                with open(os.path.join(a, ".dryas-plugin.json"), "w", encoding="utf-8") as f:
+                    f.write("{}")
         with open(os.path.join(self.root, "accounts.json"), "w", encoding="utf-8") as f:
             json.dump({"claude_dirs": [self.acc1, self.acc2]}, f)
-        p = mock.patch.dict(os.environ, {"DRYAS_DATA_ROOT": self.root, "CLAUDE_CONFIG_DIR": self.acc1,
+        p = mock.patch.dict(os.environ, {"HOME": self.d, "DRYAS_DATA_ROOT": self.root, "CLAUDE_CONFIG_DIR": self.acc1,
                                          "JEV_LOG_DIR": os.path.join(self.d, "logs")})
         p.start()
         test.addCleanup(p.stop)

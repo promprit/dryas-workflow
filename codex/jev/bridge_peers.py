@@ -1,5 +1,5 @@
 """Bridge discovery and identity (docs/specs/2026-10-18-cross-account-bridge-design.md §4): live Claude Code sessions
-in every config dir listed in accounts.json. Reads only <dir>/sessions/*.json and only the fields in FIELDS; *.key
+in every config dir listed in accounts.json or found under ~/.claude*. Reads only <dir>/sessions/*.json and only the fields in FIELDS; *.key
 files are never opened. A missing or broken file is skipped, never raised."""
 import json
 import os
@@ -14,8 +14,9 @@ import paths
 
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 FIELDS = ("pid", "procStart", "sessionId", "name", "cwd", "status", "updatedAt", "kind")
-PEER_KEYS = ("name", "sessionId", "account", "cwd", "status", "idle_for", "same_account", "kind")
-HINT = "same-account peers: native SendMessage reaches them even when idle; use send_message for other accounts"
+PEER_KEYS = ("name", "sessionId", "account", "cwd", "status", "idle_for", "same_account", "kind", "dryas")
+HINT = ("same-account peers: native SendMessage reaches them even when idle; use send_message for other accounts"
+        "; a peer with dryas false cannot receive bridge messages (install Dryas on its account)")
 _ME: Dict[str, Any] = {}  # this MCP server's own session's pid and config dir, kept once found
 
 
@@ -23,8 +24,39 @@ def own_dir() -> str:
     return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
 
 
+def discovered_dirs() -> List[str]:
+    """Config dirs found by scanning the home folder: ~/.claude, ~/.claude-* and ~/.claude.* that are real
+    directories (not symlinks) with a sessions folder. Sorted; [] on any error."""
+    home = os.path.expanduser("~")
+    try:
+        names = sorted(os.listdir(home))
+    except OSError:
+        return []
+    out = []
+    for n in names:
+        d = os.path.join(home, n)
+        if (n == ".claude" or n.startswith(".claude-") or n.startswith(".claude.")) and not os.path.islink(d) \
+                and os.path.isdir(os.path.join(d, "sessions")):
+            out.append(d)
+    return out
+
+
+def has_dryas(d: str) -> bool:
+    return os.path.isfile(os.path.join(d, ".dryas-plugin.json"))
+
+
+def _with_discovered(dirs: List[str]) -> List[str]:
+    seen = {os.path.realpath(d) for d in dirs}
+    for d in discovered_dirs():
+        if os.path.realpath(d) not in seen:
+            seen.add(os.path.realpath(d))
+            dirs.append(d)
+    return dirs
+
+
 def account_dirs() -> Tuple[List[str], Optional[str]]:
-    """The config dirs to search, each once, and a note when accounts.json could not be used."""
+    """The config dirs to search, each once (accounts.json first, then discovered ones), and a note when
+    accounts.json could not be used."""
     try:
         with open(paths.accounts_file(), encoding="utf-8") as f:
             raw = json.load(f).get("claude_dirs")
@@ -35,10 +67,10 @@ def account_dirs() -> Tuple[List[str], Optional[str]]:
                 seen.add(os.path.normpath(d))
                 dirs.append(d)
         if dirs:
-            return dirs, None
+            return _with_discovered(dirs), None
     except (OSError, ValueError, AttributeError, TypeError):
         pass
-    return [own_dir()], "accounts.json unreadable; this account only"
+    return _with_discovered([own_dir()]), "accounts.json unreadable; found accounts by scanning ~/.claude*"
 
 
 def account(d: str) -> str:
@@ -198,7 +230,8 @@ def _peer(s: Dict[str, Any], mine: str, now: float) -> Dict[str, Any]:
     idle = int(max(0.0, now - upd / 1000.0)) if isinstance(upd, (int, float)) and not isinstance(upd, bool) else None
     return {"name": str(s["name"] or "")[:120], "sessionId": s["sessionId"], "account": account(s["_dir"]),
             "cwd": str(s["cwd"] or "")[:500], "status": str(s["status"] or "")[:16], "idle_for": idle,
-            "same_account": os.path.normpath(s["_dir"]) == mine, "kind": str(s["kind"] or "")}
+            "same_account": os.path.normpath(s["_dir"]) == mine, "kind": str(s["kind"] or ""),
+            "dryas": has_dryas(s["_dir"])}
 
 
 def list_peers(now: Optional[float] = None) -> Dict[str, Any]:
