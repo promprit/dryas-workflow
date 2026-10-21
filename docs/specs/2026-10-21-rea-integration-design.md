@@ -68,18 +68,20 @@ REA is not a Claude plugin, so it does not go through `run_cmd.thirdparty` or `i
 
 - Constants: `VERSION = "6.7.0"`, `PKG = "rea-agents@6.7.0"`, `MIN_NODE = ((22, 19), (24, 11), (26, 0))`.
 - `node_ok(run=...) -> Optional[str]`: runs `node --version`; returns `None` when Node meets `MIN_NODE` (major 22 needs >=22.19, 24 needs >=24.11, 26 or later passes; 23 and 25 fail), else the warning text. No `node` or no `npx` on PATH also returns the warning.
-- `setup_argv(client)`, `dry_run_argv(client)`, `doctor_argv(client)`: `npx -y rea-agents@6.7.0 setup --client <client> --yes --json`, the same with `--dry-run --json` in place of `--yes --json`, and `doctor --client <client> --skill --json`.
+- `setup_argv(client)`, `dry_run_argv(client)`, `doctor_argv(client)`: `npx -y rea-agents@6.7.0 setup --client <client> --yes --format json`, the same with `--dry-run` in place of `--yes`, and `doctor --client <client> --skill --format json`.
 - `install(client, env, yes, dry_run) -> Optional[dict]`: the flow in 4.3; returns the record entry (4.3) or `None` when skipped or failed. Never raises, never returns a failing exit code to the caller.
 - `uninstall_cmds(entry, client, env) -> List[List[str]]` and `uninstall(...)`: 4.5.
 
-The plan's first task confirms against `rea-agents@6.7.0` (run in the scratchpad, not on an account): the `setup` flags above, the `doctor` JSON field that holds the skill path, and the Codex removal command. Where they differ, the module follows the real CLI and the spec is amended in the same task.
+Confirmed against `rea-agents@6.7.0` on 2026-10-21 (probe and a real install on this Mac's four accounts): the flags above; `setup --dry-run --format json` returns `{"status": "planned", "plannedActions": [...]}` where the action with `kind == "install_skill"` has `target` = the skill directory (`<config dir>/skills/reverse-engineer-anything`); `setup --yes` returns `status: "ready"`; `doctor` returns `identity.skill.state` (`aligned` when ready, `missing` otherwise) and `identity.registrations[]` with `client` and `state`, but no skill path. For the default account (`~/.claude`, config `~/.claude.json`) `CLAUDE_CONFIG_DIR` must be unset, not set to `~/.claude`. The Codex removal command is confirmed in the plan's Codex task.
+
+Existing accounts on this Mac (`~/.claude`, `~/.claude-team`, `~/.claude-team2`, `~/.claude-team2-vipa`) got REA by hand on 2026-10-21. Their `.dryas-plugin.json` does not record it; the next `install.sh --with-rea` re-runs setup (idempotent: REA reports `aligned`) and records it.
 
 ### 4.2 Selection (`install/run_cmd.py`)
 
 - `rea` joins `OPTIONAL` and `FRESH`.
 - `--with-rea` is added: every hard-coded `("ruflo", "superpowers", "design")` tuple for `with_*` flags in `run_cmd.py` (the `parse` loop and contradiction check, `select`, the `no_flags` check that the Codex legacy-record path depends on) gains `"rea"`. The plan replaces them with one module constant `WITH = ("ruflo", "superpowers", "design", "rea")`.
 - Upgrade: the recorded component list wins, so an account without `rea` recorded does not get it unless `--with-rea`.
-- `plugin_setup.py` keeps passing only `ruflo`, `design`, `superpowers` to `thirdparty`; after it, when `rea` is selected, it calls `rea_setup.install("claude_code", env, yes, dry_run)` with the same `env` (which carries `CLAUDE_CONFIG_DIR`).
+- `plugin_setup.py` keeps passing only `ruflo`, `design`, `superpowers` to `thirdparty`; after it, when `rea` is selected, it calls `rea_setup.install("claude_code", env, yes, dry_run)` with the same `env` (which carries `CLAUDE_CONFIG_DIR`). For the default dir `~/.claude`, `rea_setup` removes `CLAUDE_CONFIG_DIR` from the env it passes to REA (REA then targets `~/.claude.json`).
 
 ### 4.3 Running it
 
@@ -87,7 +89,7 @@ The plan's first task confirms against `rea-agents@6.7.0` (run in the scratchpad
 2. `--dry-run` of our installer: print the `setup_argv` it would run, run nothing, return `None`.
 3. Run `dry_run_argv` and print its output, then ask `Install REA? [Y/n]` (`dryas_install.confirm`). This is REA's own prompt, separate from and after the batch "Run these?" of `thirdparty`, so REA's planned changes are always shown before they are approved. `--yes` skips the question (the dry run is still printed). Declined: `skipped REA`, return `None`.
 4. Run `setup_argv`. Non-zero exit: `warning: REA setup failed (exit N); REA is optional, Dryas setup continues`, return `None`. REA's setup backs up the configuration it edits and pins its MCP registration to the exact version.
-5. Run `doctor_argv`; read the skill path from its JSON (field confirmed in 4.1's first task). Missing or unparsable: `skill_dir` is `null`.
+5. The skill path is the `target` of the `install_skill` action in step 3's dry-run JSON. Missing or unparsable: `skill_dir` is `null`. Then run `doctor_argv` and require `identity.skill.state == "aligned"`; otherwise warn (still record, so uninstall can clean up).
 6. Return the record entry `{"version": "6.7.0", "client": "claude_code", "skill_dir": "<path>" | null}`.
 
 Record (`.dryas-plugin.json`): on a returned entry, `rea` is added to `components` and the entry is stored under a new key `rec["rea"]`. Nothing about REA goes into `rec["thirdparty"]`, so the generic third-party uninstall never sees it. On `None`, `rea` is left out of `components`.
@@ -99,7 +101,7 @@ Record (`.dryas-plugin.json`): on a returned entry, `rea` is added to `component
 
 ### 4.5 Uninstall
 
-- Per config dir, when `rec["rea"]` exists: `claude mcp remove --scope user rea` with `CLAUDE_CONFIG_DIR` set, then remove `skill_dir` if recorded and it is a real directory (not a symlink) whose name contains `rea`. Codex: the Codex removal command confirmed in 4.1's first task, with `CODEX_HOME` set, then its `skill_dir`.
+- Per config dir, when `rec["rea"]` exists: `claude mcp remove --scope user rea` with `CLAUDE_CONFIG_DIR` set, then remove `skill_dir` if recorded and it is a real directory (not a symlink) whose name contains `rea`. Codex: the Codex removal command confirmed in the plan's Codex task, with `CODEX_HOME` set, then its `skill_dir`.
 - No `skill_dir` recorded: nothing is deleted by guess; the uninstall prints the manual step instead.
 - Listed in the uninstall plan and confirmed like the other extras; `--keep-extras` leaves REA and prints the commands; `--yes` runs them.
 - A failed removal is a warning; the uninstall goes on.
@@ -115,7 +117,7 @@ Same flags passed through to `run_cmd.py`; usage line updated.
 
 ### 4.8 Release check (`tools/release_check.py`)
 
-When `rec["rea"]` exists in the config dir's `.dryas-plugin.json`: run `npx -y rea-agents@6.7.0 doctor --client claude_code --skill --json` with `CLAUDE_CONFIG_DIR` set and report `identity.skill.state`. Not ready, or the command failing: a warning, not a failure. Not recorded: skipped, not reported as missing.
+When `rec["rea"]` exists in the config dir's `.dryas-plugin.json`: run `npx -y rea-agents@6.7.0 doctor --client claude_code --skill --format json` with `CLAUDE_CONFIG_DIR` set and report `identity.skill.state`. Not `aligned`, or the command failing: a warning, not a failure. Not recorded: skipped, not reported as missing.
 
 ### 4.9 Docs (`docs/install.md`)
 
