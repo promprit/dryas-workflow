@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- REA on demand (Claude Code): setup no longer leaves REA's MCP server in every session. It installs REA's skill, then removes REA's user-scope MCP entry (an upgrade asks first), so sessions that never reverse engineer anything no longer start a Node process for REA (1.0 to 1.6 s each) or carry its 207 tool names and instructions (about 1.9k tokens per turn). `dryas rea on|off|status` connects it for one project (local scope, keyed by the git root, no approval prompt); the next session there loads it. Brainstorm offers REA's command line for a one-off question (no restart) and `dryas rea on` for an investigation. `release_check.py` warns when REA is still at user scope. Uninstall skips the user-scope removal when there is no such entry.
+
 ## 2.4.0 - 2026-10-22
 
 Four features on 2.3.2: the cross-account bridge, the usage-limit handoff, the project-local judge and REA as an optional extra. Compared with 2.3.2 (`tools/compare_release.py`, `tools/compare_v1.py`): no new approval prompts; prompt hooks 86.0 -> 86.9 ms (within noise); tool-call hooks 54.9 -> 55.4 ms, about 0.5 ms (1%) per call, the project-local judge's marker lookup (+0.2 ms in the gate) and a larger chain.py (+0.16 ms), accepted as that feature's cost.

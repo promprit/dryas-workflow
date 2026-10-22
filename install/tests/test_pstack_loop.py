@@ -69,15 +69,17 @@ def plugin_form(t):
                  ("reason naming what Opus could not resolve). If Fable is unavailable", "reason naming what the strong tier could not resolve). If the frontier tier is unavailable"),
                  ("5. A Fable failure comes", "5. A frontier failure comes")):
         t = t.replace(a, b)
-    return with_rea_line(t, "- Design work")
+    return with_rea_line(t, "- Design work", CLAUDE_REA_LINE)
 
 
 REA_LINE = "- Reverse-engineering work (how software you don't have the source for does something): use REA; brainstorm says when it recommends it, the user can decline."
+CLAUDE_REA_LINE = ("- Reverse-engineering work (software without source): use REA, on demand (`dryas rea on`, then restart; "
+                   "never `rea setup`); brainstorm says when, the user can decline.")
 
 
-def with_rea_line(t, anchor):
+def with_rea_line(t, anchor, line=REA_LINE):
     """The REA rule came after the fixtures: insert it on its own line right after the anchor line."""
-    return re.sub(r"^(%s.*\n)" % re.escape(anchor), lambda m: m.group(1) + REA_LINE + "\n", t, count=1, flags=re.M)
+    return re.sub(r"^(%s.*\n)" % re.escape(anchor), lambda m: m.group(1) + line + "\n", t, count=1, flags=re.M)
 
 
 CODEX_SKILLS = re.compile(r"\$(benchmark-checklist|orchestrate|interrogate|wreview|commit|wplan|tune)(?![A-Za-z0-9_-])")

@@ -538,6 +538,10 @@ def _remove_extras(cd: Path, rec: dict, extras: List[List[str]]) -> None:
     """Run the confirmed third-party removal commands (failures warn, the uninstall goes on); say how to remove
     what stays: the plugins not removed and the marketplaces, which are never removed here."""
     for argv in extras:
+        if argv == rea_setup.remove_argv("claude_code") and not rea_setup.rea_mode.user_scoped(child_env(cd)):
+            print("REA is on demand here (no user-scope entry); projects where `dryas rea on` connected it keep it "
+                  "until `dryas rea off` there")
+            continue
         print(shown(cd, argv))
         rc = di.run(argv, env=child_env(cd))
         if rc != 0:

@@ -40,6 +40,10 @@ class ReaSetupTest(unittest.TestCase):
     def setUp(self):
         self.orig = (di.run, di.capture, di.confirm, rs.node_ok)
         rs.node_ok = lambda *a, **k: None
+        home = tempfile.mkdtemp()  # never read the real ~/.claude.json (rea_mode.user_scoped with an empty env)
+        p = mock.patch.dict(os.environ, {"HOME": home, "USERPROFILE": home})
+        p.start()
+        self.addCleanup(p.stop)
 
     def tearDown(self):
         di.run, di.capture, di.confirm, rs.node_ok = self.orig

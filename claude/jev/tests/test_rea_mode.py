@@ -122,6 +122,12 @@ class ReaModeTest(unittest.TestCase):
         self.assertEqual((code, self.calls), (0, []))
         self.assertIn("on in " + self.repo, out)
 
+    def test_leading_rea_word_is_dropped(self):
+        self.write_config(project={"rea": {}})
+        code, out = self.run_main("rea", "status")
+        self.assertEqual(code, 0)
+        self.assertIn("on in", out)
+
     def test_usage(self):
         code, out = self.run_main("bogus")
         self.assertEqual(code, 2)
