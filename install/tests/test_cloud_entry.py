@@ -141,7 +141,7 @@ class EntryTest(unittest.TestCase):
         self.assertEqual(between[-1], "exit /b %ERRORLEVEL%")  # :plain never falls into :cloud
         self.assertTrue(between[0].startswith("python -X utf8"))
         self.assertLess(t.index("goto cloud"), t.index(":envpy"))  # dispatch precedes both launcher blocks
-        block = "\n".join(lines[i_cloud:])
+        block = "\n".join(lines[i_cloud:lines.index(":rea")])
         self.assertEqual(block.count('.py" %*'), 4)  # all four launchers pass the whole original line
         self.assertNotIn("%1", block)
         self.assertEqual(block.count("exit /b %ERRORLEVEL%"), 4)
@@ -221,10 +221,18 @@ class CmdShapeTest(unittest.TestCase):
         self.assertNotIn(":collect", t)
         self.assertNotIn("goto collect", t)
         self.assertFalse([ln for ln in t.splitlines() if ln.strip().startswith("shift")])
-        self.assertEqual(t.count('.py" %*'), 8)  # memory x4 and cloud x4 launchers forward the original line
+        self.assertEqual(t.count('.py" %*'), 12)  # memory, cloud and rea x4 launchers forward the original line
 
     def test_setlocal_first(self):
         self.assertEqual(self.text.splitlines()[:2], ["@echo off", "setlocal"])  # variables never leak into the caller
+
+    def test_rea_block_shape(self):
+        lines = [ln.strip() for ln in self.text.splitlines()]
+        block = "\n".join(lines[lines.index(":rea"):])
+        self.assertEqual(block.count('rea_mode.py" %*'), 4)
+        self.assertEqual(block.count("exit /b %ERRORLEVEL%"), 4)
+        order = [block.index(n) for n in ("DRYAS_PY", "where py ", "where python3", "\npython -X")]
+        self.assertEqual(order, sorted(order))
 
     def test_crlf_and_lookup_order_kept(self):
         raw = (ROOT / "claude/bin/dryas.cmd").read_bytes()

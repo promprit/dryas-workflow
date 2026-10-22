@@ -538,6 +538,10 @@ def _remove_extras(cd: Path, rec: dict, extras: List[List[str]]) -> None:
     """Run the confirmed third-party removal commands (failures warn, the uninstall goes on); say how to remove
     what stays: the plugins not removed and the marketplaces, which are never removed here."""
     for argv in extras:
+        if argv == rea_setup.remove_argv("claude_code") and not rea_setup.rea_mode.user_scoped(child_env(cd)):
+            print("REA is on demand here (no user-scope entry); projects where `dryas rea on` connected it keep it "
+                  "until `dryas rea off` there")
+            continue
         print(shown(cd, argv))
         rc = di.run(argv, env=child_env(cd))
         if rc != 0:
@@ -629,6 +633,14 @@ def rea_step(cd: Path, comps: List[str], rec: dict, yes: bool, dry: bool, rec_pa
 def shown(cd: Path, argv: List[str]) -> str:
     """A command line as printed: `claude` ones carry the CLAUDE_CONFIG_DIR prefix of cd."""
     return "%s%s" % (env_prefix(cd) if argv[:1] == ["claude"] else "", " ".join(argv))
+
+
+def shown_extra(cd: Path, argv: List[str]) -> str:
+    """An extras line as listed before the uninstall question: REA's user-scope removal, when there is no such entry
+    (on demand), is listed as what it then does: remove REA's skill folder."""
+    if argv == rea_setup.remove_argv("claude_code") and not rea_setup.rea_mode.user_scoped(child_env(cd)):
+        return "REA's skill folder (REA is on demand here: no user-scope MCP entry to remove)"
+    return shown(cd, argv)
 
 
 def extras_commands(rec: dict, last_account: bool) -> List[List[str]]:

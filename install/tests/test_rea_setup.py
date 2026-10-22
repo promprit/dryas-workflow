@@ -1,4 +1,5 @@
-import json, os, sys, tempfile, unittest
+import io, json, os, sys, tempfile, unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 HERE = Path(__file__).resolve().parent
@@ -40,6 +41,10 @@ class ReaSetupTest(unittest.TestCase):
     def setUp(self):
         self.orig = (di.run, di.capture, di.confirm, rs.node_ok)
         rs.node_ok = lambda *a, **k: None
+        home = tempfile.mkdtemp()  # never read the real ~/.claude.json (rea_mode.user_scoped with an empty env)
+        p = mock.patch.dict(os.environ, {"HOME": home, "USERPROFILE": home})
+        p.start()
+        self.addCleanup(p.stop)
 
     def tearDown(self):
         di.run, di.capture, di.confirm, rs.node_ok = self.orig
@@ -146,6 +151,71 @@ class ReaSetupTest(unittest.TestCase):
             d.mkdir(parents=True)
             entry = rs.install("claude_code", {"CLAUDE_CONFIG_DIR": t}, yes=True, dry_run=False)
             self.assertEqual(entry["skill_dir"], str(d))
+
+    def user_scoped(self, t):
+        with open(os.path.join(t, ".claude.json"), "w", encoding="utf-8") as f:
+            json.dump({"mcpServers": {"rea": {"command": "npx"}, "other": {}}}, f)
+        return {"CLAUDE_CONFIG_DIR": t}
+
+    def test_fresh_install_removes_user_scope_registration(self):
+        # on demand: REA's own setup registers it for every session; Dryas removes that, `dryas rea on` adds it per project
+        f = self.use(Fake())
+        with tempfile.TemporaryDirectory() as t:
+            env = self.user_scoped(t)
+            self.assertIsNotNone(rs.install("claude_code", env, yes=False, dry_run=False))
+        self.assertEqual(f.asked, ["Install REA?"])  # one question: the removal is part of the install
+        self.assertEqual([c[0] for c in f.calls][-1], rs.remove_argv("claude_code"))
+
+    def test_fresh_install_plan_says_it_stays_on_demand(self):
+        self.use(Fake())
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rs.install("claude_code", {}, yes=False, dry_run=False)
+        self.assertIn("removes REA's user-scope MCP entry", buf.getvalue())  # said before "Install REA?"
+
+    def test_fresh_install_without_registration_removes_nothing(self):
+        f = self.use(Fake())
+        with tempfile.TemporaryDirectory() as t:
+            rs.install("claude_code", {"CLAUDE_CONFIG_DIR": t}, yes=True, dry_run=False)
+        self.assertNotIn(rs.remove_argv("claude_code"), [c[0] for c in f.calls])
+
+    def test_upgrade_asks_then_removes_user_scope_registration(self):
+        f = self.use(Fake())
+        prior = {"version": rs.VERSION, "client": "claude_code", "skill_dir": None}
+        with tempfile.TemporaryDirectory() as t:
+            rs.install("claude_code", self.user_scoped(t), yes=False, dry_run=False, prior=prior)
+        self.assertEqual(f.asked, ["Make REA on demand (remove its MCP entry from every session)?"])
+        self.assertEqual([c[0] for c in f.calls], [rs.doctor_argv("claude_code"), rs.remove_argv("claude_code")])
+
+    def test_upgrade_declined_keeps_registration(self):
+        f = self.use(Fake(answer=False))
+        prior = {"version": rs.VERSION, "client": "claude_code", "skill_dir": None}
+        with tempfile.TemporaryDirectory() as t:
+            entry = rs.install("claude_code", self.user_scoped(t), yes=False, dry_run=False, prior=prior)
+        self.assertEqual(entry["version"], rs.VERSION)
+        self.assertNotIn(rs.remove_argv("claude_code"), [c[0] for c in f.calls])
+
+    def test_upgrade_yes_removes_without_asking(self):
+        f = self.use(Fake())
+        prior = {"version": rs.VERSION, "client": "claude_code", "skill_dir": None}
+        with tempfile.TemporaryDirectory() as t:
+            rs.install("claude_code", self.user_scoped(t), yes=True, dry_run=False, prior=prior)
+        self.assertEqual(f.asked, [])
+        self.assertIn(rs.remove_argv("claude_code"), [c[0] for c in f.calls])
+
+    def test_codex_keeps_its_registration(self):
+        f = self.use(Fake())
+        with tempfile.TemporaryDirectory() as t:
+            rs.install("codex", dict(self.user_scoped(t), CODEX_HOME=t), yes=True, dry_run=False)
+        self.assertNotIn(rs.remove_argv("codex"), [c[0] for c in f.calls])
+        self.assertNotIn(rs.remove_argv("claude_code"), [c[0] for c in f.calls])
+
+    def test_failed_removal_is_a_warning(self):
+        f = self.use(Fake())
+        f.run = lambda argv, cwd=None, env=None: (f.calls.append((list(argv), env)) or (4 if argv[:2] == ["claude", "mcp"] else 0))
+        di.run = f.run
+        with tempfile.TemporaryDirectory() as t:
+            self.assertIsNotNone(rs.install("claude_code", self.user_scoped(t), yes=True, dry_run=False))
 
     def test_install_empty_plan_default_config_dir(self):
         self.use(Fake(plan=json.dumps({"status": "planned", "plannedActions": []})))

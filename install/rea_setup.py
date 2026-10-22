@@ -1,16 +1,23 @@
 """REA (rea-agents, reverse-engineering MCP + skill): the optional extra install, kept apart from thirdparty.
 REA is not a Claude plugin: it is set up by its own CLI, pinned to VERSION, once per config dir (the caller passes
 the env that targets it). Every failure is a warning: install() returns None and the Dryas install goes on.
-Never runs `rea uninstall`, which acts on every client; removal is remove_argv + the recorded skill folder."""
+Never runs `rea uninstall`, which acts on every client; removal is remove_argv + the recorded skill folder.
+On demand (Claude Code): REA's setup registers its MCP server for every session; Dryas removes that registration,
+so sessions that never reverse engineer anything pay nothing, and `dryas rea on` connects it per project."""
 import json
 import os
 import re
 import shutil
+import sys
+from pathlib import Path
 from typing import List, Optional
 
 import dryas_install as di
 
-VERSION = "6.7.0"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "claude" / "jev"))
+import rea_mode  # noqa: E402
+
+VERSION = rea_mode.VERSION
 PKG = "rea-agents@" + VERSION
 SKILL_NAME = "reverse-engineer-anything"
 MIN_NODE = ((22, 19), (24, 11), (26, 0))
@@ -100,6 +107,21 @@ def _config_skill_dir(env: dict) -> Optional[str]:
     return p if os.path.isdir(p) else None
 
 
+def on_demand(client: str, env: dict, ask: bool) -> None:
+    """Claude Code only: remove REA's user-scope MCP registration (asking first when ask), so it starts only where
+    `dryas rea on` connected it. A failure or a no is a printed line; never raises."""
+    if client != "claude_code" or not rea_mode.user_scoped(env or {}):
+        return
+    if ask and not di.confirm("Make REA on demand (remove its MCP entry from every session)?"):
+        print("kept REA in every session; `%s` makes it on demand" % " ".join(remove_argv(client)))
+        return
+    rc = di.run(remove_argv(client), env=env)
+    if rc != 0:
+        print("warning: could not remove REA's user-scope MCP entry (exit %d); run `%s`" % (rc, " ".join(remove_argv(client))))
+        return
+    print("REA is on demand: `dryas rea on` connects it in a project (then /exit and claude --continue)")
+
+
 def install(client: str, env: dict, yes: bool, dry_run: bool, prior: Optional[dict] = None) -> Optional[dict]:
     """Show REA's dry run, ask (unless yes), run setup, check doctor. The record entry, or None (skipped/failed).
     A prior entry at VERSION whose doctor says aligned is kept as is: no plan, no prompt."""
@@ -114,6 +136,7 @@ def install(client: str, env: dict, yes: bool, dry_run: bool, prior: Optional[di
         _, out = di.capture(doctor_argv(client), env=env, timeout=600)
         if skill_state(out) == "aligned":
             print("REA %s already set up; skipped" % VERSION)
+            on_demand(client, env, ask=not yes)
             if prior.get("skill_dir") is None and client == "claude_code":
                 return dict(prior, skill_dir=_config_skill_dir(env))
             return prior
@@ -123,6 +146,8 @@ def install(client: str, env: dict, yes: bool, dry_run: bool, prior: Optional[di
         return None
     print("REA will change:")
     print("\n".join(plan_summary(plan)) or plan.strip())
+    if client == "claude_code":
+        print("then Dryas removes REA's user-scope MCP entry (on demand: `dryas rea on` connects it per project)")
     if not yes and not di.confirm("Install REA?"):
         print("skipped REA")
         return None
@@ -137,6 +162,7 @@ def install(client: str, env: dict, yes: bool, dry_run: bool, prior: Optional[di
         print("warning: REA doctor gave no state (exit %d); run `%s`" % (rc, cmd))
     elif state != "aligned":
         print("warning: REA doctor reports the skill as %s; run `%s` to see why" % (state, cmd))
+    on_demand(client, env, ask=False)  # part of the install the user just confirmed
     skill_dir = skill_dir_from_plan(plan)
     if skill_dir is None and isinstance(prior, dict):
         skill_dir = prior.get("skill_dir")
