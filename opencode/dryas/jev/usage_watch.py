@@ -2,17 +2,14 @@
 """Chain stage on UserPromptSubmit (Claude only): when this session's account nears its 5-hour or weekly limit and
 another account has room, tell the user how to move (/handoff move, /exit, cl --account <calm>).
 Reads FlowObserve's GET /api/usage on 127.0.0.1, never through a proxy, within a 300 ms budget; any problem means
-no message. Tiers: once at switchAt, once more at switchAt+0.05; reset when use falls below switchAt (a new window).
+no message. Asks at most once a minute per session (CHECK_EVERY_S); other prompts only read a file's age.
+Tiers: once at switchAt, once more at switchAt+0.05; reset when use falls below switchAt (a new window).
 Same calm-account rule as FlowObserve's cl launcher (scripts/cl.py decide()); keep the two in step."""
-import hashlib
 import json
 import os
 import re
 import sys
-import threading
 import time
-import urllib.parse
-import urllib.request
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -22,26 +19,45 @@ BUDGET_S = 0.3
 STEP = 0.05
 DEFAULT_SWITCH = 0.9
 MAX_SID = 64
+CHECK_EVERY_S = 60
+SAFE_SID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+MAX_REPLY = 65536 + 4096  # body plus headers
 LABEL_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
 
 
 def fetch_json(url: str, timeout: float) -> Optional[Dict[str, Any]]:
-    """GET a local JSON object within `timeout` seconds in total, never through a proxy; None on any problem.
-    The request runs in a daemon thread, so a server that drip-feeds bytes cannot hold the prompt past the budget."""
-    box: List[Optional[Dict[str, Any]]] = [None]
-
-    def get() -> None:
-        try:
-            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(url, timeout=max(timeout, 0.01)) as r:
-                v = json.loads(r.read(65536).decode("utf-8"))
-            box[0] = v if isinstance(v, dict) else None
-        except Exception:
-            pass
+    """GET a JSON object from http://127.0.0.1 within `timeout` seconds in total; None on any problem (another host,
+    a non-2xx status, any Transfer-Encoding, a body over 64 KiB). A plain socket, so never a proxy and no urllib.request
+    (~20 ms of imports on every prompt). Each read waits only for what is left of the budget, so a server that
+    drip-feeds bytes cannot hold the prompt past it."""
     try:
-        t = threading.Thread(target=get, daemon=True)
-        t.start()
-        t.join(max(timeout, 0.01))
-        return None if t.is_alive() else box[0]
+        import socket  # here, not at the top: a throttled prompt never fetches
+        import urllib.parse
+        u = urllib.parse.urlsplit(url)
+        if u.scheme != "http" or u.hostname != "127.0.0.1" or not u.port:
+            return None
+        end = time.monotonic() + max(timeout, 0.01)
+        target = (u.path or "/") + ("?" + u.query if u.query else "")
+        buf = b""
+        with socket.create_connection(("127.0.0.1", u.port), timeout=max(timeout, 0.01)) as s:
+            s.sendall(("GET %s HTTP/1.0\r\nHost: 127.0.0.1:%d\r\nAccept: application/json\r\n\r\n"
+                       % (target, u.port)).encode("ascii"))
+            while len(buf) <= MAX_REPLY:
+                left = end - time.monotonic()
+                if left <= 0:
+                    return None
+                s.settimeout(left)
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                buf += chunk
+        head, sep, body = buf.partition(b"\r\n\r\n")
+        lines = head.decode("latin-1").split("\r\n")
+        if (not sep or len(buf) > MAX_REPLY or not re.match(r"HTTP/1\.[01] 2\d\d(?: |$)", lines[0])
+                or any(h.lower().startswith("transfer-encoding:") for h in lines[1:])):
+            return None
+        v = json.loads(body.decode("utf-8"))
+        return v if isinstance(v, dict) else None
     except Exception:
         return None
 
@@ -89,6 +105,7 @@ def _assess(mine: Dict[str, Any], doc: Dict[str, Any]) -> Optional[Tuple[str, fl
 
 
 def _state_file(sid: str) -> str:
+    import hashlib  # here, not at the top: a throttled prompt never needs it
     return os.path.join(paths.handoff_dir(), ".usage-warned", hashlib.sha256(sid.encode("utf-8")).hexdigest()[:16])
 
 
@@ -112,12 +129,37 @@ def _write_tier(sfile: str, tier: int, use: float) -> None:
     os.chmod(sfile, 0o600)  # portable-ok: POSIX file privacy; no-op on Windows
 
 
+def _due(sid: str, now: float) -> bool:
+    """True when this session's last check is CHECK_EVERY_S old or more, missing, or in the future (a clock set
+    back), and then records `now` as the last check; a failed or empty fetch counts as a check too. If the
+    marker cannot be written, every prompt checks (fails open: slower, never silent about a limit)."""
+    d = os.path.join(paths.handoff_dir(), ".usage-warned")
+    mark = os.path.join(d, "checked-" + sid) if SAFE_SID_RE.fullmatch(sid) else _state_file(sid) + ".checked"
+    try:
+        if 0 <= now - os.stat(mark).st_mtime < CHECK_EVERY_S:
+            return False
+    except OSError:
+        pass
+    try:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        os.chmod(d, 0o700)  # portable-ok: POSIX file privacy; no-op on Windows
+        os.close(os.open(mark, os.O_WRONLY | os.O_CREAT, 0o600))
+        os.chmod(mark, 0o600)  # portable-ok: POSIX file privacy; no-op on Windows
+        os.utime(mark, (now, now))
+    except OSError:
+        pass
+    return True
+
+
 def run(event: Dict[str, Any], fetch: Callable[[str, float], Optional[Dict[str, Any]]] = fetch_json,
-        clock: Callable[[], float] = time.monotonic) -> Optional[str]:
+        clock: Callable[[], float] = time.monotonic, now: Callable[[], float] = time.time) -> Optional[str]:
     try:
         sid = event.get("session_id")
         if not isinstance(sid, str) or not sid or len(sid) > MAX_SID:
             return None
+        if not _due(sid, now()):
+            return None
+        import urllib.parse  # here, not at the top: a throttled prompt never builds a URL
         base = _base()
         t0 = clock()
         mine = fetch(base + "?session=" + urllib.parse.quote(sid, safe=""), BUDGET_S)

@@ -264,7 +264,8 @@ def prune(now: Optional[float] = None) -> None:
             continue
         for f, m in found:
             sub, n = os.path.basename(os.path.dirname(f)), os.path.basename(f)
-            if (sub in ("delivered", "bad") and now - m > KEEP) or (n.startswith(".tmp-") and now - m > TMP_AGE):
+            if (sub in ("delivered", "bad") and now - m > KEEP) or ((n.startswith(".tmp-") or sub == "claims")
+                                                                   and now - m > TMP_AGE):
                 _unlink(f)
                 files += 1
     jevlog.append("bridge", {"event": "pruned", "files": files, "folders": folders})

@@ -222,6 +222,15 @@ class BridgeStageTest(unittest.TestCase):
         self.assertNotIn("decision", out)
         self.assertIn("block", out["hookSpecificOutput"]["additionalContext"])
 
+    def test_prompt_runs_usage_watch_inproc(self):
+        stage = {"name": "usage-watch", "harness": ["claude"], "component": "core", "inproc": "usage_watch",
+                 "context": True, "cmd": ["unused"], "timeout": 2}
+        ev = self.ev("UserPromptSubmit", prompt="hi")
+        with mock.patch("usage_watch.run", return_value="Account team is at 5h 92%") as run:
+            out = chain.prompt(ev, json.dumps(ev), [stage])
+        run.assert_called_once_with(ev)
+        self.assertEqual(out["hookSpecificOutput"]["additionalContext"], "Account team is at 5h 92%")
+
     def test_raising_inproc_stage_is_skipped(self):
         ev = self.ev("PostToolUse")
         with mock.patch.object(chain, "_inproc", side_effect=RuntimeError("boom")):

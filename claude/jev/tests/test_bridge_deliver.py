@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -79,7 +80,8 @@ class DeliverTest(unittest.TestCase):
     def test_five_at_a_time_and_more_waiting_line(self):
         for i in range(7):
             self.put(i)
-        out = bd.deliver(self.ev())
+        with mock.patch.object(bd, "BUDGET_S", 60):  # the count cap, not the time budget (slow Windows CI disks)
+            out = bd.deliver(self.ev())
         self.assertIn("5 message(s)", out)
         self.assertTrue(out.endswith("2 more waiting; they arrive at the next turn.\n[Dryas bridge] end of messages"))
         self.assertIn("2 message(s)", bd.deliver(self.ev()))
@@ -104,6 +106,94 @@ class DeliverTest(unittest.TestCase):
         joined = "\n".join(outs)
         for i in range(5):
             self.assertEqual(joined.count("id m-%012x," % i), 1)
+
+    def test_excl_claim_under_race_shows_each_message_once(self):
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.test_each_message_shown_once_under_race()
+
+    def test_excl_claim_takes_file_and_drops_marker(self):
+        self.put(1)
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.assertIn("1 message(s)", bd.deliver(self.ev()))
+        self.assertEqual(self.left(), [])
+        self.assertEqual(os.listdir(os.path.join(self.box, "claims")), [])
+
+    def test_excl_claim_live_marker_leaves_message_waiting(self):
+        self.put(1)
+        (name,) = self.left()
+        os.makedirs(os.path.join(self.box, "claims"))
+        open(os.path.join(self.box, "claims", name), "w").close()
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.assertEqual(bd.deliver(self.ev()), "")
+        self.assertEqual(self.left(), [name])
+
+    def test_excl_claim_old_marker_still_blocks(self):
+        # no takeover: two hooks could both take over one dead marker; prune removes it after TMP_AGE instead
+        self.put(1)
+        (name,) = self.left()
+        os.makedirs(os.path.join(self.box, "claims"))
+        mark = os.path.join(self.box, "claims", name)
+        open(mark, "w").close()
+        os.utime(mark, (time.time() - 600, time.time() - 600))
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.assertEqual(bd.deliver(self.ev()), "")
+        self.assertEqual(self.left(), [name])
+
+    def test_excl_claim_marker_create_error_skips(self):
+        self.put(1)
+        with mock.patch.object(bd, "EXCL_CLAIM", True), \
+                mock.patch.object(bd.os, "open", side_effect=PermissionError("delete pending")):
+            self.assertEqual(bd.deliver(self.ev()), "")
+        self.assertEqual(len(self.left()), 1)
+
+    def windows_rename(self):
+        """os.replace as on Windows: a hook that opened the source before another moved it still "succeeds"."""
+        real, gate = os.replace, threading.Barrier(2, timeout=0.3)
+
+        def fake(src, dst):
+            if not os.path.exists(src):
+                raise FileNotFoundError(src)
+            try:
+                gate.wait()  # both hooks hold the source before either renames
+            except threading.BrokenBarrierError:
+                pass
+            try:
+                real(src, dst)
+            except FileNotFoundError:
+                if not os.path.exists(dst):  # the handle followed the file: a second rename to dst still succeeds
+                    raise
+        return fake
+
+    def race_claims(self, excl):
+        self.put(1)
+        (name,) = self.left()
+        got, start = [], threading.Barrier(2)
+
+        def one():
+            start.wait()
+            got.append(bd._claim(self.box, name, "delivered"))
+        with mock.patch.object(bd, "EXCL_CLAIM", excl), mock.patch.object(bd.os, "replace", self.windows_rename()):
+            ts = [threading.Thread(target=one) for _ in range(2)]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join()
+        return [g for g in got if g]
+
+    def test_windows_rename_without_marker_claims_twice(self):
+        self.assertEqual(len(self.race_claims(False)), 2)  # the bug this marker fixes
+
+    def test_windows_rename_with_marker_claims_once(self):
+        self.assertEqual(len(self.race_claims(True)), 1)
+
+    def test_excl_claim_gone_source_drops_own_marker(self):
+        os.makedirs(self.box)
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.assertIsNone(bd._claim(self.box, "1792000000001-00000001.json", "delivered"))
+        self.assertEqual(os.listdir(os.path.join(self.box, "claims")), [])
+
+    def test_claim_marker_only_on_windows(self):
+        self.assertEqual(bd.EXCL_CLAIM, os.name == "nt")
 
     def test_oversized_file_goes_to_bad(self):
         self.put(1, raw=json.dumps(msg(1, text="x" * 70000)))
@@ -219,6 +309,7 @@ class DeliverTest(unittest.TestCase):
     def deliver_new(self, pid):
         return bd.deliver(self.ev(session_id=NEW))
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_message_survives_clear(self):
         pid = self.cleared()
         out = self.deliver_new(pid)
@@ -236,6 +327,7 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(self.deliver_new(pid), "")
         self.assertEqual(len(self.left()), 1)
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_padded_day_still_matches(self):
         pid = self.cleared()
         p = os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)
@@ -264,6 +356,7 @@ class DeliverTest(unittest.TestCase):
             self.assertEqual(bd.deliver(self.ev(session_id=SENDER)), "")
         self.assertFalse(os.path.exists(os.path.join(os.environ["JEV_LOG_DIR"], "bridge.jsonl")))  # no error logged
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_hook_never_writes_pointer(self):
         pid = self.cleared()
         p = os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)
@@ -278,6 +371,7 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(self.deliver_new(pid), "")
         self.assertEqual(len(self.left()), 1)
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_lookup_reads_own_pointer_only(self):
         pid = self.cleared()
         sd = os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "sessions")
@@ -298,6 +392,7 @@ class DeliverTest(unittest.TestCase):
         self.assertFalse([p for p in seen if p.startswith(sd)], seen)
         self.assertEqual(len([p for p in seen if p.endswith(".bypid")]), 1)
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_corrupt_pointer_logged_once(self):
         pid = self.cleared(raw="{not json")
         self.deliver_new(pid)
@@ -307,6 +402,7 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(len([l for l in self.log() if l["event"] == "rehome_error"]), 1)
         self.assertFalse(os.path.exists(os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)))
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_sids_not_a_list_is_corrupt_pointer(self):
         pid = self.cleared(sids=5)
         self.deliver_new(pid)
