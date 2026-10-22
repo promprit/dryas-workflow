@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -104,6 +105,47 @@ class DeliverTest(unittest.TestCase):
         joined = "\n".join(outs)
         for i in range(5):
             self.assertEqual(joined.count("id m-%012x," % i), 1)
+
+    def test_excl_claim_under_race_shows_each_message_once(self):
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.test_each_message_shown_once_under_race()
+
+    def test_excl_claim_takes_file_and_drops_marker(self):
+        self.put(1)
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.assertIn("1 message(s)", bd.deliver(self.ev()))
+        self.assertEqual(self.left(), [])
+        self.assertEqual(os.listdir(os.path.join(self.box, "claims")), [])
+
+    def test_excl_claim_live_marker_leaves_message_waiting(self):
+        self.put(1)
+        (name,) = self.left()
+        os.makedirs(os.path.join(self.box, "claims"))
+        open(os.path.join(self.box, "claims", name), "w").close()
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.assertEqual(bd.deliver(self.ev()), "")
+        self.assertEqual(self.left(), [name])
+
+    def test_excl_claim_stale_marker_is_taken_over(self):
+        self.put(1)
+        (name,) = self.left()
+        os.makedirs(os.path.join(self.box, "claims"))
+        mark = os.path.join(self.box, "claims", name)
+        open(mark, "w").close()
+        old = time.time() - bd.STALE_CLAIM_S - 1
+        os.utime(mark, (old, old))
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.assertIn("1 message(s)", bd.deliver(self.ev()))
+        self.assertFalse(os.path.exists(mark))
+
+    def test_excl_claim_gone_source_drops_own_marker(self):
+        os.makedirs(self.box)
+        with mock.patch.object(bd, "EXCL_CLAIM", True):
+            self.assertIsNone(bd._claim(self.box, "1792000000001-00000001.json", "delivered"))
+        self.assertEqual(os.listdir(os.path.join(self.box, "claims")), [])
+
+    def test_claim_marker_only_on_windows(self):
+        self.assertEqual(bd.EXCL_CLAIM, os.name == "nt")
 
     def test_oversized_file_goes_to_bad(self):
         self.put(1, raw=json.dumps(msg(1, text="x" * 70000)))
