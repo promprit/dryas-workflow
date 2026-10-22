@@ -127,6 +127,7 @@ class WatchTest(unittest.TestCase):
         usage_watch.run(self.ev("s2"), f)
         self.assertTrue(f.calls[0][0].startswith(BASE + "?session="))
 
+    @unittest.skipIf(os.name == "nt", "POSIX file modes; chmod is a no-op on Windows")
     def test_state_is_private(self):
         usage_watch.run(self.ev(), server(acct("team", 0.92), acct("team2", 0.1)))
         d = os.path.join(self.tmp, ".usage-warned")
@@ -297,6 +298,7 @@ class ThrottleTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertFalse(any("/" in n or " " in n for n in os.listdir(os.path.join(self.tmp, ".usage-warned"))))
 
+    @unittest.skipIf(os.name == "nt", "POSIX file modes; chmod is a no-op on Windows")
     def test_marker_is_private(self):
         self.run_at(0, lambda u, t: None)
         d = os.path.join(self.tmp, ".usage-warned")

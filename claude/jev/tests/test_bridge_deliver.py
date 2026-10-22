@@ -219,6 +219,7 @@ class DeliverTest(unittest.TestCase):
     def deliver_new(self, pid):
         return bd.deliver(self.ev(session_id=NEW))
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_message_survives_clear(self):
         pid = self.cleared()
         out = self.deliver_new(pid)
@@ -236,6 +237,7 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(self.deliver_new(pid), "")
         self.assertEqual(len(self.left()), 1)
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_padded_day_still_matches(self):
         pid = self.cleared()
         p = os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)
@@ -264,6 +266,7 @@ class DeliverTest(unittest.TestCase):
             self.assertEqual(bd.deliver(self.ev(session_id=SENDER)), "")
         self.assertFalse(os.path.exists(os.path.join(os.environ["JEV_LOG_DIR"], "bridge.jsonl")))  # no error logged
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_hook_never_writes_pointer(self):
         pid = self.cleared()
         p = os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)
@@ -278,6 +281,7 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(self.deliver_new(pid), "")
         self.assertEqual(len(self.left()), 1)
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_lookup_reads_own_pointer_only(self):
         pid = self.cleared()
         sd = os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "sessions")
@@ -298,6 +302,7 @@ class DeliverTest(unittest.TestCase):
         self.assertFalse([p for p in seen if p.startswith(sd)], seen)
         self.assertEqual(len([p for p in seen if p.endswith(".bypid")]), 1)
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_corrupt_pointer_logged_once(self):
         pid = self.cleared(raw="{not json")
         self.deliver_new(pid)
@@ -307,6 +312,7 @@ class DeliverTest(unittest.TestCase):
         self.assertEqual(len([l for l in self.log() if l["event"] == "rehome_error"]), 1)
         self.assertFalse(os.path.exists(os.path.join(self.root, "inbox", ".bypid", "%d.json" % pid)))
 
+    @unittest.skipIf(os.name == "nt", "start-time matching uses ps (POSIX)")
     def test_sids_not_a_list_is_corrupt_pointer(self):
         pid = self.cleared(sids=5)
         self.deliver_new(pid)

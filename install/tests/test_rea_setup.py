@@ -1,5 +1,6 @@
 import json, os, sys, tempfile, unittest
 from pathlib import Path
+from unittest import mock
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 import dryas_install as di
@@ -151,15 +152,8 @@ class ReaSetupTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             d = Path(t) / ".claude" / "skills" / rs.SKILL_NAME
             d.mkdir(parents=True)
-            orig = os.environ.get("HOME")
-            os.environ["HOME"] = t
-            try:
+            with mock.patch.dict(os.environ, {"HOME": t, "USERPROFILE": t}):  # expanduser reads USERPROFILE on Windows
                 entry = rs.install("claude_code", {}, yes=True, dry_run=False)
-            finally:
-                if orig is None:
-                    os.environ.pop("HOME", None)
-                else:
-                    os.environ["HOME"] = orig
             self.assertEqual(entry["skill_dir"], str(d))
 
     def test_install_empty_plan_codex_stays_none(self):
