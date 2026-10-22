@@ -39,6 +39,13 @@ class PruneTest(unittest.TestCase):
         self.assertFalse(os.path.exists(old_b))
         self.assertTrue(os.path.exists(new_d))
 
+    def test_old_claim_marker_removed_recent_kept(self):
+        old = self.put(os.path.join(bf.SID_B, "claims", "a.json"), bridge.TMP_AGE + 60)
+        new = self.put(os.path.join(bf.SID_B, "claims", "b.json"), 1)
+        bridge.prune(self.now)
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.exists(new))
+
     def test_live_session_waiting_kept_however_old(self):
         p = self.put(os.path.join(bf.SID_B, "1-a.json"), 30 * DAY)
         bridge.prune(self.now)
