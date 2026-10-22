@@ -80,7 +80,8 @@ class DeliverTest(unittest.TestCase):
     def test_five_at_a_time_and_more_waiting_line(self):
         for i in range(7):
             self.put(i)
-        out = bd.deliver(self.ev())
+        with mock.patch.object(bd, "BUDGET_S", 60):  # the count cap, not the time budget (slow Windows CI disks)
+            out = bd.deliver(self.ev())
         self.assertIn("5 message(s)", out)
         self.assertTrue(out.endswith("2 more waiting; they arrive at the next turn.\n[Dryas bridge] end of messages"))
         self.assertIn("2 message(s)", bd.deliver(self.ev()))

@@ -40,12 +40,18 @@ def _mark(folder: str, name: str) -> Optional[str]:
     """Create folder/claims/name exclusively: its path, or None while another hook holds it (or on Windows while
     its deletion is pending, PermissionError)."""
     m = os.path.join(folder, "claims", name)
-    try:
-        os.makedirs(os.path.dirname(m), mode=0o700, exist_ok=True)
-        os.close(os.open(m, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
-    except OSError:
-        return None
-    return m
+    for _ in range(2):
+        try:
+            os.close(os.open(m, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+            return m
+        except FileNotFoundError:  # first claim in this inbox: create claims/ once, then try again
+            try:
+                os.makedirs(os.path.dirname(m), mode=0o700, exist_ok=True)
+            except OSError:
+                return None
+        except OSError:
+            return None
+    return None
 
 
 def _claim(folder: str, name: str, sub: str) -> Optional[str]:
