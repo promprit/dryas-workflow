@@ -126,17 +126,64 @@ class DeliverTest(unittest.TestCase):
             self.assertEqual(bd.deliver(self.ev()), "")
         self.assertEqual(self.left(), [name])
 
-    def test_excl_claim_stale_marker_is_taken_over(self):
+    def test_excl_claim_old_marker_still_blocks(self):
+        # no takeover: two hooks could both take over one dead marker; prune removes it after TMP_AGE instead
         self.put(1)
         (name,) = self.left()
         os.makedirs(os.path.join(self.box, "claims"))
         mark = os.path.join(self.box, "claims", name)
         open(mark, "w").close()
-        old = time.time() - bd.STALE_CLAIM_S - 1
-        os.utime(mark, (old, old))
+        os.utime(mark, (time.time() - 600, time.time() - 600))
         with mock.patch.object(bd, "EXCL_CLAIM", True):
-            self.assertIn("1 message(s)", bd.deliver(self.ev()))
-        self.assertFalse(os.path.exists(mark))
+            self.assertEqual(bd.deliver(self.ev()), "")
+        self.assertEqual(self.left(), [name])
+
+    def test_excl_claim_marker_create_error_skips(self):
+        self.put(1)
+        with mock.patch.object(bd, "EXCL_CLAIM", True), \
+                mock.patch.object(bd.os, "open", side_effect=PermissionError("delete pending")):
+            self.assertEqual(bd.deliver(self.ev()), "")
+        self.assertEqual(len(self.left()), 1)
+
+    def windows_rename(self):
+        """os.replace as on Windows: a hook that opened the source before another moved it still "succeeds"."""
+        real, gate = os.replace, threading.Barrier(2, timeout=0.3)
+
+        def fake(src, dst):
+            if not os.path.exists(src):
+                raise FileNotFoundError(src)
+            try:
+                gate.wait()  # both hooks hold the source before either renames
+            except threading.BrokenBarrierError:
+                pass
+            try:
+                real(src, dst)
+            except FileNotFoundError:
+                if not os.path.exists(dst):  # the handle followed the file: a second rename to dst still succeeds
+                    raise
+        return fake
+
+    def race_claims(self, excl):
+        self.put(1)
+        (name,) = self.left()
+        got, start = [], threading.Barrier(2)
+
+        def one():
+            start.wait()
+            got.append(bd._claim(self.box, name, "delivered"))
+        with mock.patch.object(bd, "EXCL_CLAIM", excl), mock.patch.object(bd.os, "replace", self.windows_rename()):
+            ts = [threading.Thread(target=one) for _ in range(2)]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join()
+        return [g for g in got if g]
+
+    def test_windows_rename_without_marker_claims_twice(self):
+        self.assertEqual(len(self.race_claims(False)), 2)  # the bug this marker fixes
+
+    def test_windows_rename_with_marker_claims_once(self):
+        self.assertEqual(len(self.race_claims(True)), 1)
 
     def test_excl_claim_gone_source_drops_own_marker(self):
         os.makedirs(self.box)
