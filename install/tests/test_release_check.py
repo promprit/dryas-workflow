@@ -547,6 +547,12 @@ class ReleaseCheckReaTest(unittest.TestCase):
         self.assertIn("missing", detail)
         self.assertEqual(self.rep.fails, 0)
 
+    def test_on_demand_doctor_exit_1_with_aligned_skill_passes(self):
+        # on demand, REA's doctor exits 1 because its MCP registration is missing; the skill state is what counts
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+        release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(1, '{"identity": {"skill": {"state": "aligned"}}}'))
+        self.assertEqual([s for s, _, _ in self.rep.lines], ["PASS"])
+
     def test_doctor_nonzero_exit_warns_without_fail(self):
         self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
         release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(1, ""))
