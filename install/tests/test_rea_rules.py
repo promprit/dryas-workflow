@@ -9,10 +9,13 @@ class ReaRulesTest(unittest.TestCase):
         return (ROOT / p).read_text(encoding="utf-8")
 
     def test_template_rule(self):
-        for p, anchor in (("claude/CLAUDE.md.template", "- Design work"), ("codex/AGENTS.md.template", "- Brainstorm first")):
+        claude = ("- Reverse-engineering work (software without source): use REA, on demand (`dryas rea on`, then "
+                  "restart; never `rea setup`); brainstorm says when, the user can decline.")
+        for p, anchor, line in (("claude/CLAUDE.md.template", "- Design work", claude),
+                                ("codex/AGENTS.md.template", "- Brainstorm first", LINE)):
             t = self.read(p)
-            self.assertIn(LINE, t, p)
-            self.assertLess(t.index(anchor), t.index(LINE), p)
+            self.assertIn(line, t, p)
+            self.assertLess(t.index(anchor), t.index(line), p)
 
     def test_opencode_rule_says_unavailable(self):
         t = self.read("opencode/dryas/AGENTS.md.template")
