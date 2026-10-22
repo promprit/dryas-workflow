@@ -512,10 +512,14 @@ def rea(rep, cd, env, capture=None):
         rc, out = (capture or (lambda argv, env=None: di.capture(argv, env=env, timeout=600)))(argv, env=pu.claude_env(cd, env))
     except OSError as ex:
         rc, out = 1, str(ex)
-    state = rea_setup.skill_state(out) if rc == 0 else None
-    if state == "aligned":
-        return rep.say("PASS", "REA skill and MCP ready", "")
-    rep.say("WARN", "REA skill and MCP ready", "doctor says %s; run `%s`" % (state or "nothing (exit %s)" % rc, " ".join(argv)))
+    state = rea_setup.skill_state(out)  # on demand, doctor exits 1 (no MCP registration); the skill state counts
+    name = "REA ready, on demand"
+    if state != "aligned":
+        return rep.say("WARN", name, "doctor says %s; run `%s`" % (state or "nothing (exit %s)" % rc, " ".join(argv)))
+    if rea_setup.rea_mode.user_scoped(pu.claude_env(cd, env)):
+        return rep.say("WARN", name, "REA's MCP server starts in every session (user scope); re-run setup or `%s`"
+                       % " ".join(rea_setup.remove_argv("claude_code")))
+    rep.say("PASS", name, "`dryas rea on` connects it in a project")
 
 
 def better_than_previous(rep):

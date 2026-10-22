@@ -1,6 +1,6 @@
 {
   "name": "dryas",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Dryas Workflow for Claude Code: rules, scope lock, Jev chain, agents, commands and skills.",
   "author": {
     "name": "Promprit"

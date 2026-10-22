@@ -15,6 +15,18 @@ class ReaDocsTest(unittest.TestCase):
         paras = [x for x in t.split("\n\n") if "not recorded" in x]
         self.assertTrue(any("--with-rea" in x for x in paras))
 
+    def test_on_demand_docs_name_the_pinned_version_and_command(self):
+        import sys
+        sys.path.insert(0, str(ROOT / "install"))
+        import rea_setup
+        pin = "rea-agents@" + rea_setup.VERSION
+        for rel in ("claude/skills/brainstorm/reference.md", "docs/install.md"):
+            t = (ROOT / rel).read_text(encoding="utf-8")
+            self.assertIn(pin, t, rel)
+            self.assertIn("rea on", t, rel)
+            self.assertNotIn("rea-agents@" + "0.0.0", t)
+        self.assertIn("never `rea setup`", (ROOT / "claude" / "CLAUDE.md.template").read_text(encoding="utf-8"))
+
     def test_workflow_doc(self):
         t = (ROOT / "docs/workflow.md").read_text(encoding="utf-8")
         self.assertIn("**Reverse-engineering work.**", t)
