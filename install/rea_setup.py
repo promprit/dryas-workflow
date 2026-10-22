@@ -146,6 +146,8 @@ def install(client: str, env: dict, yes: bool, dry_run: bool, prior: Optional[di
         return None
     print("REA will change:")
     print("\n".join(plan_summary(plan)) or plan.strip())
+    if client == "claude_code":
+        print("then Dryas removes REA's user-scope MCP entry (on demand: `dryas rea on` connects it per project)")
     if not yes and not di.confirm("Install REA?"):
         print("skipped REA")
         return None

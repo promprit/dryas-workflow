@@ -1,4 +1,5 @@
-import json, os, sys, tempfile, unittest
+import io, json, os, sys, tempfile, unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 HERE = Path(__file__).resolve().parent
@@ -164,6 +165,13 @@ class ReaSetupTest(unittest.TestCase):
             self.assertIsNotNone(rs.install("claude_code", env, yes=False, dry_run=False))
         self.assertEqual(f.asked, ["Install REA?"])  # one question: the removal is part of the install
         self.assertEqual([c[0] for c in f.calls][-1], rs.remove_argv("claude_code"))
+
+    def test_fresh_install_plan_says_it_stays_on_demand(self):
+        self.use(Fake())
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rs.install("claude_code", {}, yes=False, dry_run=False)
+        self.assertIn("removes REA's user-scope MCP entry", buf.getvalue())  # said before "Install REA?"
 
     def test_fresh_install_without_registration_removes_nothing(self):
         f = self.use(Fake())

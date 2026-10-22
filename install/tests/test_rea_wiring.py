@@ -161,6 +161,17 @@ class ReaWiringTest(unittest.TestCase):
             ps._remove_extras(Path(t), {"rea": {"skill_dir": None}}, [RM])
         self.assertIn(RM, ran)
 
+    def test_uninstall_listing_names_what_on_demand_removes(self):
+        with tempfile.TemporaryDirectory() as t0:
+            t = Path(os.path.realpath(t0))
+            (t / ".claude.json").write_text("{}", encoding="utf-8")
+            self.assertIn("skill folder", ps.shown_extra(t, RM))
+            self.assertNotIn("claude mcp remove", ps.shown_extra(t, RM))
+            (t / ".claude.json").write_text('{"mcpServers": {"rea": {}}}', encoding="utf-8")
+            self.assertIn("claude mcp remove --scope user rea", ps.shown_extra(t, RM))
+            other = ["claude", "plugin", "uninstall", "x@y"]
+            self.assertEqual(ps.shown_extra(t, other), ps.shown(t, other))
+
     def test_keep_extras_removes_nothing(self):
         di.run = lambda argv, cwd=None, env=None: self.fail("ran %s" % argv)
         with tempfile.TemporaryDirectory() as t0:

@@ -54,6 +54,43 @@ class ReaModeTest(unittest.TestCase):
     def test_project_key_is_git_root(self):
         self.assertEqual(rea_mode.project_key(os.path.join(self.repo, "sub")), self.repo)
 
+    def test_project_key_in_worktree_is_the_main_repo(self):
+        # Claude Code keys local scope by the main repo root, so a worktree shares its repo's entry
+        subprocess.run(["git", "-C", self.repo, "commit", "-q", "--allow-empty", "-m", "init"], check=True,
+                       env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+                                GIT_COMMITTER_EMAIL="t@t"))
+        wt = os.path.join(self.tmp, "wt")
+        subprocess.run(["git", "-C", self.repo, "worktree", "add", "-q", wt, "-b", "x"], check=True)
+        self.assertEqual(rea_mode.project_key(wt), self.repo)
+        self.write_config(project={"rea": {}})
+        self.assertEqual(rea_mode.state(self.env, wt), "project")
+
+    def test_state_matches_key_spelled_differently(self):
+        # Windows: slashes and drive-letter case may differ between git, realpath and Claude Code's key
+        with open(os.path.join(self.cfg, ".claude.json"), "w", encoding="utf-8") as f:
+            json.dump({"projects": {self.repo + os.sep: {"mcpServers": {"rea": {}}}}}, f)
+        self.assertEqual(rea_mode.state(self.env, os.path.join(self.repo, "sub")), "project")
+
+    def test_missing_claude_is_a_message_not_a_traceback(self):
+        self.write_config()
+        env = dict(self.env, PATH=os.path.join(self.tmp, "empty"))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = rea_mode.main(["on"], env=env, cwd=self.repo)
+        self.assertEqual(code, 127)
+        self.assertIn("claude", buf.getvalue())
+
+    def test_runner_resolves_through_path(self):
+        b = os.path.join(self.tmp, "bin")
+        os.makedirs(b)
+        exe = os.path.join(b, "claude")
+        with open(exe, "w") as f:
+            f.write("#!/bin/sh\nexit 7\n")
+        os.chmod(exe, 0o755)
+        if os.name == "nt":
+            self.skipTest("POSIX shell script")
+        self.assertEqual(rea_mode.run_cmd(["claude", "x"], cwd=self.tmp, env=dict(self.env, PATH=b)), 7)
+
     def test_project_key_outside_git_is_the_folder(self):
         d = os.path.join(self.tmp, "plain")
         os.makedirs(d)

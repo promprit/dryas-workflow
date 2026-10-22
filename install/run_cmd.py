@@ -297,7 +297,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             elif extras:
                 print("Third-party tools setup installed for %s (kept with --keep-extras):" % cd)
                 for argv in extras:
-                    print("  " + ps.shown(cd, argv))
+                    print("  " + ps.shown_extra(cd, argv))
                 if not (a.yes or di.confirm("Remove them too?")):
                     extras = []
             if not a.keep_extras and (cd / ps.RECORD).exists():  # only an account Dryas set up

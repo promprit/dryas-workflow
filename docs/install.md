@@ -129,7 +129,7 @@ Setup installs a `dryas` command with the plugin (`claude/bin/dryas`; `claude/bi
 
 ### `dryas rea`
 
-REA is on demand (Claude Code). `dryas rea on` adds REA as a local-scope MCP server for the current folder's git root (or the folder itself outside git), with the pinned `rea-agents` version; the next session there loads it, so `/exit` and run `claude --continue`. A git worktree has its own root: run it in the folder the session works in. `dryas rea off` removes it, and `dryas rea status` says whether REA is on in every session (user scope), in this project, or nowhere. Local scope needs no approval prompt. For a one-off question, REA's command line (`npx -y rea-agents@6.7.0 <command> --format json`) needs no MCP server and no restart.
+REA is on demand (Claude Code). `dryas rea on` adds REA as a local-scope MCP server for the current folder's git root (or the folder itself outside git), with the pinned `rea-agents` version; the next session there loads it, so `/exit` and run `claude --continue`. Worktrees share their main repo's entry, so turning REA on in a repo covers its worktrees. On Windows, `claude` must be on PATH (`claude.cmd` is found through PATHEXT). `dryas rea off` removes it, and `dryas rea status` says whether REA is on in every session (user scope), in this project, or nowhere. Local scope needs no approval prompt. For a one-off question, REA's command line (`npx -y rea-agents@6.7.0 <command> --format json`) needs no MCP server and no restart.
 
 ### Cut-over from 1.x
 

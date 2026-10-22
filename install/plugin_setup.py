@@ -635,6 +635,14 @@ def shown(cd: Path, argv: List[str]) -> str:
     return "%s%s" % (env_prefix(cd) if argv[:1] == ["claude"] else "", " ".join(argv))
 
 
+def shown_extra(cd: Path, argv: List[str]) -> str:
+    """An extras line as listed before the uninstall question: REA's user-scope removal, when there is no such entry
+    (on demand), is listed as what it then does: remove REA's skill folder."""
+    if argv == rea_setup.remove_argv("claude_code") and not rea_setup.rea_mode.user_scoped(child_env(cd)):
+        return "REA's skill folder (REA is on demand here: no user-scope MCP entry to remove)"
+    return shown(cd, argv)
+
+
 def extras_commands(rec: dict, last_account: bool) -> List[List[str]]:
     """The commands that undo the third-party installs setup recorded in rec["thirdparty"] (components.json runs):
     `claude plugin uninstall <id>` for each plugin it installed and, only for the last account (the package is
