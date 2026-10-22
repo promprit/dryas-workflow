@@ -524,6 +524,21 @@ class ReleaseCheckReaTest(unittest.TestCase):
         self.assertEqual([s for s, _, _ in self.rep.lines], ["PASS"])
         self.assertEqual(self.rep.fails, 0)
 
+    def test_rea_user_scope_warns_slows_every_session(self):
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+        (self.cd / ".claude.json").write_text(json.dumps({"mcpServers": {"rea": {"command": "npx"}}}), encoding="utf-8")
+        release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(0, '{"identity": {"skill": {"state": "aligned"}}}'))
+        status, _, detail = self.rep.lines[0]
+        self.assertEqual(status, "WARN")
+        self.assertIn("every session", detail)
+        self.assertIn("claude mcp remove --scope user rea", detail)
+        self.assertEqual(self.rep.fails, 0)
+
+    def test_rea_aligned_passes_as_on_demand(self):
+        self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
+        release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(0, '{"identity": {"skill": {"state": "aligned"}}}'))
+        self.assertIn("on demand", self.rep.lines[0][1])
+
     def test_rea_skill_missing_warns_without_fail(self):
         self.write_record({"rea": {"version": "6.7.0", "client": "claude_code", "skill_dir": None}})
         release_check.rea(self.rep, self.cd, {}, capture=self.capture_returning(0, '{"identity": {"skill": {"state": "missing"}}}'))
