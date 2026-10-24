@@ -54,7 +54,7 @@ class TuneTest(unittest.TestCase):
     def test_judged_share_uses_gate_window(self):
         # calls.jsonl and gate.jsonl rotate separately; calls from before the gate log starts are not counted
         write(self.d, "calls", [{"tool": "Bash", "ts": "2026-10-19T10:00:00+0700"}] * 6
-              + [{"tool": "Bash", "ts": "2026-10-20T19:00:00+0700"}] * 4)
+              + [{"tool": "Bash", "ts": "2026-10-20T19:00:00+0700"}] * 3 + [{"tool": "Bash"}])
         write(self.d, "gate", [{"tool": "Bash", "decision": "none", "head": "make", "latency_ms": 5,
                                 "ts": "2026-10-20T19:00:00+0700"}] * 2
               + [{"tool": "Bash", "decision": "skipped", "head": "ls", "ts": "2026-10-20T19:00:01+0700"}] * 2)

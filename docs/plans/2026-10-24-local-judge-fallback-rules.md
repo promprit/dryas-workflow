@@ -15,5 +15,5 @@
 
 **Goal:** `local_judge.destructive` returns a rule name (decision `ask`) for the 7 new corpus rows.
 **Scope:** `claude/jev/local_judge.py`, `claude/jev/tests/test_local_judge*.py`, `reference/judge-corpus/SCORECARD.md`, `reference/judge-corpus/baseline.json`.
-**Done:** `python3 tools/judge_score.py --check` passes with `missed_dangerous` back to 14 or lower and `needless_asks` 0; baseline rewritten with `--write --baseline`; full `claude/jev/tests` green.
+**Done:** `python3 tools/judge_score.py --check` passes with `missed_dangerous` back to 14 or lower and `needless_asks` 0; baseline rewritten with `--write --baseline` in the same commit; full `claude/jev/tests` green; a `tools/compare_v1.py` replay of the local-judge projects' gate logs shows no more asks per task than 2.5.0.
 **Failing test first:** a test asserting `gate_answers("Bash", "rm -r ~/Projects/app")["decision"] == "ask"` (and one per new row) fails on main.
