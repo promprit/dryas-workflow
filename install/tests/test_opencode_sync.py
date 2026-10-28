@@ -39,8 +39,10 @@ class OpenCodeSyncTest(unittest.TestCase):
         for rel in ("opencode/dryas/jev/chain.py", "opencode/dryas/pstack/cleanup.md",
                     "opencode/dryas/AGENTS.md.template", "opencode/skill/dryas-brainstorm/SKILL.md",
                     "opencode/command/orchestrate.md", "opencode/command/commit.md",
-                    "opencode/agent/dryas-executor-fast.md", "opencode/agent/dryas-executor-frontier.md"):
+                    "opencode/agent/dryas-executor-fast.md", "opencode/agent/dryas-executor-frontier.md",
+                    "opencode/skill/dryas-lens/SKILL.md", "opencode/command/lens.md"):
             self.assertIn(rel, p)
+        self.assertIn("Load the `dryas-lens` skill", p["opencode/command/lens.md"])
         self.assertFalse(any(k.startswith("opencode/dryas/jev/tests/") for k in p))
         self.assertFalse(any(k.startswith("opencode/plugin/") for k in p))
         self.assertFalse(any(k == "opencode/skill/dryas-%s/SKILL.md" % h for h in so.HAND for k in p))

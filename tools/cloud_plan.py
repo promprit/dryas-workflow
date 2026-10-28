@@ -30,8 +30,8 @@ import redact  # noqa: E402
 import render  # noqa: E402
 
 CORE_SKILLS = ("orchestrate", "brainstorm", "plan", "review-request", "review-receive", "tdd", "debug", "verify",
-               "worktree", "interrogate")
-CORE_COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "dryas-cloud")
+               "worktree", "interrogate", "lens")
+CORE_COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "dryas-cloud", "lens")
 CORE_AGENTS = ("executor",)
 COMPS = ("core", "jev", "memory", "pstack-picks")  # chain.json stages and rules blocks a repo copy keeps
 DESIGN: Dict[str, Tuple[str, Tuple[str, ...]]] = {

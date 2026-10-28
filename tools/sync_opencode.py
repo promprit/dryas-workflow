@@ -21,7 +21,7 @@ MARK = "<!-- dryas-managed -->"
 TREES = (("claude/jev", "opencode/dryas/jev"), ("claude/pstack", "opencode/dryas/pstack"))
 HAND = ("orchestrate", "interrogate", "benchmark-checklist")
 CLAUDE_ONLY = ("ruflo-tools.md",)
-THIN = ("orchestrate", "interrogate")
+THIN = ("orchestrate", "interrogate", "lens")
 FROM_CODEX = ("wplan", "wreview", "commit", "tune", "retro")
 TIERS = ("fast", "standard", "strong", "frontier")
 JEV_TOOLS = ("jev_judge|log_override|log_escalation|log_dispatch|log_review|log_merge|memory_search|memory_store|"
@@ -115,7 +115,7 @@ def plan(repo: Path) -> Dict[str, Union[Path, str]]:
     for n in scp.SKILL_FILES:
         if (skills / n).is_file():
             out["opencode/skill/" + n] = scp._lf(skills / n)
-    for name in scp.PROCESS_SKILLS + HAND:
+    for name in scp.PROCESS_SKILLS + scp.OWN_SKILLS + HAND:
         for f in sorted((skills / name).glob("*.md")) if (skills / name).is_dir() else []:
             if (name in HAND and f.name == "SKILL.md") or f.name in CLAUDE_ONLY:
                 continue
