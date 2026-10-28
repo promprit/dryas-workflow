@@ -19,7 +19,7 @@ Write one paragraph stating the intent, from the approved design or spec, the PL
 
 ## 3. Reviewers
 
-Read `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/reviewer-prompt.md` and fill it with the intent, the diff (or the exact command that prints it), `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/rubric.md` and `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/code-quality-review.md`. Both reviewers get the same filled prompt.
+Read `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/reviewer-prompt.md` and fill it with the intent, the diff (or the exact command that prints it), `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/rubric.md` and `${CLAUDE_PLUGIN_ROOT}/pstack/interrogate/code-quality-review.md`. Both reviewers get the same filled prompt. Each reviewer's dispatch description starts with `devils-advocate: ` (for example `devils-advocate: interrogate A`).
 
 Inside `/orchestrate`, dispatch only after every build task has left `.orchestrate/active.json`. Add one section per reviewer to `.orchestrate/PLAN.md`:
 

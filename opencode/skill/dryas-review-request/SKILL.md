@@ -36,6 +36,7 @@ Have fresh reviewers check the work before problems cascade. Each reviewer gets 
    - `[PLAN_OR_REQUIREMENTS]`: what it should do (`.orchestrate/PLAN.md`, the named plan or spec, the task text, or the requirements)
    - `[BASE_SHA]`: the starting commit
    - `[HEAD_SHA]`: the ending commit
+   Each reviewer's dispatch description starts with its role slug and a colon: `reviewer-spec: `, `reviewer-quality: ` or `reviewer-minimalist: `.
    Done when three reports are back, one per stage.
 3. **Act on the findings** with the `dryas-review-receive` skill:
    - Fix critical issues immediately

@@ -8,6 +8,7 @@ from test_pstack_content import LEAK
 import re
 from test_lens_rules import CLAUDE_LENS_LINE, CODEX_LENS_LINE
 from test_lens_orchestrate import CLAUDE_LENS_STEP, CODEX_LENS_STEP
+from test_role_memory_docs import CLAUDE_LESSONS_STEP, CLAUDE_LESSONS_STORE, DESC_RULE
 CODEX_LENS_OLD = "- Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`)."
 CD_PATH = re.compile(r"(?:\{\{CD\}\}|\$\{CLAUDE_PLUGIN_ROOT\})/([A-Za-z0-9_./-]+)")
 ROOT = "${CLAUDE_PLUGIN_ROOT}"
@@ -73,7 +74,11 @@ def plugin_form(t):
                  ("3. If the Opus executor succeeds, stop: no Fable.", "3. If the strong executor succeeds, stop: no frontier."),
                  ("4. Only if the Opus executor fails", "4. Only if the strong executor fails"),
                  ("reason naming what Opus could not resolve). If Fable is unavailable", "reason naming what the strong tier could not resolve). If the frontier tier is unavailable"),
-                 ("5. A Fable failure comes", "5. A frontier failure comes")):
+                 ("5. A Fable failure comes", "5. A frontier failure comes"),
+                 ("(executors read them; they have no Skill tool).\n", "(executors read them; they have no Skill tool).\n\n   " + CLAUDE_LESSONS_STEP + "\n"),
+                 ("   Independent tasks go out in one message, in parallel.", "   " + DESC_RULE + " Independent tasks go out in one message, in parallel."),
+                 ("role (coder, tester, reviewer or docs)", "role (coder, tester, reviewer, reviewer-spec, reviewer-quality, reviewer-minimalist or docs)"),
+                 ("tell the user; then remove the worktree.", "tell the user. " + CLAUDE_LESSONS_STORE + " Then remove the worktree.")):
         t = t.replace(a, b)
     return with_rea_line(t, "- Design work", CLAUDE_REA_LINE)
 
@@ -89,6 +94,10 @@ def with_rea_line(t, anchor, line=REA_LINE):
 
 
 CODEX_SKILLS = re.compile(r"\$(benchmark-checklist|orchestrate|interrogate|wreview|commit|wplan|tune)(?![A-Za-z0-9_-])")
+CODEX_LESSONS_STEP = CLAUDE_LESSONS_STEP.replace("`mcp__plugin_dryas_jev__memory_search`", "`memory_search` (server `jev`)").replace(
+    "the §5.5 id", "the dispatch task id").replace("the dispatch prompt", "the worker's prompt")
+CODEX_LESSONS_STORE = CLAUDE_LESSONS_STORE.replace("`mcp__plugin_dryas_jev__memory_store`", "`memory_store` (server `jev`)")
+CODEX_DESC_RULE = DESC_RULE.replace("Agent dispatch's", "sub-agent dispatch's")
 CODEX_ROOT_LINE = ("`<dryas-root>` and `<dryas-py>` are given in the Dryas rules (\"Dryas paths:\"). If they are missing, "
                    "the Dryas hooks are not trusted: tell the user to run /hooks in Codex and stop.\n\n")
 
@@ -108,6 +117,11 @@ def codex_form(t, rel):
         t = t.replace(a, b)
     if rel.endswith("orchestrate/SKILL.md"):
         t = t.replace("# Orchestrate (Codex)\n\n", "# Orchestrate (Codex)\n\n" + CODEX_ROOT_LINE, 1)
+        t = t.replace("Name `<dryas-root>/skills/tdd/SKILL.md` and `<dryas-root>/skills/debug/SKILL.md` in its prompt. ",
+                      "Name `<dryas-root>/skills/tdd/SKILL.md` and `<dryas-root>/skills/debug/SKILL.md` in its prompt. " + CODEX_LESSONS_STEP + " ", 1)
+        t = t.replace("Use Codex sub-agents when available (independent tasks in parallel); otherwise",
+                      CODEX_DESC_RULE + " Use Codex sub-agents when available (independent tasks in parallel); otherwise", 1)
+        t = t.replace("tell the user; remove the worktree.", "tell the user. " + CODEX_LESSONS_STORE + " Then remove the worktree.", 1)
         t = t.replace("Delete `.orchestrate/active.json`, review the worktree diff",
                       "Delete `.orchestrate/active.json`. " + CODEX_LENS_STEP + " Review the worktree diff", 1)
     return t
