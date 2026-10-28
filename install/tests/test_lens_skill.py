@@ -87,6 +87,22 @@ class LensSkillTest(unittest.TestCase):
         self.assertIn("Skill(dryas:lens)", t)
         self.assertIn("Artifact", t.split("---", 2)[1])
         self.assertIn("$ARGUMENTS", t)
+        head = t.split("---", 2)[1]
+        for s in ("Edit", "Skill(impeccable)", "Skill(impeccable:impeccable)", "Skill(ui-ux-pro-max)",
+                  "Skill(ui-ux-pro-max:ui-ux-pro-max)", "Skill(artifact-design)"):
+            self.assertIn(s, head, s)
+        self.assertNotIn("Bash(open", head)
+
+    def test_orchestrate_mode(self):
+        t = read(SKILL)
+        self.assertIn("## Inside /orchestrate", t)
+        for s in ("skip § Re-run and step 6", "never write or change the spec's `## Lens` block",
+                  "`.orchestrate/<branch-slug>-lens.html`", "lens: <finding> — <change>"):
+            self.assertIn(s, t, s)
+        self.assertNotIn("lens-<branch>", t)
+        self.assertNotIn("open <path>", t)
+        for p in ("codex/skills/lens/SKILL.md", "opencode/skill/dryas-lens/SKILL.md"):
+            self.assertIn("<branch-slug>-lens.html", read(ROOT / p), p)
 
     def test_sync_lists(self):
         self.assertEqual(scp.OWN_SKILLS, ("lens",))

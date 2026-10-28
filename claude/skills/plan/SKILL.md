@@ -64,7 +64,7 @@ Goal is one sentence on what this builds; Architecture is 2-3 sentences on the a
 
 ## Global constraints
 
-A `## Global Constraints` section: the spec's project-wide requirements (version floors, dependency limits, naming and copy rules, platform requirements), one line each, with exact values copied verbatim from the spec. Every task's requirements implicitly include this section. When the spec's `## Lens` block has `Panel: design` or `Panel: design+product`, add the line `- Design checked by dryas:lens (Panel: <value>); UI tasks follow the lens page's changes: <link or path>` to Global Constraints.
+A `## Global Constraints` section: the spec's project-wide requirements (version floors, dependency limits, naming and copy rules, platform requirements), one line each, with exact values copied verbatim from the spec. Every task's requirements implicitly include this section. When the spec's `## Lens` block has `Panel: design` or `Panel: design+product`, add the line `- Design checked by dryas:lens (Panel: <value>); UI tasks follow the design as written in the spec (lens changes already applied), not the lens page.` to Global Constraints.
 
 ## Review focus
 

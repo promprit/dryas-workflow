@@ -30,7 +30,7 @@ Out of scope: changing FlowObserve or Canopy (they consume the contract in §6; 
 | D3 | Design panel: craft (Ive), `impeccable` critique, `ui-ux-pro-max` check. Product panel: focus (Jobs), craft (Ive), data (Ng: data and AI). |
 | D4 | Triggers: design that needs review → design panel; new feature or product idea in brainstorm → product panel; both → one page with both panels; "3 lens" or `/lens [design\|product]` on demand. Not for bug fixes or internal tooling. |
 | D5 | Output: one page per design topic, updated in place on re-run. Claude Code: Artifact. Codex, OpenCode: local HTML file. |
-| D6 | `/orchestrate` writes `.orchestrate/lens-<task>.html` (scratch, git-ignored) and names it in the end report; publishes only if the user asked on that run. |
+| D6 | `/orchestrate` writes `.orchestrate/<branch-slug>-lens.html` (scratch, git-ignored) and names it in the end report; publishes only if the user asked on that run. |
 | D7 | Canopy marker: the Artifact publish `label` (`dryas:lens design`, `dryas:lens product`, `dryas:lens design+product`) and the file name `lens/<topic>-lens.html`. No Jev log or reducer change. |
 | D8 | Fixed `## Lens` block in the spec or in-chat design (§6). |
 | D9 | Lenses advise; the user's approval stays the gate. Lenses never quote or claim endorsement from real people. |
@@ -68,7 +68,7 @@ Locations:
 | --- | --- | --- |
 | Brainstorm, Claude Code | scratchpad `lens/<topic>-lens.html` | yes, Artifact, label per D7 |
 | Brainstorm, Codex/OpenCode | `docs/lens/<topic>-lens.html` (committed with the spec) | no, path given |
-| `/orchestrate` design review pass | `.orchestrate/lens-<task>.html` | only if asked on that run |
+| `/orchestrate` design review pass | `.orchestrate/<branch-slug>-lens.html` | only if asked on that run |
 | On demand (`/lens`) | as brainstorm for the edition | as brainstorm |
 
 `<topic>` is the spec's topic slug. A re-run updates the existing page: the skill reads the link or path from the design's `## Lens` block (`Verdict: … artifact: <link or path>`) and publishes to that `url`, so it works in a later session or after `/handoff`. With no block yet, it creates the page.
@@ -87,7 +87,7 @@ Changed:
 - `claude/CLAUDE.md.template:7`, the design rule becomes: "Design work (UI/UX, layout, visual style, components, on-screen copy) and new features: run `dryas:lens`." `codex/AGENTS.md.template` has no design rule today: its line 5 becomes "Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`; design: `$dryas:lens`)." Rule lines are kept short to stay within the template byte budgets (install/tests/test_template_budget.py); the detail lives in the skill and docs/workflow.md.
 - `docs/workflow.md` §4 step 1: the Design work paragraph says the same; a new "Product lens" paragraph; the table row at line 285 gains a `dryas:lens` row.
 - `claude/skills/brainstorm/SKILL.md:97` and `reference.md` § Presenting the design: design work runs the design panel before the design is presented; a new feature runs the product panel before approaches; the page link and the `## Lens` block go into the in-chat design or the spec.
-- `claude/skills/orchestrate/SKILL.md` has no design step today; this adds one. In §8 Finish, before "Review the worktree diff with the `dryas:review-request` skill": when the approved design's `## Lens` block has `Panel: design` or `Panel: design+product`, run `dryas:lens` (design panel) on what was built, write `.orchestrate/lens-<branch>.html`, and put its path in the end report; publish it as an Artifact only when the user asked for artifacts when starting this run. No `## Lens` block or `Panel: product` means no lens step. Add `Skill(dryas:lens)` to its `allowed-tools`. Design is recognised by that block, not by guessing from the diff.
+- `claude/skills/orchestrate/SKILL.md` has no design step today; this adds one. In §8 Finish, before "Review the worktree diff with the `dryas:review-request` skill": when the `## Lens` block in the spec named in the plan header (`**Spec:**` line of the plan the run was started from) has `Panel: design` or `Panel: design+product`, run `dryas:lens` (design panel, in its read-only § Inside /orchestrate mode) on what was built, write `.orchestrate/<branch-slug>-lens.html`, and put its path in the end report; publish it as an Artifact only when the user asked for artifacts when starting this run. No `## Lens` block or `Panel: product` means no lens step. Add `Skill(dryas:lens)` to its `allowed-tools`. Design is recognised by that block, not by guessing from the diff.
 - `claude/skills/plan/SKILL.md`: a plan written from a design whose `## Lens` block names the design panel copies the block's `Panel:` line into the plan's Global Constraints, so executors of UI tasks see "design checked by `dryas:lens`; follow the lens page's changes".
 
 ## 6. Contract with Canopy (FlowObserve)
@@ -131,6 +131,8 @@ Per the "no release worse than the last" rule:
 - **Prompts per task.** Non-design tasks: unchanged (`tools/compare_v1.py` replay on the real `~/.dryas/jev/logs` tasks, plus `tools/compare_release.py` for the hook path, which this release does not touch). Design tasks: the Artifact publish replaces reading the text design in chat; it must not add a prompt. If a publish raises a consent ask in the test runs, D10 applies and the release ships with the local-file path as the Claude default until publishing is prompt-free.
 - **Speed and cost.** One lens run on a design task adds at most one critique pass. Limit: median added time ≤ 90 s and added tokens ≤ 25k per design task. Measured by running the same three design prompts (one design-only, one product-only, one both; fixtures in `tools/fixtures/lens/`) in a headless session on 2.5.0 and on this branch, three runs each side, comparing total tokens and wall time from the session usage. This is a new small script, `tools/compare_lens.py`, and a plan task; `compare_v1.py` only covers prompts. Over either limit fails the release. Report the numbers through `pstack/benchmark-checklist.md`.
 - **Noise.** One page per topic, updated in place; no new chat output beyond the link and the `## Lens` block.
+
+Inside `/orchestrate` the lens never publishes unless asked and never edits the spec; the skills it calls are pre-allowed in the orchestrate front matter so the run stays prompt-free.
 
 ## 9. Hand-off
 

@@ -36,7 +36,7 @@ Not for bug fixes, internal tooling or refactors, unless the user asks.
 
 ## Save or publish
 
-Write the page to `docs/lens/<topic>-lens.html` (self-contained HTML, no external scripts) and give the user its path; it is committed with the spec. Inside `$dryas:orchestrate`: write `.orchestrate/lens-<branch>.html` and name its path in the end report. Never publish it anywhere: only when the user asked for artifacts when starting the run may you tell them the path to share.
+Write the page to `docs/lens/<topic>-lens.html` (self-contained HTML, no external scripts) and give the user its path; it is committed with the spec. Inside `$dryas:orchestrate`: write `.orchestrate/<branch-slug>-lens.html` and name its path in the end report. Never publish it anywhere: only when the user asked for artifacts when starting the run may you tell them the path to share.
 
 ## Re-run
 
@@ -44,6 +44,10 @@ A second run on the same design updates the same page. Read the design's `## Len
 - A local path: overwrite that file.
 - A link: write a new local page and replace the link in the block with its path.
 - No block yet: create the page and the block.
+
+## Inside $dryas:orchestrate
+
+Run from `$dryas:orchestrate`, the lens is read-only on the design: skip § Re-run and step 6 (never write or change the spec's `## Lens` block), never publish unless the user asked for artifacts when starting the run, and write the page only to `.orchestrate/<branch-slug>-lens.html`, where `<branch-slug>` is the branch name with `/` replaced by `-`. Each `change` finding goes to the review as a line `lens: <finding> — <change>`, so the orchestrator handles it with the reviewers' findings; the page is for the user.
 
 ## Guardrails
 

@@ -31,7 +31,7 @@ class LensRulesTest(unittest.TestCase):
 
     def test_brainstorm_runs_lens(self):
         t = read("claude/skills/brainstorm/SKILL.md")
-        for s in ("`dryas:lens` design panel", "product panel before you propose approaches", "`## Lens` block"):
+        for s in ("`dryas:lens` design panel", "(not internal tooling, unless the user asks) before you propose approaches","`## Lens` block", "user-facing"):
             self.assertIn(s, t, s)
         ref = read("claude/skills/brainstorm/reference.md").split("## Presenting the design")[1].split("\n## ")[0]
         self.assertIn("`## Lens` block", ref)
@@ -42,6 +42,7 @@ class LensRulesTest(unittest.TestCase):
         t = read("claude/skills/plan/SKILL.md").split("## Global constraints")[1].split("\n## ")[0]
         self.assertIn("`Panel: design`", t)
         self.assertIn("Design checked by dryas:lens", t)
+        self.assertIn("as written in the spec", t)
 
 
 if __name__ == "__main__":

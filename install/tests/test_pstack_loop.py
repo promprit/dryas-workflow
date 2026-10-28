@@ -30,7 +30,7 @@ def plugin_form(t):
                  ("~/.claude/jev/thresholds.py", ROOT + "/jev/thresholds.py"),
                  ("~/.claude/skills/orchestrate/", ROOT + "/skills/orchestrate/"),
                  ("- Design work (UI/UX, layout, visual style, components, on-screen copy): use `ui-ux-pro-max` and `impeccable`.", CLAUDE_LENS_LINE),
-                 ("Skill(dryas:review-receive), Bash(git worktree:*)", "Skill(dryas:review-receive), Skill(dryas:lens), Artifact, Bash(git worktree:*)"),
+                 ("Skill(dryas:review-receive), Bash(git worktree:*)", "Skill(dryas:review-receive), Skill(dryas:lens), Artifact, Skill(impeccable), Skill(impeccable:impeccable), Skill(ui-ux-pro-max), Skill(ui-ux-pro-max:ui-ux-pro-max), Skill(artifact-design), Bash(git worktree:*)"),
                  ("Delete `.orchestrate/active.json`. Review the worktree diff", "Delete `.orchestrate/active.json`. " + CLAUDE_LENS_STEP + " Review the worktree diff"),
                  ("`~/.claude/jev/chain.json`", "`jev/chain.json` in the Dryas plugin folder"),
                  ("`~/.claude/pstack/benchmark-checklist.md`", "`pstack/benchmark-checklist.md` in the Dryas plugin folder"),

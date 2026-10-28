@@ -3,16 +3,18 @@ import unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CLAUDE_LENS_STEP = (
-    "When the approved design's `## Lens` block has `Panel: design` or `Panel: design+product`, run the `dryas:lens` "
-    "skill (design panel) on what was built before the review: write `.orchestrate/lens-<branch>.html` and name its "
-    "path in the end report. Publish it as an Artifact only when the user asked for artifacts when starting the run. "
-    "Its `change` findings join the reviewers' findings and are handled with `dryas:review-receive`. No `## Lens` "
+    "When the `## Lens` block in the spec named in the plan header (`**Spec:**` line of the plan the run was started "
+    "from) has `Panel: design` or `Panel: design+product`, run the `dryas:lens` skill (design panel) on what was "
+    "built before the review, in its § Inside /orchestrate mode: write `.orchestrate/<branch-slug>-lens.html` and "
+    "name its path in the end report. Publish it as an Artifact only when the user asked for artifacts when starting "
+    "the run. Its `change` findings join the reviewers' findings and are handled with `dryas:review-receive`. No `## Lens` "
     "block, no `Panel:` line, or `Panel: product`: no lens step.")
 CODEX_LENS_STEP = (
-    "When the approved design's `## Lens` block has `Panel: design` or `Panel: design+product`, run `$dryas:lens` "
-    "(design panel) on what was built before the review: write `.orchestrate/lens-<branch>.html` and name its path in "
-    "the end report. Its `change` findings join the reviewers' findings. No `## Lens` block, no `Panel:` line, or "
-    "`Panel: product`: no lens step.")
+    "When the `## Lens` block in the spec named in the plan header (`**Spec:**` line of the plan the run was started "
+    "from) has `Panel: design` or `Panel: design+product`, run `$dryas:lens` (design panel) on what was built before "
+    "the review, in its § Inside /orchestrate mode: write `.orchestrate/<branch-slug>-lens.html` and name its path "
+    "in the end report. Its `change` findings join the reviewers' findings. No `## Lens` block, no `Panel:` line, "
+    "or `Panel: product`: no lens step.")
 OPENCODE_LENS_STEP = CODEX_LENS_STEP.replace("`$dryas:lens`", "the `dryas-lens` skill")
 
 
@@ -29,6 +31,9 @@ class LensOrchestrateTest(unittest.TestCase):
         head = t.split("---", 2)[1]
         self.assertIn("Skill(dryas:lens)", head)
         self.assertIn("Artifact", head)
+        for s in ("Skill(impeccable)", "Skill(impeccable:impeccable)", "Skill(ui-ux-pro-max)",
+                  "Skill(ui-ux-pro-max:ui-ux-pro-max)", "Skill(artifact-design)"):
+            self.assertIn(s, head, s)
 
     def test_codex_and_opencode(self):
         for p, step in (("codex/skills/orchestrate/SKILL.md", CODEX_LENS_STEP),
