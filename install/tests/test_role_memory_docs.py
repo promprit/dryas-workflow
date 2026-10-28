@@ -1,4 +1,3 @@
-"""Canopy spec task 2: reviewer role values and role lessons in /orchestrate and review-request (all editions)."""
 import unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
