@@ -25,7 +25,6 @@ def section(text, title):
 
 
 def block_section():
-    # § Lens block is the last section of reference.md and holds a fenced "## Lens", so take the rest of the file
     return read(REF).split("## Lens block", 1)[1]
 
 
