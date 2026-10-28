@@ -132,6 +132,10 @@ class ArtifactAllowTest(unittest.TestCase):
         self.assertIn("Artifact", tools.split(": ", 1)[1].split(", "))
         self.assertIn("Skill(impeccable)", tools)
 
+    def test_lens_skill_load_pre_allowed(self):
+        frag = json.loads(read(ROOT / "claude/settings.fragment.json"))
+        self.assertIn("Skill(dryas:lens)", frag["core"]["permissions"]["allow"])
+
 
 if __name__ == "__main__":
     unittest.main()

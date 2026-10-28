@@ -161,6 +161,30 @@ class CompareLensTest(unittest.TestCase):
         cfg = json.loads(cmd[cmd.index("--settings") + 1])
         self.assertIs(cfg["enabledPlugins"]["dryas@dryas-workflow"], False)
 
+    def test_build_cmd_passes_side_allow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            side = Path(tmp)
+            (side / "claude").mkdir()
+            (side / "claude" / "settings.fragment.json").write_text(
+                json.dumps({"core": {"permissions": {"allow": ["Skill(dryas:lens)", "Read($DATA_RULE/**)"]}}}),
+                encoding="utf-8")
+            cmd = cl.build_cmd("claude", side, "hello")
+        cfg = json.loads(cmd[cmd.index("--settings") + 1])
+        self.assertEqual(cfg["permissions"], {"allow": ["Skill(dryas:lens)"]})
+
+    def test_side_allow_reads_fragment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            side = Path(tmp)
+            (side / "claude").mkdir()
+            (side / "claude" / "settings.fragment.json").write_text(
+                json.dumps({"core": {"permissions": {"allow": ["Skill(dryas:lens)", "Read($DATA_RULE/**)"]}}}),
+                encoding="utf-8")
+            self.assertEqual(cl.side_allow(side), ["Skill(dryas:lens)"])
+
+    def test_side_allow_missing_fragment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(cl.side_allow(Path(tmp)), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,7 +10,9 @@ never has more permission prompts (denials in -p mode) than the old, and every n
 Prompts are counted as permission_denials in -p mode: a tool that would ask interactively shows up only when it is
 denied there. Run logs go to a temp JEV_LOG_DIR, never ~/.dryas/jev/logs. Cost is printed for information only.
 The account's installed Dryas plugin is switched off for each run with --settings, so only the --plugin-dir copy
-loads; the user's settings files are not changed. Prompts are compared as the maximum per fixture on each side.
+loads; the user's settings files are not changed. Each side runs with the allow list from its own settings fragment
+(entries without installer placeholders), so the gate measures each release's permissions as installed.
+Prompts are compared as the maximum per fixture on each side.
 """
 import argparse
 import json
@@ -78,8 +80,18 @@ def verdict(old: List[Dict[str, object]], new: List[Dict[str, object]], max_ms: 
     return ok, lines
 
 
+def side_allow(side: Path) -> List[str]:
+    """The core allow list of one side's settings fragment, minus installer placeholders ($CD, $DATA_RULE...)."""
+    try:
+        frag = json.loads((side / "claude" / "settings.fragment.json").read_text(encoding="utf-8"))
+        allow = frag["core"]["permissions"]["allow"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    return [r for r in allow if "$" not in r]
+
+
 def build_cmd(claude: str, side: Path, prompt: str) -> List[str]:
-    off = json.dumps({"enabledPlugins": {"dryas@dryas-workflow": False}})
+    off = json.dumps({"enabledPlugins": {"dryas@dryas-workflow": False}, "permissions": {"allow": side_allow(side)}})
     return [claude, "-p", prompt, "--output-format", "json", "--settings", off, "--plugin-dir", str(side / "claude")]
 
 
