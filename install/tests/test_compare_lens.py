@@ -94,37 +94,41 @@ class CompareLensTest(unittest.TestCase):
             return types.SimpleNamespace(returncode=0, stdout=result_json(), stderr="")
 
         with mock.patch.object(cl.subprocess, "run", side_effect=fake_run):
-            cl.run_once("claude", Path("/old"), "hello", "design")
+            cl.run_once("claude", Path("/old"), "hello", "design", [])
         self.assertEqual(seen["env"]["JEV_LOG_DIR"], str(Path(seen["cwd"]) / "logs"))
 
     def test_run_once_nonzero_exit_is_run_error(self):
         fake = types.SimpleNamespace(returncode=1, stdout="", stderr="boom")
         with mock.patch.object(cl.subprocess, "run", return_value=fake):
             with self.assertRaises(cl.RunError) as ctx:
-                cl.run_once("claude", Path("/old"), "hello", "design")
+                cl.run_once("claude", Path("/old"), "hello", "design", [])
         self.assertIn("/old", str(ctx.exception))
         self.assertIn("design", str(ctx.exception))
 
     def test_run_once_timeout_is_run_error(self):
         with mock.patch.object(cl.subprocess, "run", side_effect=subprocess.TimeoutExpired("claude", 900)):
             with self.assertRaises(cl.RunError):
-                cl.run_once("claude", Path("/old"), "hello", "design")
+                cl.run_once("claude", Path("/old"), "hello", "design", [])
 
     def test_failed_run_is_setup_error(self):
         with tempfile.TemporaryDirectory() as tmp, \
                 mock.patch.object(cl, "run_once", side_effect=cl.RunError("x")):
             (Path(tmp) / "claude").mkdir()
+            (Path(tmp) / "claude" / "settings.fragment.json").write_text(
+                json.dumps({"core": {"permissions": {"allow": []}}}), encoding="utf-8")
             self.assertEqual(cl.main(["--old", tmp, "--runs", "1"]), 2)
 
     def test_relative_old_is_resolved(self):
         sides = []
 
-        def fake_run_once(claude, side, prompt, name):
+        def fake_run_once(claude, side, prompt, name, allow):
             sides.append(side)
             return run(1, 1)
 
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "old" / "claude").mkdir(parents=True)
+            (Path(tmp) / "old" / "claude" / "settings.fragment.json").write_text(
+                json.dumps({"core": {"permissions": {"allow": []}}}), encoding="utf-8")
             cwd = os.getcwd()
             os.chdir(tmp)
             try:
@@ -151,24 +155,18 @@ class CompareLensTest(unittest.TestCase):
         self.assertEqual(names, ["both.md", "design.md", "product.md"])
 
     def test_build_cmd(self):
-        cmd = cl.build_cmd("claude", Path("/old"), "hello")
+        cmd = cl.build_cmd("claude", Path("/old"), "hello", [])
         self.assertEqual(cmd[:3], ["claude", "-p", "hello"])
         self.assertIn("--output-format", cmd)
         self.assertEqual(cmd[cmd.index("--plugin-dir") + 1], "/old/claude")
 
     def test_build_cmd_disables_installed_plugin(self):
-        cmd = cl.build_cmd("claude", Path("/old"), "hello")
+        cmd = cl.build_cmd("claude", Path("/old"), "hello", [])
         cfg = json.loads(cmd[cmd.index("--settings") + 1])
         self.assertIs(cfg["enabledPlugins"]["dryas@dryas-workflow"], False)
 
     def test_build_cmd_passes_side_allow(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            side = Path(tmp)
-            (side / "claude").mkdir()
-            (side / "claude" / "settings.fragment.json").write_text(
-                json.dumps({"core": {"permissions": {"allow": ["Skill(dryas:lens)", "Read($DATA_RULE/**)"]}}}),
-                encoding="utf-8")
-            cmd = cl.build_cmd("claude", side, "hello")
+        cmd = cl.build_cmd("claude", Path("/old"), "hello", ["Skill(dryas:lens)"])
         cfg = json.loads(cmd[cmd.index("--settings") + 1])
         self.assertEqual(cfg["permissions"], {"allow": ["Skill(dryas:lens)"]})
 
@@ -181,9 +179,38 @@ class CompareLensTest(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(cl.side_allow(side), ["Skill(dryas:lens)"])
 
-    def test_side_allow_missing_fragment(self):
+    def test_side_allow_missing_fragment_is_setup_error(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(cl.side_allow(Path(tmp)), [])
+            with self.assertRaises(cl.RunError) as ctx:
+                cl.side_allow(Path(tmp))
+        self.assertIn("settings fragment missing or unreadable", str(ctx.exception))
+
+    def test_side_allow_malformed_fragment_is_setup_error(self):
+        bad = ["{not json", json.dumps({"core": {}}), json.dumps({"core": {"permissions": {"allow": "Read"}}})]
+        for text in bad:
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as tmp:
+                side = Path(tmp)
+                (side / "claude").mkdir()
+                (side / "claude" / "settings.fragment.json").write_text(text, encoding="utf-8")
+                with self.assertRaises(cl.RunError):
+                    cl.side_allow(side)
+
+    def test_side_allow_empty_list_is_not_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            side = Path(tmp)
+            (side / "claude").mkdir()
+            (side / "claude" / "settings.fragment.json").write_text(
+                json.dumps({"core": {"permissions": {"allow": []}}}), encoding="utf-8")
+            self.assertEqual(cl.side_allow(side), [])
+
+    def test_main_exits_2_on_bad_fragment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "claude").mkdir()
+            err = io.StringIO()
+            with mock.patch.object(cl, "run_once", side_effect=AssertionError("run_once must not run")), \
+                    mock.patch.object(sys, "stderr", err):
+                self.assertEqual(cl.main(["--old", tmp, "--runs", "1"]), 2)
+        self.assertIn("settings fragment missing or unreadable", err.getvalue())
 
 
 if __name__ == "__main__":
