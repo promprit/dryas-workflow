@@ -156,6 +156,11 @@ class CompareLensTest(unittest.TestCase):
         self.assertIn("--output-format", cmd)
         self.assertEqual(cmd[cmd.index("--plugin-dir") + 1], "/old/claude")
 
+    def test_build_cmd_disables_installed_plugin(self):
+        cmd = cl.build_cmd("claude", Path("/old"), "hello")
+        cfg = json.loads(cmd[cmd.index("--settings") + 1])
+        self.assertIs(cfg["enabledPlugins"]["dryas@dryas-workflow"], False)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,7 +34,7 @@ Out of scope: changing FlowObserve or Canopy (they consume the contract in §6; 
 | D7 | Canopy marker: the Artifact publish `label` (`dryas:lens design`, `dryas:lens product`, `dryas:lens design+product`) and the file name `lens/<topic>-lens.html`. No Jev log or reducer change. |
 | D8 | Fixed `## Lens` block in the spec or in-chat design (§6). |
 | D9 | Lenses advise; the user's approval stays the gate. Lenses never quote or claim endorsement from real people. |
-| D10 | If a publish would prompt (consent ask), the Claude edition writes the local file and opens it instead. |
+| D10 | The Artifact tool is pre-allowed in the core settings fragment, so a lens publish adds no prompt; if a publish is still denied, the skill writes the local file instead. |
 | D11 | Released as 2.6.0, gated against 2.5.0 (§8). |
 
 ## 3. The lenses
@@ -128,7 +128,7 @@ In `install/tests`, following the existing render and sync tests:
 
 Per the "no release worse than the last" rule:
 
-- **Prompts per task.** Non-design tasks: unchanged (`tools/compare_v1.py` replay on the real `~/.dryas/jev/logs` tasks, plus `tools/compare_release.py` for the hook path, which this release does not touch). Design tasks: the Artifact publish replaces reading the text design in chat; it must not add a prompt. If a publish raises a consent ask in the test runs, D10 applies and the release ships with the local-file path as the Claude default until publishing is prompt-free.
+- **Prompts per task.** Non-design tasks: unchanged (`tools/compare_v1.py` replay on the real `~/.dryas/jev/logs` tasks, plus `tools/compare_release.py` for the hook path, which this release does not touch). Design tasks: the Artifact publish replaces reading the text design in chat; it must not add a prompt. The Artifact tool is pre-allowed in the core settings fragment, so a lens publish adds no prompt; if a publish is still denied, the skill writes the local file instead.
 - **Speed and cost.** One lens run on a design task adds at most one critique pass. Limit: median added time ≤ 90 s and added tokens ≤ 25k per design task. Measured by running the same three design prompts (one design-only, one product-only, one both; fixtures in `tools/fixtures/lens/`) in a headless session on 2.5.0 and on this branch, three runs each side, comparing total tokens and wall time from the session usage. This is a new small script, `tools/compare_lens.py`, and a plan task; `compare_v1.py` only covers prompts. Over either limit fails the release. Report the numbers through `pstack/benchmark-checklist.md`.
 - **Noise.** One page per topic, updated in place; no new chat output beyond the link and the `## Lens` block.
 

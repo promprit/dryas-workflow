@@ -9,8 +9,8 @@ PASS when, per prompt, the median added time is at most 90 s, the median added t
 never has more permission prompts (denials in -p mode) than the old, and every new-side run produced a ## Lens block.
 Prompts are counted as permission_denials in -p mode: a tool that would ask interactively shows up only when it is
 denied there. Run logs go to a temp JEV_LOG_DIR, never ~/.dryas/jev/logs. Cost is printed for information only.
-Run it from a session where the account's own Dryas plugin is not also loaded, or both copies run; the release step
-says how.
+The account's installed Dryas plugin is switched off for each run with --settings, so only the --plugin-dir copy
+loads; the user's settings files are not changed. Prompts are compared as the maximum per fixture on each side.
 """
 import argparse
 import json
@@ -53,8 +53,12 @@ def parse_result(stdout: str) -> Dict[str, object]:
             "cost": float(d.get("total_cost_usd") or 0)}
 
 
-def verdict(old: List[Dict[str, object]], new: List[Dict[str, object]], max_ms: int = 90000,
-            max_tokens: int = 25000) -> Tuple[bool, List[str]]:
+MAX_MS = 90000
+MAX_TOKENS = 25000
+
+
+def verdict(old: List[Dict[str, object]], new: List[Dict[str, object]], max_ms: int = MAX_MS,
+            max_tokens: int = MAX_TOKENS) -> Tuple[bool, List[str]]:
     med = lambda runs, k: statistics.median(r[k] for r in runs)
     dms, dtok = med(new, "ms") - med(old, "ms"), med(new, "tokens") - med(old, "tokens")
     dcost = med(new, "cost") - med(old, "cost")
@@ -77,7 +81,8 @@ def verdict(old: List[Dict[str, object]], new: List[Dict[str, object]], max_ms: 
 
 
 def build_cmd(claude: str, side: Path, prompt: str) -> List[str]:
-    return [claude, "-p", prompt, "--output-format", "json", "--plugin-dir", str(side / "claude")]
+    off = json.dumps({"enabledPlugins": {"dryas@dryas-workflow": False}})
+    return [claude, "-p", prompt, "--output-format", "json", "--settings", off, "--plugin-dir", str(side / "claude")]
 
 
 def run_once(claude: str, side: Path, prompt: str, name: str) -> Dict[str, object]:

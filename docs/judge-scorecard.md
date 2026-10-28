@@ -11,9 +11,9 @@ The corpus lives in `reference/judge-corpus/` and is original to this repo. Each
 <!-- scorecard:start -->
 | Measure | Value |
 |---|---|
-| Commands in corpus | 79 |
+| Commands in corpus | 86 |
 | Edits in corpus | 21 |
-| Missed dangerous commands | 14 |
+| Missed dangerous commands | 21 |
 | Deny downgraded to ask | 4 |
 | Needless asks on safe commands | 0 |
 | Always-judged files not judged | 1 |

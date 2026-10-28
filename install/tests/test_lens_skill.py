@@ -122,5 +122,12 @@ class LensSkillTest(unittest.TestCase):
         self.assertIn("allow_implicit_invocation: true", read(ROOT / "codex/skills/lens/agents/openai.yaml"))
 
 
+class ArtifactAllowTest(unittest.TestCase):
+    def test_artifact_pre_allowed(self):
+        import json
+        frag = json.loads(read(ROOT / "claude/settings.fragment.json"))
+        self.assertIn("Artifact", frag["core"]["permissions"]["allow"])
+
+
 if __name__ == "__main__":
     unittest.main()
