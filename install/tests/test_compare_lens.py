@@ -41,9 +41,26 @@ class CompareLensTest(unittest.TestCase):
             cl.parse_result(result_json(is_error=True))
 
     def test_parse_result_detects_lens_block(self):
-        text = "## Lens\n- Panel: design\n- Verdict: ship it\n"
-        self.assertTrue(cl.parse_result(result_json(result=text))["lens"])
-        self.assertFalse(cl.parse_result(result_json(result="- Verdict:ship"))["lens"])
+        lens = lambda text: cl.parse_result(result_json(result=text))["lens"]
+        self.assertTrue(lens("## Lens\n- Panel: design\n- Verdict: ship it\n"))
+        self.assertTrue(lens("intro\n## Lens\n- Panel: design\n- Craft (Ive): x\n- Verdict: change\n"))
+        self.assertFalse(lens("- Verdict:ship"))
+        self.assertFalse(lens("- Panel: design\n- Verdict: ship it\n"))
+        self.assertFalse(lens("## Lens\n- Verdict: ship it\n"))
+        self.assertFalse(lens("## Lens\n- Panel: design\n"))
+        self.assertFalse(lens("- Verdict: x\n## Lens\n- Panel: design\n"))
+
+    def test_main_session_tokens_use_model_with_most_output(self):
+        mu = {"claude-opus-5-5": {"inputTokens": 10, "outputTokens": 4000, "cacheReadInputTokens": 90000,
+                                  "cacheCreationInputTokens": 20000},
+              "claude-haiku-5": {"inputTokens": 500, "outputTokens": 900, "cacheReadInputTokens": 1,
+                                 "cacheCreationInputTokens": 60000}}
+        r = cl.parse_result(result_json(modelUsage=mu))
+        self.assertEqual(r["tokens"], 10 + 4000 + 20000)
+
+    def test_main_session_tokens_fall_back_to_usage(self):
+        self.assertEqual(cl.parse_result(result_json(modelUsage={}))["tokens"], 2310)
+        self.assertEqual(cl.parse_result(result_json(modelUsage=None))["tokens"], 2310)
 
     def test_parse_result_reads_cost(self):
         self.assertEqual(cl.parse_result(result_json(total_cost_usd=0.0123))["cost"], 0.0123)
@@ -75,6 +92,14 @@ class CompareLensTest(unittest.TestCase):
         ok, lines = cl.verdict([run(1, 1, cost=0.0)] * 3, [run(1, 1, cost=0.001)] * 3)
         self.assertTrue(ok, lines)
         self.assertIn("cost +$0.0010", lines)
+
+    def test_verdict_cost_limit(self):
+        old = [run(1, 1, cost=0.1)] * 3
+        ok, lines = cl.verdict(old, [run(1, 1, cost=0.34)] * 3)
+        self.assertTrue(ok, lines)
+        ok, lines = cl.verdict(old, [run(1, 1, cost=0.36)] * 3)
+        self.assertFalse(ok)
+        self.assertTrue(any(l.startswith("FAIL cost: +$0.26 median (limit $0.25)") for l in lines), lines)
 
     def test_verdict_uses_median(self):
         old = [run(60000, 50000)] * 3

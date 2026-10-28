@@ -23,6 +23,15 @@ In this order:
 
 Self-contained HTML that reads well at phone width and in dark mode.
 
+## Subagent reply
+
+The lens subagent replies with ONLY this, nothing before or after:
+
+1. The `## Lens` block exactly as § Lens block below shows it.
+2. A list, one line per finding: `- <lens>: <finding> → <change>`.
+
+The caller applies the changes, publishes or keeps the page, and writes the block into the design.
+
 ## Lens block
 
 The block goes into the in-chat design or the spec, verbatim in this shape:

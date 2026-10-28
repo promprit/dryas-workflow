@@ -1,7 +1,7 @@
 ---
 name: lens
 description: Use when a design needs review (UI, UX, layout, visual style, components, on-screen copy), when brainstorm meets a new feature or product idea, or when the user says "3 lens" or /lens. Runs the design panel (craft, impeccable, ui-ux-pro-max) or the product panel (focus, craft, data), writes one lens page and a fixed `## Lens` block.
-allowed-tools: Artifact, Skill(artifact-design), Skill(impeccable), Skill(impeccable:impeccable), Skill(ui-ux-pro-max), Skill(ui-ux-pro-max:ui-ux-pro-max), Read, Write, Edit, Glob, Grep
+allowed-tools: Agent, Artifact, Skill(artifact-design), Skill(impeccable), Skill(impeccable:impeccable), Skill(ui-ux-pro-max), Skill(ui-ux-pro-max:ui-ux-pro-max), Read, Write, Edit, Glob, Grep
 ---
 <!-- claude -->
 Invoke this skill with the Skill tool as `dryas:lens`; `/lens [design|product]` runs it on demand.
@@ -37,6 +37,15 @@ Not for bug fixes, internal tooling or refactors, unless the user asks.
    - Design panel: craft, then `impeccable` (its critique pass on the subject), then `ui-ux-pro-max` (style, palette, font pairing, UX guidelines, stack patterns).
    - Product panel: focus, then craft, then data.
    - When `impeccable` or `ui-ux-pro-max` is not installed or not callable here, mark that lens `skipped (not available)` and go on; craft always runs, since it needs no skill.
+<!-- claude -->
+   **Run steps 2-4 in ONE subagent**, so `impeccable` and `ui-ux-pro-max` stay out of this session's context: the Agent tool with `subagent_type: "general-purpose"`, `model: "haiku"`, description `designer: lens review <topic>`. Its prompt carries: the subject (the design text, spec path or mockup path); the panel; the page path to write (`lens/<topic>-lens.html` in your scratchpad, or `.orchestrate/<branch-slug>-lens.html` inside /orchestrate); the instruction to read `${CLAUDE_PLUGIN_ROOT}/skills/lens/reference.md`; to load `impeccable` and `ui-ux-pro-max` with the Skill tool for the design panel (skip a lens it cannot load and mark it `skipped (not available)`); never run Bash; and to reply with ONLY the `## Lens` block exactly as § Lens block, then a list `- <lens>: <finding> → <change>` (reference.md § Subagent reply). You then apply the changes to the design, publish the page or keep the local file (below), and write the block.
+<!-- /claude -->
+<!-- codex -->
+   If sub-agents are available, run steps 2-4 in one sub-agent with the same prompt (subject, panel, page path, reference path, reply with ONLY the block and the finding list); otherwise run them here.
+<!-- /codex -->
+<!-- opencode -->
+   Run steps 2-4 with the task tool on `dryas-executor-fast` when it can load skills, with the same prompt (subject, panel, page path, reference path, reply with ONLY the block and the finding list); otherwise run them here.
+<!-- /opencode -->
 3. **Apply.** In brainstorm, apply each change to the design before you present it, so the user approves the changed design. Inside `/orchestrate`, the `change` findings go to review next to the reviewers' findings.
 4. **Page.** Write the lens page as `${CLAUDE_PLUGIN_ROOT}/skills/lens/reference.md` § Page describes. `<topic>` is the spec's topic slug (or a short slug of the design's name).
 5. **Save or publish** (below).
