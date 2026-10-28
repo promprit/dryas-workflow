@@ -12,19 +12,26 @@ from typing import Any, Dict, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import memdb
+import jevlog
 import memstore
 import projns
 import redact
+import thresholds
 
 _NS = {"type": "string", "description": "Main repo folder name; default: the current project's"}
 TOOLS = [
     {"name": "memory_search",
      "description": ("Search Dryas memory in one namespace (default: this project). Returns the top results with a "
                      "reason each, plus learned patterns that mention a query word (file failure rates, files edited "
-                     "together, the tier that finished a task type). Archived hook noise only with include_archive."),
+                     "together, the tier that finished a task type). Archived hook noise only with include_archive. "
+                     "In a role-<slug> namespace (builder, reviewer-spec, reviewer-quality, reviewer-minimalist, "
+                     "devils-advocate) it returns at most 3 whole lessons in 600 characters, ignores limit and "
+                     "include_archive, and logs the loaded lesson ids only when task is given."),
      "inputSchema": {"type": "object", "properties": {
          "query": {"type": "string"}, "namespace": _NS, "limit": {"type": "integer", "minimum": 1, "maximum": 20},
-         "include_archive": {"type": "boolean"}}, "required": ["query"]}},
+         "include_archive": {"type": "boolean"},
+         "task": {"type": "string", "description": "Plan task id (branch:N); in a role-<slug> namespace, logs which lessons were loaded"}},
+         "required": ["query"]}},
     {"name": "memory_store",
      "description": ("Store one task outcome (what worked, what failed) in Dryas memory. Secrets, diffs and bodies "
                      "over 4000 characters are refused (MEM-4). Ruflo's key/value are accepted as title/body."),
@@ -51,6 +58,46 @@ TOOLS = [
          "strategy": {"type": "string"}, "namespace": _NS}}},
 ]
 NAMES = frozenset(t["name"] for t in TOOLS)
+
+ROLE_PREFIX = "role-"
+ROLE_SLUGS = ("builder", "reviewer-spec", "reviewer-quality", "reviewer-minimalist", "devils-advocate")
+ROLE_LESSONS_MAX = 3
+ROLE_LESSONS_CHARS = 600
+ROLE_CANDIDATES = 10  # over-fetch before the char budget cuts the list
+
+
+def _role_on() -> bool:
+    return thresholds.load().get("memory", {}).get("role_lessons", True) is not False
+
+
+def _role(args: Dict[str, Any]) -> Optional[str]:
+    v = args.get("namespace")
+    if not isinstance(v, str):
+        return None
+    ns = projns.sanitize(v.strip())
+    return ns[len(ROLE_PREFIX):] if ns.startswith(ROLE_PREFIX) and ns[len(ROLE_PREFIX):] in ROLE_SLUGS else None
+
+
+def _role_search(conn, ns: str, role: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    if not _role_on():
+        return {"results": [], "namespace": ns, "role_lessons": "off"}
+    res = memstore.search(conn, ns, str(args.get("query") or ""), limit=ROLE_CANDIDATES, session=_session(),
+                          record_hits=False)
+    repo = "repo:" + projns.project_ns()
+    left, out = ROLE_LESSONS_CHARS, []
+    for r in sorted(res["results"], key=lambda r: repo not in r["tags"]):
+        if len(out) >= ROLE_LESSONS_MAX:
+            break
+        size = len(r["title"]) + len(r["body"])
+        if size <= left:
+            out.append({"id": r["id"], "title": r["title"], "body": r["body"]})
+            left -= size
+    memstore.touch_hits(conn, [r["id"] for r in out], _session())
+    task = _opt(args.get("task"))
+    if task:
+        jevlog.append("memory", {"stage": "role-lessons", "ok": True, "task": task,
+                                 "role": role, "lesson_ids": [str(r["id"]) for r in out]})
+    return {"results": out, "namespace": ns}
 
 
 def _ns(args: Dict[str, Any]) -> str:
@@ -107,6 +154,13 @@ def _store(conn, ns: str, args: Dict[str, Any]) -> Tuple[Any, bool]:
     title = args.get("title", args.get("key"))
     title = str(title) if isinstance(title, (str, int)) and not isinstance(title, bool) else body.strip().splitlines()[0][:80]
     tags = args.get("tags")
+    if _role(args):
+        if not _role_on():
+            return {"stored": False, "reason": "memory.role_lessons is off"}, False
+        if len(title) + len(body) > ROLE_LESSONS_CHARS:
+            return {"stored": False, "reason": "role lessons are at most 600 characters"}, True
+        tags = [t for t in tags if not (isinstance(t, str) and t.startswith("repo:"))] if isinstance(tags, list) else []
+        tags.append("repo:" + projns.project_ns())
     try:
         r = memstore.store(conn, ns, title, body, kind=args.get("kind") if args.get("kind") in memstore.STORE_KINDS else "outcome",
                            tags=[t for t in tags if isinstance(t, str)] if isinstance(tags, list) else [],
@@ -118,6 +172,9 @@ def _store(conn, ns: str, args: Dict[str, Any]) -> Tuple[Any, bool]:
 
 def _call(conn, name: str, ns: str, args: Dict[str, Any]) -> Tuple[Any, bool]:
     if name == "memory_search":
+        role = _role(args)
+        if role:
+            return _role_search(conn, ns, role, args), False
         res = memstore.search(conn, ns, str(args.get("query") or ""), limit=_int(args.get("limit"), 3, 1, 20),
                               include_archive=args.get("include_archive") is True, session=_session())
         return dict(res, namespace=ns), False

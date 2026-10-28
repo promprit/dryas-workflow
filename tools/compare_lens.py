@@ -10,7 +10,10 @@ never has more permission prompts (denials in -p mode) than the old, and every n
 Prompts are counted as permission_denials in -p mode: a tool that would ask interactively shows up only when it is
 denied there. Run logs go to a temp JEV_LOG_DIR, never ~/.dryas/jev/logs. Cost is printed for information only.
 The account's installed Dryas plugin is switched off for each run with --settings, so only the --plugin-dir copy
-loads; the user's settings files are not changed. Prompts are compared as the maximum per fixture on each side.
+loads; the user's settings files are not changed. The allow list is additive: --settings merges with the account's
+own settings, so rules the user already allowed apply to both sides. Entries with installer placeholders ($CD and so
+on) are dropped on both sides. A missing or unreadable settings fragment is a setup error (exit 2) before any run.
+Prompts are compared as the maximum per fixture on each side.
 """
 import argparse
 import json
@@ -78,16 +81,31 @@ def verdict(old: List[Dict[str, object]], new: List[Dict[str, object]], max_ms: 
     return ok, lines
 
 
-def build_cmd(claude: str, side: Path, prompt: str) -> List[str]:
-    off = json.dumps({"enabledPlugins": {"dryas@dryas-workflow": False}})
+def side_allow(side: Path) -> List[str]:
+    """The core allow list of one side's settings fragment, minus installer placeholders ($CD, $DATA_RULE...).
+
+    Raises RunError when the fragment is missing, not JSON, or has no core.permissions.allow list.
+    """
+    try:
+        frag = json.loads((side / "claude" / "settings.fragment.json").read_text(encoding="utf-8"))
+        allow = frag["core"]["permissions"]["allow"]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise RunError("%s: settings fragment missing or unreadable: %s" % (side, e))
+    if not isinstance(allow, list):
+        raise RunError("%s: settings fragment missing or unreadable: no core.permissions.allow list" % side)
+    return [r for r in allow if "$" not in r]
+
+
+def build_cmd(claude: str, side: Path, prompt: str, allow: List[str]) -> List[str]:
+    off = json.dumps({"enabledPlugins": {"dryas@dryas-workflow": False}, "permissions": {"allow": allow}})
     return [claude, "-p", prompt, "--output-format", "json", "--settings", off, "--plugin-dir", str(side / "claude")]
 
 
-def run_once(claude: str, side: Path, prompt: str, name: str) -> Dict[str, object]:
+def run_once(claude: str, side: Path, prompt: str, name: str, allow: List[str]) -> Dict[str, object]:
     where = "side %s, fixture %s" % (side, name)
     with tempfile.TemporaryDirectory() as tmp:
         try:
-            p = subprocess.run(build_cmd(claude, side, prompt), cwd=tmp, env=build_env(Path(tmp)),
+            p = subprocess.run(build_cmd(claude, side, prompt, allow), cwd=tmp, env=build_env(Path(tmp)),
                                capture_output=True, text=True, timeout=900)
         except subprocess.TimeoutExpired:
             raise RunError("timed out (900 s): %s" % where)
@@ -114,12 +132,13 @@ def main(argv=None) -> int:
         return 2
     ok = True
     try:
+        allow = {side: side_allow(side) for side in (a.old, REPO)}
         for f in sorted(FIXTURES.glob("*.md")):
             prompt = f.read_text(encoding="utf-8").strip()
             old, new = [], []
             for i in range(a.runs):
                 for side, out in ((a.old, old), (REPO, new)) if i % 2 == 0 else ((REPO, new), (a.old, old)):
-                    out.append(run_once(a.claude, side, prompt, f.stem))
+                    out.append(run_once(a.claude, side, prompt, f.stem, allow[side]))
             good, lines = verdict(old, new)
             ok = ok and good
             print("%s: %s" % (f.stem, "PASS" if good else "FAIL"))

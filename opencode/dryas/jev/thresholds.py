@@ -42,6 +42,7 @@ DEFAULTS: Dict[str, Dict[str, Any]] = {
     # "auto": jev when a key is set, else local; shadow local when jev decides, else none (providers.py).
     "judge": {"provider": "auto", "shadow": "auto"},
     "review": {"task_skip": False, "min_tasks": 50, "max_false_skip_rate": 0.01},
+    "memory": {"role_lessons": True},
     "history": {"min_tasks": 30},
     "baseline": {"until": ""},
 }

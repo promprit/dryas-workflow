@@ -9,7 +9,7 @@ If the Dryas rules say pstack-picks is not installed, say so and stop. Change no
 
 1. **Scope.** The diff from the merge-base with the default branch to HEAD plus uncommitted changes, or what the user names.
 2. **Intent.** One paragraph from the approved design or spec, the plan goals and the commit messages. Unsure: ask the user.
-3. **Reviewers.** Fill `<dryas-root>/pstack/interrogate/reviewer-prompt.md` with the intent, the diff (or the command that prints it), `<dryas-root>/pstack/interrogate/rubric.md` and `<dryas-root>/pstack/interrogate/code-quality-review.md`. Inside `/orchestrate`, start only after every build task has left `.orchestrate/active.json`, and add one section per reviewer to `.orchestrate/PLAN.md`:
+3. **Reviewers.** Fill `<dryas-root>/pstack/interrogate/reviewer-prompt.md` with the intent, the diff (or the command that prints it), `<dryas-root>/pstack/interrogate/rubric.md` and `<dryas-root>/pstack/interrogate/code-quality-review.md`. Each reviewer's subagent dispatch description starts with `devils-advocate: ` (for example `devils-advocate: interrogate A`). Inside `/orchestrate`, start only after every build task has left `.orchestrate/active.json`, and add one section per reviewer to `.orchestrate/PLAN.md`:
 
    ```
    ## Task <N>: interrogate reviewer <A|B>

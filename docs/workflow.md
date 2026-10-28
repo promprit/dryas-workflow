@@ -109,6 +109,7 @@ Last updated: 2026-10-05.
    - Each executor receives **only its own section** (`"${CLAUDE_PLUGIN_ROOT}/bin/dryas-py" "${CLAUDE_PLUGIN_ROOT}/jev/planfile.py" section .orchestrate/PLAN.md <N>`; Claude Code substitutes the plugin path, and setup renders the allow rule with the same absolute paths) plus the worktree path, never the whole plan.
    - Independent tasks run in parallel, recorded in the `swarm_init` ledger (topology always `hierarchical`). Agents spawn via Claude Code's Agent tool, so they run on the subscription.
    - Executors follow four principles (fix root causes, prove it works, test behavior, subtract before you add), full text in the plugin's `pstack/principles/`.
+   - **Role lessons.** Each dispatch loads up to 3 lessons (600 characters) from the role's shared namespace `role-<slug>` (`builder`, `reviewer-spec`, `reviewer-quality`, `reviewer-minimalist`, `devils-advocate`), this repo's first, and logs which ones in `memory.jsonl`; after the merge, at most one new lesson per role is stored. Review-request logs its reviewers as `reviewer-spec`, `reviewer-quality` and `reviewer-minimalist`. Switch off with `memory.role_lessons: false` in `thresholds.json`.
 8. **On return.** Jev checks `done` (done-criteria met?) and `risk` (routine / worth a look / incident).
    - Only incidents, failures and escalations reach the orchestrator in full; everything else becomes one summary line.
    - The outcome is stored in Dryas memory (`memory_store`).
@@ -199,6 +200,7 @@ Claude Code runs all matching hooks in parallel, so the order of our stages come
   | handoff | keep_min 0.5 |
   | context | warn_pct 0.65 |
   | interrogate | min_confidence 0.7 |
+  | memory | role_lessons true |
 
 - **Logs** go to `~/.dryas/jev/logs/*.jsonl` (gate, route, mcp, calls, escalations, overrides, compact, compare). They hold decisions and confidences only, never payloads; a Bash call logs just the first word of the command.
 - **Compaction.**

@@ -170,7 +170,7 @@ def patterns_for(conn, ns: str, ts: List[str], limit: int = 5) -> List[Dict[str,
     return out
 
 
-def _touch(conn, ids: List[int], session: Optional[str]) -> None:
+def touch_hits(conn, ids: List[int], session: Optional[str]) -> None:
     if not ids or conn.readonly:
         return
     now = time.time()
@@ -186,7 +186,7 @@ def _touch(conn, ids: List[int], session: Optional[str]) -> None:
 
 
 def search(conn, ns: str, query: str, limit: int = 3, include_archive: bool = False,
-           session: Optional[str] = None) -> Dict[str, Any]:
+           session: Optional[str] = None, record_hits: bool = True) -> Dict[str, Any]:
     limit = max(1, min(int(limit), 20))
     ts = terms(query)
     if not ts:
@@ -208,8 +208,8 @@ def search(conn, ns: str, query: str, limit: int = 3, include_archive: bool = Fa
             scored.append((score, r, _reason(matched, len(ts), rank, used)))
         scored.sort(key=lambda x: (-x[0], -(x[1]["created"] or 0), x[1]["id"]))
         hits = scored[:limit]
-    if ts:
-        _touch(conn, [r["id"] for _, r, _ in hits], session)
+    if ts and record_hits:
+        touch_hits(conn, [r["id"] for _, r, _ in hits], session)
     return {"results": [_result(r, s, why, MAX_BODY) for s, r, why in hits], "patterns": patterns_for(conn, ns, ts),
             "fts": bool(conn.fts)}
 
