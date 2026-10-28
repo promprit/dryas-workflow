@@ -14,8 +14,9 @@ sys.path.insert(0, str(ROOT / "tools"))
 import compare_lens as cl  # noqa: E402
 
 
-def run(ms, tokens, prompts=0, lens=True, cost=0.0):
-    return {"ms": ms, "tokens": tokens, "prompts": prompts, "lens": lens, "cost": cost}
+def run(ms, tokens, prompts=0, lens=True, cost=0.0, models=None, skipped=False, denied=None):
+    return {"ms": ms, "tokens": tokens, "prompts": prompts, "lens": lens, "cost": cost,
+            "models": models or {}, "skipped": skipped, "denied": denied or []}
 
 
 def result_json(**extra):
@@ -30,7 +31,8 @@ class CompareLensTest(unittest.TestCase):
     def test_parse_result(self):
         out = result_json()
         self.assertEqual(cl.parse_result(out), {"ms": 41000, "tokens": 2310, "prompts": 1, "lens": False,
-                                                "cost": 0.0})
+                                                "cost": 0.0, "models": {}, "skipped": False,
+                                                "denied": ["Artifact"]})
 
     def test_parse_result_rejects_non_result(self):
         with self.assertRaises(ValueError):
@@ -57,6 +59,40 @@ class CompareLensTest(unittest.TestCase):
                                  "cacheCreationInputTokens": 60000}}
         r = cl.parse_result(result_json(modelUsage=mu))
         self.assertEqual(r["tokens"], 10 + 4000 + 20000)
+
+    def test_main_tokens_ignore_fast_subagent(self):
+        mu = {"claude-opus-5-5": {"inputTokens": 10, "outputTokens": 1200, "cacheCreationInputTokens": 100},
+              "claude-haiku-5": {"inputTokens": 5, "outputTokens": 9000, "cacheCreationInputTokens": 7}}
+        r = cl.parse_result(result_json(modelUsage=mu))
+        self.assertEqual(r["tokens"], 1310)
+        self.assertEqual(r["models"], {"claude-opus-5-5": 1310, "claude-haiku-5": 9012})
+
+    def test_main_tokens_only_haiku_uses_largest(self):
+        mu = {"claude-haiku-5": {"inputTokens": 5, "outputTokens": 9000, "cacheCreationInputTokens": 7}}
+        self.assertEqual(cl.parse_result(result_json(modelUsage=mu))["tokens"], 9012)
+
+    def test_verdict_prints_models_per_side(self):
+        old = [run(1, 1, models={"opus": 100})] * 3
+        new = [run(1, 1, models={"opus": 200, "haiku": 900})] * 3
+        _, lines = cl.verdict(old, new)
+        self.assertIn("old models: opus=100", lines)
+        self.assertIn("new models: haiku=900 opus=200", lines)
+
+    def test_skipped_panel_fails(self):
+        r = cl.parse_result(result_json(result="## Lens\n- Panel: x (skipped (not available))\n"))
+        self.assertTrue(r["skipped"])
+        old = [run(1, 1)] * 3
+        ok, lines = cl.verdict(old, [run(1, 1), run(1, 1, skipped=True), run(1, 1)])
+        self.assertFalse(ok)
+        self.assertIn("FAIL lens: a lens was skipped on the new side", lines)
+
+    def test_denied_names(self):
+        pd = [{"tool_name": "Write"}, {"tool_name": "Skill", "tool_input": {"skill": "dryas:lens"}},
+              {"tool_name": "Artifact"}]
+        r = cl.parse_result(result_json(permission_denials=pd))
+        self.assertEqual(r["denied"], ["Artifact", "Skill:dryas:lens", "Write"])
+        _, lines = cl.verdict([run(1, 1)] * 3, [run(1, 1, denied=["Write"]), run(1, 1, denied=["Artifact"])])
+        self.assertIn("new denied: Artifact, Write", lines)
 
     def test_main_session_tokens_fall_back_to_usage(self):
         self.assertEqual(cl.parse_result(result_json(modelUsage={}))["tokens"], 2310)
