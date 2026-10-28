@@ -49,7 +49,7 @@ Not for bug fixes, internal tooling or refactors, unless the user asks.
 3. **Apply.** In brainstorm, apply each change to the design before you present it, so the user approves the changed design. Inside `/orchestrate`, the `change` findings go to review next to the reviewers' findings.
 4. **Page.** Write the lens page as `${CLAUDE_PLUGIN_ROOT}/skills/lens/reference.md` § Page describes. `<topic>` is the spec's topic slug (or a short slug of the design's name).
 5. **Save or publish** (below).
-6. **Block.** Write the `## Lens` block into the in-chat design or the spec, exactly as `${CLAUDE_PLUGIN_ROOT}/skills/lens/reference.md` § Lens block shows.
+6. **Block.** Write the `## Lens` block into the in-chat design or the spec, exactly as `${CLAUDE_PLUGIN_ROOT}/skills/lens/reference.md` § Lens block shows. Always end your reply with the `## Lens` section exactly, even when the design is in a file.
 7. **Tell the user** the page link or path, the verdict, and one line per lens that changed something.
 
 ## Save or publish

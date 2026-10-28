@@ -121,6 +121,10 @@ class LensSkillTest(unittest.TestCase):
         for ed in (codex, oc):
             self.assertNotIn("Artifact tool", ed)
 
+    def test_reply_ends_with_block(self):
+        for p in ("claude/skills/lens/SKILL.md", "codex/skills/lens/SKILL.md", "opencode/skill/dryas-lens/SKILL.md"):
+            self.assertIn("Always end your reply with the `## Lens` section exactly", read(ROOT / p), p)
+
     def test_sync_lists(self):
         self.assertEqual(scp.OWN_SKILLS, ("lens",))
         self.assertNotIn("lens", scp.PROCESS_SKILLS)
