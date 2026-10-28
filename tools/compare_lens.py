@@ -5,10 +5,16 @@
 
 Runs each prompt in tools/fixtures/lens/ headless (`claude -p ... --output-format json --plugin-dir <side>/claude`)
 on the old release checkout (DIR) and on this checkout, sides alternating per run, in a fresh temp folder each time.
-PASS when, per prompt, the median added time is at most 90 s, the median added tokens at most 25k, the new side
-never has more permission prompts (denials in -p mode) than the old, and every new-side run produced a ## Lens block.
+PASS when, per prompt: the median added time is at most 90 s (wall time of the whole run); the median added
+main-session tokens are at most 25k (input + output + cache creation, no cache reads, of the main model only: the
+model with the most output tokens in modelUsage after dropping every haiku model, the lens subagent's fixed fast
+tier, so its tokens do not count; all models if only haiku ran; the whole-run usage sum when modelUsage is absent); the median added total cost is at most $0.25 (what the user pays,
+all models); the new side never has more permission prompts (denials in -p mode) than the old; and every new-side
+run produced a ## Lens block (a `## Lens` line, then a `- Panel: ` line and a `- Verdict: ` line) and none
+reports a lens "skipped (not available)". Per fixture the output also lists the median tokens per model and the
+names of denied tools (Skill denials as Skill:<skill>) for each side, so a misattribution or a denial is visible.
 Prompts are counted as permission_denials in -p mode: a tool that would ask interactively shows up only when it is
-denied there. Run logs go to a temp JEV_LOG_DIR, never ~/.dryas/jev/logs. Cost is printed for information only.
+denied there. Run logs go to a temp JEV_LOG_DIR, never ~/.dryas/jev/logs.
 The account's installed Dryas plugin is switched off for each run with --settings, so only the --plugin-dir copy
 loads; the user's settings files are not changed. The allow list is additive: --settings merges with the account's
 own settings, so rules the user already allowed apply to both sides. Entries with installer placeholders ($CD and so
@@ -30,8 +36,47 @@ REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tools/fixtures/lens"
 MAX_MS = 90000
 MAX_TOKENS = 25000
+MAX_COST_USD = 0.25
 TOKEN_KEYS = ("input_tokens", "output_tokens", "cache_creation_input_tokens")
-LENS_LINE = re.compile(r"^- Verdict: ", re.M)
+MODEL_TOKEN_KEYS = ("inputTokens", "outputTokens", "cacheCreationInputTokens")
+
+
+def _model_tokens(m: dict) -> int:
+    return sum(int(m.get(k) or 0) for k in MODEL_TOKEN_KEYS)
+
+
+def model_breakdown(d: dict) -> Dict[str, int]:
+    return {n: _model_tokens(m) for n, m in (d.get("modelUsage") or {}).items() if isinstance(m, dict)}
+
+
+def main_tokens(d: dict) -> int:
+    """Tokens of the main session: modelUsage minus haiku models (the lens subagent's tier), then the model
+    with the most output tokens (all models if only haiku ran); no modelUsage: the usage sum."""
+    items = [(n, m) for n, m in (d.get("modelUsage") or {}).items() if isinstance(m, dict)]
+    if items:
+        rest = [m for n, m in items if "haiku" not in n.lower()] or [m for _, m in items]
+        return _model_tokens(max(rest, key=lambda m: int(m.get("outputTokens") or 0)))
+    usage = d.get("usage") or {}
+    return sum(int(usage.get(k) or 0) for k in TOKEN_KEYS)
+
+
+def denied_names(d: dict) -> List[str]:
+    out = []
+    for x in d.get("permission_denials") or []:
+        name = str(x.get("tool_name") or "?")
+        if name == "Skill":
+            name += ":%s" % ((x.get("tool_input") or {}).get("skill") or "?")
+        out.append(name)
+    return sorted(out)
+
+
+def has_lens_block(text: str) -> bool:
+    """A `## Lens` line, then (anywhere after it) a `- Panel: ` line and a `- Verdict: ` line."""
+    head = re.search(r"^## Lens\s*$", text, re.M)
+    if not head:
+        return False
+    rest = text[head.end():]
+    return re.search(r"^- Panel: ", rest, re.M) is not None and re.search(r"^- Verdict: ", rest, re.M) is not None
 
 
 class RunError(Exception):
@@ -51,11 +96,12 @@ def parse_result(stdout: str) -> Dict[str, object]:
         raise ValueError("not a claude -p json result")
     if d.get("is_error"):
         raise ValueError("claude reported an error: %s" % str(d.get("result", ""))[:200])
-    usage = d.get("usage") or {}
-    return {"ms": int(d["duration_ms"]), "tokens": sum(int(usage.get(k) or 0) for k in TOKEN_KEYS),
+    return {"ms": int(d["duration_ms"]), "tokens": main_tokens(d),
             "prompts": len(d.get("permission_denials") or []),
-            "lens": LENS_LINE.search(str(d.get("result") or "")) is not None,
-            "cost": float(d.get("total_cost_usd") or 0)}
+            "lens": has_lens_block(str(d.get("result") or "")),
+            "cost": float(d.get("total_cost_usd") or 0), "models": model_breakdown(d),
+            "skipped": "skipped (not available)" in str(d.get("result") or ""),
+            "denied": denied_names(d)}
 
 
 def verdict(old: List[Dict[str, object]], new: List[Dict[str, object]], max_ms: int = MAX_MS,
@@ -70,14 +116,25 @@ def verdict(old: List[Dict[str, object]], new: List[Dict[str, object]], max_ms: 
     if dtok > max_tokens:
         ok = False
         lines.append("FAIL tokens: +%d median (limit %d)" % (dtok, max_tokens))
+    if dcost > MAX_COST_USD:
+        ok = False
+        lines.append("FAIL cost: +$%.2f median (limit $%.2f)" % (dcost, MAX_COST_USD))
     if max(r["prompts"] for r in new) > max(r["prompts"] for r in old):
         ok = False
         lines.append("FAIL prompts: new side asked more often than the old one")
     if not all(r["lens"] for r in new):
         ok = False
         lines.append("FAIL lens: the new side did not produce a ## Lens block")
-    lines.append("time +%d ms, tokens +%d" % (dms, dtok))
+    if any(r["skipped"] for r in new):
+        ok = False
+        lines.append("FAIL lens: a lens was skipped on the new side")
+    lines.append("time +%d ms, main-session tokens +%d" % (dms, dtok))
     lines.append("cost %s$%.4f" % ("+" if dcost >= 0 else "-", abs(dcost)))
+    for label, runs in (("old", old), ("new", new)):
+        names = sorted({n for r in runs for n in r["models"]})
+        lines.append("%s models: %s" % (label, " ".join(
+            "%s=%d" % (n, statistics.median(r["models"].get(n, 0) for r in runs)) for n in names)))
+        lines.append("%s denied: %s" % (label, ", ".join(sorted({n for r in runs for n in r["denied"]})) or "none"))
     return ok, lines
 
 

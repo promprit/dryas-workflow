@@ -104,6 +104,23 @@ class LensSkillTest(unittest.TestCase):
         for p in ("codex/skills/lens/SKILL.md", "opencode/skill/dryas-lens/SKILL.md"):
             self.assertIn("<branch-slug>-lens.html", read(ROOT / p), p)
 
+    def test_panel_runs_in_subagent(self):
+        t = read(SKILL)
+        for s in ('subagent_type: "general-purpose"', 'model: "haiku"', "designer: lens review",
+                  "reply with ONLY", "never run Bash"):
+            self.assertIn(s, t, s)
+        head = t.split("---", 2)[1]
+        tools = [l for l in head.splitlines() if l.startswith("allowed-tools:")][0]
+        self.assertIn("Agent", tools.split(": ", 1)[1].split(", "))
+        self.assertIn("## Subagent reply", read(REF))
+        codex = read(ROOT / "codex/skills/lens/SKILL.md")
+        self.assertIn("sub-agent", codex)
+        oc = read(ROOT / "opencode/skill/dryas-lens/SKILL.md")
+        self.assertIn("task tool", oc)
+        self.assertIn("dryas-executor-fast", oc)
+        for ed in (codex, oc):
+            self.assertNotIn("Artifact tool", ed)
+
     def test_sync_lists(self):
         self.assertEqual(scp.OWN_SKILLS, ("lens",))
         self.assertNotIn("lens", scp.PROCESS_SKILLS)

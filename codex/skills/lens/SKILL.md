@@ -28,6 +28,7 @@ Not for bug fixes, internal tooling or refactors, unless the user asks.
    - Design panel: craft, then `impeccable` (its critique pass on the subject), then `ui-ux-pro-max` (style, palette, font pairing, UX guidelines, stack patterns).
    - Product panel: focus, then craft, then data.
    - When `impeccable` or `ui-ux-pro-max` is not installed or not callable here, mark that lens `skipped (not available)` and go on; craft always runs, since it needs no skill.
+   If sub-agents are available, run steps 2-4 in one sub-agent with the same prompt (subject, panel, page path, reference path, reply with ONLY the block and the finding list); otherwise run them here.
 3. **Apply.** In brainstorm, apply each change to the design before you present it, so the user approves the changed design. Inside `$dryas:orchestrate`, the `change` findings go to review next to the reviewers' findings.
 4. **Page.** Write the lens page as `<dryas-root>/skills/lens/reference.md` § Page describes. `<topic>` is the spec's topic slug (or a short slug of the design's name).
 5. **Save or publish** (below).
