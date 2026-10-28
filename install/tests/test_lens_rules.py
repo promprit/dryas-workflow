@@ -3,12 +3,8 @@ import unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OLD = "- Design work (UI/UX, layout, visual style, components, on-screen copy): use `ui-ux-pro-max` and `impeccable`."
-CLAUDE_LENS_LINE = ("- Design work (UI/UX, layout, visual style, components, on-screen copy): run `dryas:lens` (design panel: "
-                    "craft, `impeccable`, `ui-ux-pro-max`); its result is an Artifact page. New features: product panel "
-                    "(focus, craft, data) in brainstorm, or when the user says \"3 lens\".")
-CODEX_LENS_LINE = ("- Design work (UI/UX, layout, visual style, components, on-screen copy): run `$dryas:lens` (design panel); "
-                   "new features: product panel, or when the user says \"3 lens\". The result is a local HTML page; give the "
-                   "user its path.")
+CLAUDE_LENS_LINE = "- Design work (UI/UX, layout, visual style, components, on-screen copy) and new features: run `dryas:lens`."
+CODEX_LENS_LINE = "- Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`; design: `$dryas:lens`)."
 
 
 def read(p):
@@ -24,8 +20,6 @@ class LensRulesTest(unittest.TestCase):
     def test_codex_rules(self):
         t = read("codex/AGENTS.md.template")
         self.assertIn(CODEX_LENS_LINE, t)
-        self.assertLess(t.index("- Reverse-engineering work"), t.index(CODEX_LENS_LINE))
-        self.assertIn("`$dryas:lens` (design and product lens review)", t)
         self.assertIn("/lens", read("opencode/dryas/AGENTS.md.template"))
 
     def test_workflow_doc(self):

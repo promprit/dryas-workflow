@@ -7,6 +7,7 @@ import render
 from test_pstack_content import LEAK
 import re
 from test_lens_rules import CLAUDE_LENS_LINE, CODEX_LENS_LINE
+CODEX_LENS_OLD = "- Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`)."
 CD_PATH = re.compile(r"(?:\{\{CD\}\}|\$\{CLAUDE_PLUGIN_ROOT\})/([A-Za-z0-9_./-]+)")
 ROOT = "${CLAUDE_PLUGIN_ROOT}"
 REPO = HERE.parents[1]
@@ -97,9 +98,8 @@ def codex_form(t, rel):
         t = t.replace("Full reference: `{{CD}}/docs/dryas-workflow.md`.",
                       "Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: "
                       "`~/.dryas/docs/dryas-local.md`).")
-        t = t.replace("`$dryas:retro`", "`$dryas:lens` (design and product lens review), `$dryas:retro`")
         t = with_rea_line(t, "- Brainstorm first")
-        return with_rea_line(t, "- Reverse-engineering work", CODEX_LENS_LINE)
+        return t.replace(CODEX_LENS_OLD, CODEX_LENS_LINE)
     for a, b in (('"{{PY}}" -X utf8 "{{CD}}/jev/', '"<dryas-py>" -X utf8 "<dryas-root>/jev/'),
                  ("{{CD}}/jev/thresholds.json", "~/.dryas/jev/thresholds.json"), ("{{CD}}/", "<dryas-root>/")):
         t = t.replace(a, b)

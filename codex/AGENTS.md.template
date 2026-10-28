@@ -2,9 +2,8 @@
 Process rules for coding sessions on this machine. Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: `~/.dryas/docs/dryas-local.md`).
 
 ## Always
-- Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`).
+- Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`; design: `$dryas:lens`).
 - Reverse-engineering work (how software you don't have the source for does something): use REA; brainstorm says when it recommends it, the user can decline.
-- Design work (UI/UX, layout, visual style, components, on-screen copy): run `$dryas:lens` (design panel); new features: product panel, or when the user says "3 lens". The result is a local HTML page; give the user its path.
 - Multi-step work runs in its own git worktree (`$dryas:worktree`); merge after review and verification (`$dryas:verify`).
 - One agent per worktree: never run two sessions in the same worktree. Parallel loops each get their own worktree and branch.
 - Plans are files: `.orchestrate/PLAN.md` in the worktree, sections `## Task N:` with Goal, Scope (globs), Done and Failing test first. Never commit `.orchestrate/`.
@@ -14,7 +13,7 @@ Process rules for coding sessions on this machine. Full reference: `~/.dryas/doc
 - Do what was asked, nothing more. Read a file before editing it. Never commit secrets or `.env` files.
 
 ## Skills
-`$dryas:orchestrate` (multi-step tasks), `$dryas:wplan` (write a plan), `$dryas:wreview` (two-stage review), `$dryas:commit` (Jev-gated commit), `$dryas:tune` (weekly Jev calibration), `$dryas:lens` (design and product lens review), `$dryas:retro` (lessons from a finished task).
+`$dryas:orchestrate` (multi-step tasks), `$dryas:wplan` (write a plan), `$dryas:wreview` (two-stage review), `$dryas:commit` (Jev-gated commit), `$dryas:tune` (weekly Jev calibration), `$dryas:retro` (lessons from a finished task).
 <!-- pstack-picks -->
 `$dryas:interrogate` (gated two-model review), `$dryas:benchmark-checklist` (vet a measured performance number). Shared references: `{{CD}}/pstack/`.
 <!-- /pstack-picks -->
