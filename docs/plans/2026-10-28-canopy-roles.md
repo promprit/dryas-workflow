@@ -109,8 +109,12 @@ Scope:
 - docs/workflow.md
 - install/tests/test_role_memory_docs.py
 - install/tests/test_pstack_loop.py
+- claude/skills/interrogate/SKILL.md
+- codex/skills/interrogate/SKILL.md
+- opencode/skill/dryas-interrogate/SKILL.md
 Done:
-- `python3 -m pytest -q install/tests/test_role_memory_docs.py install/tests/test_pstack_loop.py install/tests/test_process_skills.py install/tests/test_opencode_skills.py` passes
+- `python3 -m pytest -q install/tests/test_role_memory_docs.py install/tests/test_pstack_loop.py install/tests/test_process_skills.py install/tests/test_opencode_skills.py install/tests/test_pstack_skills.py` passes
+- Every Agent dispatch the orchestrate, review-request and interrogate skills describe (all editions) names its `description` prefix: the role slug and a colon (`DESC_RULE` in the test)
 - `python3 tools/sync_codex_plugin.py --check` exits 0
 - `python3 -m pytest -q install/tests claude/jev/tests` passes
 Failing test first: install/tests/test_role_memory_docs.py :: RoleMemoryDocsTest.test_orchestrate_loads_role_lessons
@@ -141,6 +145,10 @@ CLAUDE_LESSONS_STORE = (
     "Skip a role with nothing to learn. The tool tags the lesson with this repo and stores nothing when "
     "`memory.role_lessons` is off.")
 REVIEW_ROLES = "role `reviewer-spec`, `reviewer-quality` or `reviewer-minimalist` (stage 1, 2 or 3)"
+DESC_RULE = (
+    "Every Agent dispatch's `description` starts with its role slug and a colon: `builder: ` (coder, tester, docs, "
+    "cleanup), `reviewer-spec: `, `reviewer-quality: `, `reviewer-minimalist: ` or `devils-advocate: ` "
+    "(interrogate), so observers such as FlowObserve's Canopy read the role instead of guessing it.")
 
 
 def read(p):
@@ -168,6 +176,16 @@ class RoleMemoryDocsTest(unittest.TestCase):
             self.assertIn(search, t, p)
             self.assertIn("memory.role_lessons", t, p)
 
+    def test_description_prefix_rule(self):
+        self.assertIn(DESC_RULE, read("claude/skills/orchestrate/SKILL.md").split("## 5. Dispatch")[1].split("\n## ")[0])
+        self.assertIn("`reviewer-spec: `", read("claude/skills/review-request/SKILL.md"))
+        self.assertIn("`devils-advocate: `", read("claude/skills/interrogate/SKILL.md"))
+        for p in ("codex/skills/orchestrate/SKILL.md", "opencode/skill/dryas-orchestrate/SKILL.md",
+                  "codex/skills/interrogate/SKILL.md", "opencode/skill/dryas-interrogate/SKILL.md",
+                  "codex/skills/review-request/SKILL.md", "opencode/skill/dryas-review-request/SKILL.md"):
+            t = read(p)
+            self.assertTrue("`builder: `" in t or "`reviewer-spec: `" in t or "`devils-advocate: `" in t, p)
+
     def test_workflow_doc(self):
         t = read("docs/workflow.md")
         for s in ("role-<slug>", "memory.role_lessons", "reviewer-spec"):
@@ -180,7 +198,8 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Run it to see it fail.** Run: `python3 -m pytest -q install/tests/test_role_memory_docs.py`. Expected: 4 FAIL.
 - [ ] **Step 3: Claude orchestrate.** In `claude/skills/orchestrate/SKILL.md` §5: insert `CLAUDE_LESSONS_STEP` as its own paragraph right after item 3 ("Give each executor ONLY its section…"); in item 6 change `role (coder, tester, reviewer or docs)` to `role (coder, tester, reviewer, reviewer-spec, reviewer-quality, reviewer-minimalist or docs)`. In §8 Finish, insert `CLAUDE_LESSONS_STORE` as its own sentence right after the `log_merge` sentence and before "then remove the worktree" (keep the sentence flow: end the log_merge sentence, add the lessons sentence, then "Then remove the worktree."). `allowed-tools` already lists both memory tools.
-- [ ] **Step 4: review-request.** In `claude/skills/review-request/SKILL.md`, the Claude block: replace `role reviewer, one per stage` with `` `REVIEW_ROLES` `` text: `role `reviewer-spec`, `reviewer-quality` or `reviewer-minimalist` (stage 1, 2 or 3), one per stage`. Run `python3 tools/sync_codex_plugin.py` (renders the Codex and OpenCode review-request copies).
+- [ ] **Step 4: review-request.** In `claude/skills/review-request/SKILL.md`, the Claude block: replace `role reviewer, one per stage` with `` `REVIEW_ROLES` `` text: `role `reviewer-spec`, `reviewer-quality` or `reviewer-minimalist` (stage 1, 2 or 3), one per stage`. Outside the harness blocks (so every edition gets it), add: "Each reviewer's dispatch description starts with its role slug and a colon: `reviewer-spec: `, `reviewer-quality: ` or `reviewer-minimalist: `." Run `python3 tools/sync_codex_plugin.py` (renders the Codex and OpenCode review-request copies).
+- [ ] **Step 4b: Description prefix.** In `claude/skills/orchestrate/SKILL.md` §5 item 4 (the Agent dispatch item), add `DESC_RULE` (exact text from the test) as its own sentence. In `claude/skills/interrogate/SKILL.md` § Reviewers, add: "Each reviewer's dispatch description starts with `devils-advocate: ` (for example `devils-advocate: interrogate A`)." Make the same additions in the hand-written `codex/skills/orchestrate/SKILL.md`, `opencode/skill/dryas-orchestrate/SKILL.md`, `codex/skills/interrogate/SKILL.md` and `opencode/skill/dryas-interrogate/SKILL.md` (Codex and OpenCode call it a sub-agent or subagent and their task tool; keep the slugs exact). Add the matching transforms to `install/tests/test_pstack_loop.py` for every changed fixture-compared file (orchestrate-claude, orchestrate-codex), importing the strings from `test_role_memory_docs`.
 - [ ] **Step 5: Codex and OpenCode orchestrate (hand-written).** Add the same two steps in their own words: the Codex copy names `memory_search` / `memory_store`, the OpenCode copy `jev_memory_search` / `jev_memory_store`; both name `role-<slug>`, the slug mapping, the 3-lesson / 600-character cap and `memory.role_lessons`. Then `python3 tools/sync_codex_plugin.py --check` (its shared-name check covers `memory_search`/`memory_store`).
 - [ ] **Step 6: Fixture comparison.** `install/tests/test_pstack_loop.py::test_off_is_byte_identical` compares orchestrate to old fixtures through `plugin_form`/`codex_form`: add (old, new) pairs or insertions for every changed sentence, importing the strings from `test_role_memory_docs`. Never edit `install/tests/fixtures/`.
 - [ ] **Step 7: Workflow doc.** In `docs/workflow.md`, where the §4 loop describes dispatch (after the "Plan as a file" / dispatch steps), add a short paragraph: "**Role lessons.** Each dispatch loads up to 3 lessons (600 characters) from the role's shared namespace `role-<slug>` (`builder`, `reviewer-spec`, `reviewer-quality`, `reviewer-minimalist`, `devils-advocate`), this repo's first, and logs which ones in `memory.jsonl`; after the merge, at most one new lesson per role is stored. Review-request logs its reviewers as `reviewer-spec`, `reviewer-quality` and `reviewer-minimalist`. Switch off with `memory.role_lessons: false` in `thresholds.json`." Also add `memory.role_lessons` to the thresholds table if the doc has one.
