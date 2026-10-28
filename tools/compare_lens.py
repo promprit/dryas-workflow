@@ -25,6 +25,8 @@ from typing import Dict, List, Tuple
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tools/fixtures/lens"
+MAX_MS = 90000
+MAX_TOKENS = 25000
 TOKEN_KEYS = ("input_tokens", "output_tokens", "cache_creation_input_tokens")
 LENS_LINE = re.compile(r"^- Verdict: ", re.M)
 
@@ -51,10 +53,6 @@ def parse_result(stdout: str) -> Dict[str, object]:
             "prompts": len(d.get("permission_denials") or []),
             "lens": LENS_LINE.search(str(d.get("result") or "")) is not None,
             "cost": float(d.get("total_cost_usd") or 0)}
-
-
-MAX_MS = 90000
-MAX_TOKENS = 25000
 
 
 def verdict(old: List[Dict[str, object]], new: List[Dict[str, object]], max_ms: int = MAX_MS,

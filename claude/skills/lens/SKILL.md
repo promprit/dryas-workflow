@@ -1,6 +1,7 @@
 ---
 name: lens
 description: Use when a design needs review (UI, UX, layout, visual style, components, on-screen copy), when brainstorm meets a new feature or product idea, or when the user says "3 lens" or /lens. Runs the design panel (craft, impeccable, ui-ux-pro-max) or the product panel (focus, craft, data), writes one lens page and a fixed `## Lens` block.
+allowed-tools: Artifact, Skill(artifact-design), Skill(impeccable), Skill(impeccable:impeccable), Skill(ui-ux-pro-max), Skill(ui-ux-pro-max:ui-ux-pro-max), Read, Write, Edit, Glob, Grep
 ---
 <!-- claude -->
 Invoke this skill with the Skill tool as `dryas:lens`; `/lens [design|product]` runs it on demand.

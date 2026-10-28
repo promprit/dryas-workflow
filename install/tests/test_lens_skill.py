@@ -1,4 +1,5 @@
 """dryas:lens (spec 2026-10-28-lens-design.md): skill shape, the Canopy contract, and the edition copies."""
+import json
 import re
 import sys
 import unittest
@@ -124,9 +125,12 @@ class LensSkillTest(unittest.TestCase):
 
 class ArtifactAllowTest(unittest.TestCase):
     def test_artifact_pre_allowed(self):
-        import json
         frag = json.loads(read(ROOT / "claude/settings.fragment.json"))
-        self.assertIn("Artifact", frag["core"]["permissions"]["allow"])
+        self.assertNotIn("Artifact", frag["core"]["permissions"]["allow"])
+        head = read(SKILL).split("---")[1]
+        tools = [l for l in head.splitlines() if l.startswith("allowed-tools:")][0]
+        self.assertIn("Artifact", tools.split(": ", 1)[1].split(", "))
+        self.assertIn("Skill(impeccable)", tools)
 
 
 if __name__ == "__main__":

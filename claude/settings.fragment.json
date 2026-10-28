@@ -13,8 +13,7 @@
         "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/handoff.py\" save:*)",
         "Bash(\"$CD/bin/dryas-py\" \"$CD/jev/tune.py\" report)",
         "Bash(\"$CD/bin/dryas\" memory:*)",
-        "mcp__plugin_dryas_jev",
-        "Artifact"
+        "mcp__plugin_dryas_jev"
       ],
       "deny": [
         "Skill(superpowers:subagent-driven-development)",
