@@ -1,6 +1,6 @@
 # Lens review (`dryas:lens`): design
 
-Date: 2026-10-28. Status: design approved in chat 2026-10-28 (approach A, sections 1 and 2 plus the Canopy addendum); written spec awaiting review. Branch: `spec/lens`.
+Date: 2026-10-28. Status: design approved in chat 2026-10-28 (approach A, sections 1 and 2 plus the Canopy addendum); written spec approved 2026-10-28. Branch: `spec/lens`.
 Contested: yes (changes the numbered design rule in `claude/CLAUDE.md.template` and `docs/workflow.md` §4 step 1, and defines a marker and a text format that FlowObserve's Canopy reads).
 
 ## 1. Goal
