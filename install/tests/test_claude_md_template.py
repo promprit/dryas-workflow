@@ -14,7 +14,7 @@ class ClaudeMdTemplateTest(unittest.TestCase):
         self.off = render.gate_blocks(self.text, [])
 
     def test_rules_present(self):
-        for s in ("~/.dryas/docs/dryas-workflow.md", "dryas:brainstorm", "ui-ux-pro-max", "impeccable",
+        for s in ("~/.dryas/docs/dryas-workflow.md", "dryas:brainstorm", "dryas:lens",
                   "/orchestrate", "git worktree", "One agent per worktree", "/wreview",
                   "dryas:verify", "Ask before any install", ".orchestrate/",
                   "scope lock -> gate -> memory -> observer", "/handoff", "Edit the repo"):
