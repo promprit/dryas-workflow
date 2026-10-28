@@ -185,8 +185,12 @@ def _touch(conn, ids: List[int], session: Optional[str]) -> None:
         pass  # a busy store must not cost the caller its results
 
 
+def touch(conn, ids: List[int], session: Optional[str] = None) -> None:
+    _touch(conn, ids, session)
+
+
 def search(conn, ns: str, query: str, limit: int = 3, include_archive: bool = False,
-           session: Optional[str] = None) -> Dict[str, Any]:
+           session: Optional[str] = None, touch: bool = True) -> Dict[str, Any]:
     limit = max(1, min(int(limit), 20))
     ts = terms(query)
     if not ts:
@@ -208,7 +212,7 @@ def search(conn, ns: str, query: str, limit: int = 3, include_archive: bool = Fa
             scored.append((score, r, _reason(matched, len(ts), rank, used)))
         scored.sort(key=lambda x: (-x[0], -(x[1]["created"] or 0), x[1]["id"]))
         hits = scored[:limit]
-    if ts:
+    if ts and touch:
         _touch(conn, [r["id"] for _, r, _ in hits], session)
     return {"results": [_result(r, s, why, MAX_BODY) for s, r, why in hits], "patterns": patterns_for(conn, ns, ts),
             "fts": bool(conn.fts)}
