@@ -23,7 +23,10 @@ TOOLS = [
     {"name": "memory_search",
      "description": ("Search Dryas memory in one namespace (default: this project). Returns the top results with a "
                      "reason each, plus learned patterns that mention a query word (file failure rates, files edited "
-                     "together, the tier that finished a task type). Archived hook noise only with include_archive."),
+                     "together, the tier that finished a task type). Archived hook noise only with include_archive. "
+                     "In a role-<slug> namespace (builder, reviewer-spec, reviewer-quality, reviewer-minimalist, "
+                     "devils-advocate) it returns at most 3 whole lessons in 600 characters, ignores limit and "
+                     "include_archive, and logs the loaded lesson ids only when task is given."),
      "inputSchema": {"type": "object", "properties": {
          "query": {"type": "string"}, "namespace": _NS, "limit": {"type": "integer", "minimum": 1, "maximum": 20},
          "include_archive": {"type": "boolean"},
@@ -60,6 +63,7 @@ ROLE_PREFIX = "role-"
 ROLE_SLUGS = ("builder", "reviewer-spec", "reviewer-quality", "reviewer-minimalist", "devils-advocate")
 ROLE_LESSONS_MAX = 3
 ROLE_LESSONS_CHARS = 600
+ROLE_CANDIDATES = 10  # over-fetch before the char budget cuts the list
 
 
 def _role_on() -> bool:
@@ -77,7 +81,8 @@ def _role(args: Dict[str, Any]) -> Optional[str]:
 def _role_search(conn, ns: str, role: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if not _role_on():
         return {"results": [], "namespace": ns, "role_lessons": "off"}
-    res = memstore.search(conn, ns, str(args.get("query") or ""), limit=10, session=_session(), touch=False)
+    res = memstore.search(conn, ns, str(args.get("query") or ""), limit=ROLE_CANDIDATES, session=_session(),
+                          record_hits=False)
     repo = "repo:" + projns.project_ns()
     left, out = ROLE_LESSONS_CHARS, []
     for r in sorted(res["results"], key=lambda r: repo not in r["tags"]):
@@ -87,7 +92,7 @@ def _role_search(conn, ns: str, role: str, args: Dict[str, Any]) -> Dict[str, An
         if size <= left:
             out.append({"id": r["id"], "title": r["title"], "body": r["body"]})
             left -= size
-    memstore.touch(conn, [r["id"] for r in out], _session())
+    memstore.touch_hits(conn, [r["id"] for r in out], _session())
     task = _opt(args.get("task"))
     if task:
         jevlog.append("memory", {"stage": "role-lessons", "ok": True, "task": task,
