@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## 2.6.0 - 2026-10-28
+
+Canopy: the design and product lens, and reviewer roles with role memory. Release gate `tools/compare_lens.py` vs 2.5.0, before the last fix: time, main-session tokens (at most +8.5k per design task), cost (at most +$0.12) and denials all PASS; some design and product runs left the `## Lens` section out of the reply, fixed in step 6 of the skill. The gate was not rerun after that fix.
+
+- `dryas:lens` and `/lens`: a design panel (craft, impeccable, ui-ux-pro-max) and a product panel (focus, craft, data) review a design or a product idea, write one lens page (published with the label `dryas:lens <panel>`, which Canopy reads) and a fixed `## Lens` block. The panel runs in one fast-tier subagent, so the design skills stay out of the main session. `/orchestrate` runs the design lens before review when the spec's `## Lens` block names it, read-only and without prompts; its findings join the reviewers'. The lens reply always ends with the `## Lens` section. Artifact and loading `dryas:lens` are pre-allowed for the lens skill only.
+- Reviewer roles and role memory: dispatches carry a role slug so Canopy shows who reviewed what; after each merge `/orchestrate` stores at most one lesson per role in `role-<slug>` namespaces (`memory.role_lessons` switch), and a role search returns at most 3 whole lessons. All editions.
+- `tools/compare_lens.py`: release gate for design tasks (time, main-session tokens and cost, denials, lens section present), with isolated logs and the installed plugin switched off.
+- `/tune`: judged share counted over the gate log's window; local-judge misses become corpus rows.
+
 ## 2.5.0 - 2026-10-22
 
 REA on demand: ordinary sessions no longer start REA's MCP server; `dryas rea on` connects it for the project that needs it. Compared with 2.4.0 (`tools/compare_release.py`, `tools/compare_v1.py`): no new approval prompts; prompt hooks 86.4 -> 86.3 ms and tool-call hooks 55.0 -> 55.0 ms, both PASS. A fresh session in an ordinary project lists 0 REA tools (112 tools in all; 319 with REA on).
