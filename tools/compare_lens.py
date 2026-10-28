@@ -102,6 +102,10 @@ def main(argv=None) -> int:
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--claude", default="claude")
     a = ap.parse_args(argv)
+    if a.runs < 1:
+        print("--runs must be at least 1", file=sys.stderr)
+        return 2
+    a.old = a.old.resolve()
     if not (a.old / "claude").is_dir():
         print("no claude/ in %s" % a.old, file=sys.stderr)
         return 2

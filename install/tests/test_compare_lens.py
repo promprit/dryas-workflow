@@ -1,5 +1,7 @@
 """tools/compare_lens.py: parse headless results and judge the lens release gate (spec §8)."""
+import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -113,6 +115,36 @@ class CompareLensTest(unittest.TestCase):
                 mock.patch.object(cl, "run_once", side_effect=cl.RunError("x")):
             (Path(tmp) / "claude").mkdir()
             self.assertEqual(cl.main(["--old", tmp, "--runs", "1"]), 2)
+
+    def test_relative_old_is_resolved(self):
+        sides = []
+
+        def fake_run_once(claude, side, prompt, name):
+            sides.append(side)
+            return run(1, 1)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "old" / "claude").mkdir(parents=True)
+            cwd = os.getcwd()
+            os.chdir(tmp)
+            try:
+                with mock.patch.object(cl, "run_once", side_effect=fake_run_once):
+                    cl.main(["--old", "old", "--runs", "1"])
+            finally:
+                os.chdir(cwd)
+        old_sides = [s for s in sides if s != cl.REPO]
+        self.assertTrue(old_sides)
+        for s in old_sides:
+            self.assertTrue(s.is_absolute(), s)
+
+    def test_runs_below_one_is_setup_error(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cl, "run_once") as fake:
+            (Path(tmp) / "claude").mkdir()
+            err = io.StringIO()
+            with mock.patch.object(sys, "stderr", err):
+                self.assertEqual(cl.main(["--old", tmp, "--runs", "0"]), 2)
+            self.assertIn("--runs must be at least 1", err.getvalue())
+            fake.assert_not_called()
 
     def test_fixtures(self):
         names = sorted(p.name for p in (ROOT / "tools/fixtures/lens").glob("*.md"))
