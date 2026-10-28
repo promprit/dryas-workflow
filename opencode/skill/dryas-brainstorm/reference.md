@@ -73,6 +73,7 @@ digraph brainstorm {
 - Ask after each section whether it looks right so far.
 - Cover architecture, components, data flow, error handling, testing.
 - Be ready to go back and clarify when something does not make sense.
+- When a lens ran, the design carries its `## Lens` block and the page link or path; present the design with the lens changes already applied.
 
 ## Design for isolation and clarity
 

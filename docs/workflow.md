@@ -74,7 +74,9 @@ Last updated: 2026-10-05.
 
    Nothing is dispatched to executors before you approve.
 
-   **Design work.** Anything that needs design (UI, UX, layout, visual style, components, pages, design systems, copy on screen) uses both design skills: `ui-ux-pro-max` for design intelligence (style, palette, font pairing, UX guidelines, stack-specific patterns) and `impeccable` to shape, critique and polish the result. Use them while designing and again as a review pass before `/wreview`. Design executors get the same instruction in their task section.
+   **Design work.** Anything that needs design (UI, UX, layout, visual style, components, pages, design systems, copy on screen) runs `dryas:lens` with the design panel: the craft lens (reduction and care, from Ive), then `impeccable` to critique the result and `ui-ux-pro-max` for design intelligence (style, palette, font pairing, UX guidelines, stack-specific patterns). Brainstorm runs it before the design is presented, and the result is an Artifact page (a local HTML file on Codex and OpenCode) plus a `## Lens` block in the design. `/orchestrate` runs it again on what was built, before `/wreview`, when the design's `## Lens` block names the design panel; it publishes that page only when you asked for artifacts when starting the run.
+
+   **Product lens.** A new feature or product idea runs `dryas:lens` with the product panel in brainstorm, before approaches: focus (from Jobs: the one thing it must do), craft (from Ive) and data (from Ng: what is measured, and does every metric point to a next action). Say "3 lens" or `/lens product` to run it at any point, `/lens design` for the design panel. The lenses are our own interpretation of known principles, never quotes.
 
    **Reverse-engineering work.** When a request depends on how software we don't have the source for behaves (an app, binary, APK, Electron app or website), brainstorm proposes "investigate with REA first" and says why; you can decline. REA ([morluto/rea](https://github.com/morluto/rea), installed by setup as an optional extra) returns findings with evidence and limitations, which go into the spec or the in-chat design. REA is on demand: no session starts it until `dryas rea on` connects it in a project (then `/exit` and `claude --continue`), and a one-off question can use REA's command line instead. Executors never call REA: a task that needs a finding carries its evidence in its plan section.
 2. **Route.** On every prompt, the Jev route hook may add one line such as `Jev route: swarm (0.82); opus: no (0.91)`. This is advisory, and it's silent below 0.7.
@@ -282,7 +284,8 @@ The process skills Dryas uses are its own (`dryas:brainstorm`, `dryas:worktree`,
 | agent `dryas:executor` | `standard` tier (`model: sonnet`), tools Read/Edit/Write/Bash, one task section, locked scope. Ends with CHANGED / TESTS / DONE-CRITERIA / CONFIDENCE / UNRESOLVED |
 | skills `stack-nextjs-ts`, `stack-supabase-postgres`, `stack-swift-ios`, `stack-python` | Conventions, test commands and pitfalls, scanned from the real projects |
 | plugin `typesafe@typesafe-ai` | Official Jev/TypeSafe docs skill |
-| skills `impeccable`, `ui-ux-pro-max` | Design pair, required for any task that involves design (§4 step 1) |
+| skill `dryas:lens`, command `/lens` | Design panel (craft, `impeccable`, `ui-ux-pro-max`) and product panel (focus, craft, data); one lens page per topic and a `## Lens` block (§4 step 1) |
+| skills `impeccable`, `ui-ux-pro-max` | Design pair, run by `dryas:lens`'s design panel (§4 step 1) |
 | MCP `rea` + skill `reverse-engineer-anything` | Reverse engineering of software without source; optional extra (§4 step 1) |
 | `~/.claude/release/export.sh` (maintainer only) | One-way export of `~/.claude` to the public `dryas-workflow` repo: allowlist `public-manifest.txt`, path/name rewrites `rewrites.tsv`, deny-term and secret scans, Jev tests on the staged tree, FlowObserve stages shipped disabled. `--dry-run` first. Never edit `claude/` in the public repo; change `~/.claude` and re-export |
 

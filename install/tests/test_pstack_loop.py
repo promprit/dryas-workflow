@@ -6,6 +6,7 @@ sys.path.insert(0, str(HERE))
 import render
 from test_pstack_content import LEAK
 import re
+from test_lens_rules import CLAUDE_LENS_LINE, CODEX_LENS_LINE
 CD_PATH = re.compile(r"(?:\{\{CD\}\}|\$\{CLAUDE_PLUGIN_ROOT\})/([A-Za-z0-9_./-]+)")
 ROOT = "${CLAUDE_PLUGIN_ROOT}"
 REPO = HERE.parents[1]
@@ -26,6 +27,7 @@ def plugin_form(t):
                  ("~/.claude/jev/thresholds.json", "~/.dryas/jev/thresholds.json"),
                  ("~/.claude/jev/thresholds.py", ROOT + "/jev/thresholds.py"),
                  ("~/.claude/skills/orchestrate/", ROOT + "/skills/orchestrate/"),
+                 ("- Design work (UI/UX, layout, visual style, components, on-screen copy): use `ui-ux-pro-max` and `impeccable`.", CLAUDE_LENS_LINE),
                  ("`~/.claude/jev/chain.json`", "`jev/chain.json` in the Dryas plugin folder"),
                  ("`~/.claude/pstack/benchmark-checklist.md`", "`pstack/benchmark-checklist.md` in the Dryas plugin folder"),
                  ("`~/.claude/agents/executor.md`", "`agents/executor.md` in the Dryas plugin folder"),
@@ -95,7 +97,9 @@ def codex_form(t, rel):
         t = t.replace("Full reference: `{{CD}}/docs/dryas-workflow.md`.",
                       "Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: "
                       "`~/.dryas/docs/dryas-local.md`).")
-        return with_rea_line(t, "- Brainstorm first")
+        t = t.replace("`$dryas:retro`", "`$dryas:lens` (design and product lens review), `$dryas:retro`")
+        t = with_rea_line(t, "- Brainstorm first")
+        return with_rea_line(t, "- Reverse-engineering work", CODEX_LENS_LINE)
     for a, b in (('"{{PY}}" -X utf8 "{{CD}}/jev/', '"<dryas-py>" -X utf8 "<dryas-root>/jev/'),
                  ("{{CD}}/jev/thresholds.json", "~/.dryas/jev/thresholds.json"), ("{{CD}}/", "<dryas-root>/")):
         t = t.replace(a, b)

@@ -4,7 +4,7 @@
 
 # Workflow rules
 - Brainstorm first, always (dryas:brainstorm); build or dispatch only after the user approves the design.
-- Design work (UI/UX, layout, visual style, components, on-screen copy): use `ui-ux-pro-max` and `impeccable`.
+- Design work (UI/UX, layout, visual style, components, on-screen copy): run `dryas:lens` (design panel: craft, `impeccable`, `ui-ux-pro-max`); its result is an Artifact page. New features: product panel (focus, craft, data) in brainstorm, or when the user says "3 lens".
 - Reverse-engineering work (software without source): use REA, on demand (`dryas rea on`, then restart; never `rea setup`); brainstorm says when, the user can decline.
 - Single-file fix: plain Claude on the strong tier. Multi-step: `/orchestrate <task>` on the approved design.
 - Every multi-step task runs in its own git worktree. One agent per worktree: never two sessions in one worktree; parallel loops each get their own worktree and branch. Merge after `/wreview` and dryas:verify.
