@@ -7,6 +7,7 @@ import render
 from test_pstack_content import LEAK
 import re
 from test_lens_rules import CLAUDE_LENS_LINE, CODEX_LENS_LINE
+from test_lens_orchestrate import CLAUDE_LENS_STEP, CODEX_LENS_STEP
 CODEX_LENS_OLD = "- Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`)."
 CD_PATH = re.compile(r"(?:\{\{CD\}\}|\$\{CLAUDE_PLUGIN_ROOT\})/([A-Za-z0-9_./-]+)")
 ROOT = "${CLAUDE_PLUGIN_ROOT}"
@@ -29,6 +30,8 @@ def plugin_form(t):
                  ("~/.claude/jev/thresholds.py", ROOT + "/jev/thresholds.py"),
                  ("~/.claude/skills/orchestrate/", ROOT + "/skills/orchestrate/"),
                  ("- Design work (UI/UX, layout, visual style, components, on-screen copy): use `ui-ux-pro-max` and `impeccable`.", CLAUDE_LENS_LINE),
+                 ("Skill(dryas:review-receive), Bash(git worktree:*)", "Skill(dryas:review-receive), Skill(dryas:lens), Artifact, Bash(git worktree:*)"),
+                 ("Delete `.orchestrate/active.json`. Review the worktree diff", "Delete `.orchestrate/active.json`. " + CLAUDE_LENS_STEP + " Review the worktree diff"),
                  ("`~/.claude/jev/chain.json`", "`jev/chain.json` in the Dryas plugin folder"),
                  ("`~/.claude/pstack/benchmark-checklist.md`", "`pstack/benchmark-checklist.md` in the Dryas plugin folder"),
                  ("`~/.claude/agents/executor.md`", "`agents/executor.md` in the Dryas plugin folder"),
@@ -105,6 +108,8 @@ def codex_form(t, rel):
         t = t.replace(a, b)
     if rel.endswith("orchestrate/SKILL.md"):
         t = t.replace("# Orchestrate (Codex)\n\n", "# Orchestrate (Codex)\n\n" + CODEX_ROOT_LINE, 1)
+        t = t.replace("Delete `.orchestrate/active.json`, review the worktree diff",
+                      "Delete `.orchestrate/active.json`. " + CODEX_LENS_STEP + " Review the worktree diff", 1)
     return t
 
 
