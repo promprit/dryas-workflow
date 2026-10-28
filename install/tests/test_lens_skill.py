@@ -1,4 +1,5 @@
 """dryas:lens (spec 2026-10-28-lens-design.md): skill shape, the Canopy contract, and the edition copies."""
+import json
 import re
 import sys
 import unittest
@@ -120,6 +121,16 @@ class LensSkillTest(unittest.TestCase):
         self.assertIn("$dryas:lens", read(ROOT / "codex/skills/lens/SKILL.md"))
         self.assertIn("Load the `dryas-lens` skill", read(ROOT / "opencode/command/lens.md"))
         self.assertIn("allow_implicit_invocation: true", read(ROOT / "codex/skills/lens/agents/openai.yaml"))
+
+
+class ArtifactAllowTest(unittest.TestCase):
+    def test_artifact_pre_allowed(self):
+        frag = json.loads(read(ROOT / "claude/settings.fragment.json"))
+        self.assertNotIn("Artifact", frag["core"]["permissions"]["allow"])
+        head = read(SKILL).split("---")[1]
+        tools = [l for l in head.splitlines() if l.startswith("allowed-tools:")][0]
+        self.assertIn("Artifact", tools.split(": ", 1)[1].split(", "))
+        self.assertIn("Skill(impeccable)", tools)
 
 
 if __name__ == "__main__":
