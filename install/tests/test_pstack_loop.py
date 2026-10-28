@@ -121,6 +121,8 @@ def codex_form(t, rel):
                       "Name `<dryas-root>/skills/tdd/SKILL.md` and `<dryas-root>/skills/debug/SKILL.md` in its prompt. " + CODEX_LESSONS_STEP + " ", 1)
         t = t.replace("Use Codex sub-agents when available (independent tasks in parallel); otherwise",
                       CODEX_DESC_RULE + " Use Codex sub-agents when available (independent tasks in parallel); otherwise", 1)
+        t = t.replace("tier as the model name, role, attempt",
+                      "tier as the model name, role (coder, tester, reviewer, reviewer-spec, reviewer-quality, reviewer-minimalist or docs), attempt", 1)
         t = t.replace("tell the user; remove the worktree.", "tell the user. " + CODEX_LESSONS_STORE + " Then remove the worktree.", 1)
         t = t.replace("Delete `.orchestrate/active.json`, review the worktree diff",
                       "Delete `.orchestrate/active.json`. " + CODEX_LENS_STEP + " Review the worktree diff", 1)

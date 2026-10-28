@@ -36,7 +36,7 @@ Have fresh reviewers check the work before problems cascade. Each reviewer gets 
    - `[BASE_SHA]`: the starting commit
    - `[HEAD_SHA]`: the ending commit
    On Codex: run the three reviewers as Codex sub-agents in parallel when available; otherwise review three times yourself, one fresh pass per stage, and still report them separately. Change nothing unless asked.
-   Each reviewer's dispatch description starts with its role slug and a colon: `reviewer-spec: `, `reviewer-quality: ` or `reviewer-minimalist: `.
+   Log each reviewer's dispatch with role `reviewer-spec`, `reviewer-quality` or `reviewer-minimalist` (stage 1, 2 or 3). Each reviewer's dispatch description starts with its role slug and a colon: `reviewer-spec: `, `reviewer-quality: ` or `reviewer-minimalist: `.
    Done when three reports are back, one per stage.
 3. **Act on the findings** with the `$dryas:review-receive` skill:
    - Fix critical issues immediately
