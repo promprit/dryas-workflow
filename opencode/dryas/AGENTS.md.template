@@ -2,7 +2,7 @@
 Process rules for coding sessions on this machine. Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: `~/.dryas/docs/dryas-local.md`).
 
 ## Always
-- Brainstorm first: before new work, get the user's approval of a design (`dryas-brainstorm`).
+- Brainstorm first: before new work, get the user's approval of a design (`dryas-brainstorm`; design: `/lens`).
 - Reverse-engineering work (how software you don't have the source for does something): REA is not set up for OpenCode; say so and propose other approaches.
 - Multi-step work runs in its own git worktree (`dryas-worktree`); merge after review and verification (`dryas-verify`).
 - One agent per worktree: never run two sessions in the same worktree. Parallel loops each get their own worktree and branch.

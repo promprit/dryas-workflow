@@ -6,6 +6,9 @@ sys.path.insert(0, str(HERE))
 import render
 from test_pstack_content import LEAK
 import re
+from test_lens_rules import CLAUDE_LENS_LINE, CODEX_LENS_LINE
+from test_lens_orchestrate import CLAUDE_LENS_STEP, CODEX_LENS_STEP
+CODEX_LENS_OLD = "- Brainstorm first: before new work, get the user's approval of a design (`$dryas:brainstorm`)."
 CD_PATH = re.compile(r"(?:\{\{CD\}\}|\$\{CLAUDE_PLUGIN_ROOT\})/([A-Za-z0-9_./-]+)")
 ROOT = "${CLAUDE_PLUGIN_ROOT}"
 REPO = HERE.parents[1]
@@ -26,6 +29,9 @@ def plugin_form(t):
                  ("~/.claude/jev/thresholds.json", "~/.dryas/jev/thresholds.json"),
                  ("~/.claude/jev/thresholds.py", ROOT + "/jev/thresholds.py"),
                  ("~/.claude/skills/orchestrate/", ROOT + "/skills/orchestrate/"),
+                 ("- Design work (UI/UX, layout, visual style, components, on-screen copy): use `ui-ux-pro-max` and `impeccable`.", CLAUDE_LENS_LINE),
+                 ("Skill(dryas:review-receive), Bash(git worktree:*)", "Skill(dryas:review-receive), Skill(dryas:lens), Artifact, Skill(impeccable), Skill(impeccable:impeccable), Skill(ui-ux-pro-max), Skill(ui-ux-pro-max:ui-ux-pro-max), Skill(artifact-design), Bash(git worktree:*)"),
+                 ("Delete `.orchestrate/active.json`. Review the worktree diff", "Delete `.orchestrate/active.json`. " + CLAUDE_LENS_STEP + " Review the worktree diff"),
                  ("`~/.claude/jev/chain.json`", "`jev/chain.json` in the Dryas plugin folder"),
                  ("`~/.claude/pstack/benchmark-checklist.md`", "`pstack/benchmark-checklist.md` in the Dryas plugin folder"),
                  ("`~/.claude/agents/executor.md`", "`agents/executor.md` in the Dryas plugin folder"),
@@ -95,12 +101,15 @@ def codex_form(t, rel):
         t = t.replace("Full reference: `{{CD}}/docs/dryas-workflow.md`.",
                       "Full reference: `~/.dryas/docs/dryas-workflow.md` (local notes, if present: "
                       "`~/.dryas/docs/dryas-local.md`).")
-        return with_rea_line(t, "- Brainstorm first")
+        t = with_rea_line(t, "- Brainstorm first")
+        return t.replace(CODEX_LENS_OLD, CODEX_LENS_LINE)
     for a, b in (('"{{PY}}" -X utf8 "{{CD}}/jev/', '"<dryas-py>" -X utf8 "<dryas-root>/jev/'),
                  ("{{CD}}/jev/thresholds.json", "~/.dryas/jev/thresholds.json"), ("{{CD}}/", "<dryas-root>/")):
         t = t.replace(a, b)
     if rel.endswith("orchestrate/SKILL.md"):
         t = t.replace("# Orchestrate (Codex)\n\n", "# Orchestrate (Codex)\n\n" + CODEX_ROOT_LINE, 1)
+        t = t.replace("Delete `.orchestrate/active.json`, review the worktree diff",
+                      "Delete `.orchestrate/active.json`. " + CODEX_LENS_STEP + " Review the worktree diff", 1)
     return t
 
 

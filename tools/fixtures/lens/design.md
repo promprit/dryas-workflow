@@ -1,0 +1,1 @@
+Design a settings page for a todo app: two toggles (dark mode, reminders) and a save button. Requirements are complete and approved; this is design work. Present the design now with its lens review. Do not write code.

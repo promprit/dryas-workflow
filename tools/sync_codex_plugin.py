@@ -8,7 +8,7 @@ instead of bytes: pstack files, Jev and Ruflo tools, Jev questions, threshold ke
 named by both, except the harness-specific ones listed in SKILL_ALLOW. sync never rewrites a skill.
 The process skills (PROCESS_SKILLS) are one source in claude/skills: sync renders them into codex/skills (harness
 blocks kept or dropped, Claude names rewritten), and --check also fails when a Codex instruction carried over from 1.x
-(HARNESS_REQUIRED) is missing from a rendered copy.
+(HARNESS_REQUIRED) is missing from a rendered copy. Dryas's own skills (OWN_SKILLS) are rendered the same way.
 The OpenCode edition (opencode/) is rendered by tools/sync_opencode.py; this tool runs it too.
 """
 import argparse
@@ -42,6 +42,7 @@ SKILL_ALLOW: Dict[str, Dict[str, Set[str]]] = {
     },
 }
 PROCESS_SKILLS = ("brainstorm", "worktree", "debug", "verify", "plan", "review-request", "review-receive", "tdd")
+OWN_SKILLS = ("lens",)  # Dryas's own skills: rendered like process skills, no Superpowers upstream
 SKILL_FILES = ("UPSTREAM.md", "LICENSE-superpowers")
 HARNESS_REQUIRED: Dict[str, Tuple[str, ...]] = {
     "brainstorm": ("get the user's approval of a design",),
@@ -51,7 +52,7 @@ HARNESS_REQUIRED: Dict[str, Tuple[str, ...]] = {
     "plan": ("`docs/superpowers/plans/` if the project uses that", "$dryas:orchestrate"),
     "review-request": ("Change nothing unless asked", "Codex sub-agent"),
 }
-COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "retro")
+COMMANDS = ("orchestrate", "wplan", "wreview", "commit", "tune", "handoff", "interrogate", "retro", "lens")
 COMMAND_RE = re.compile(r"(?<![\w$/.<-])/(" + "|".join(COMMANDS) + r")\b(?![/\w-]|\.\w)")
 _HARNESS = re.compile(r"^<!-- (/?)(claude|codex|opencode) -->\n?", re.M)
 _FRONT = re.compile(r"\A---\n(.*?\n)---\n", re.S)
@@ -182,7 +183,7 @@ def skill_plan(repo: Path) -> Dict[str, str]:
     for name in SKILL_FILES:
         if (src / name).is_file():
             out["codex/skills/" + name] = _lf(src / name)
-    for name in PROCESS_SKILLS:
+    for name in PROCESS_SKILLS + OWN_SKILLS:
         for f in sorted((src / name).glob("*.md")) if (src / name).is_dir() else []:
             try:
                 text = render_skill(_lf(f), "codex")
@@ -197,7 +198,7 @@ def skill_plan(repo: Path) -> Dict[str, str]:
 def _skill_existing(repo: Path) -> List[str]:
     base, out = Path(repo) / "codex/skills", []
     out += ["codex/skills/" + n for n in SKILL_FILES if (base / n).is_file()]
-    for name in PROCESS_SKILLS:
+    for name in PROCESS_SKILLS + OWN_SKILLS:
         if (base / name).is_dir():
             out += ["codex/skills/%s/%s" % (name, f.relative_to(base / name).as_posix())
                     for f in sorted((base / name).rglob("*")) if f.is_file()]

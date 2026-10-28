@@ -28,7 +28,7 @@ class PstackSkillsTest(unittest.TestCase):
                 self.assertTrue(skill(h, n).startswith("---\nname: %s\ndescription: " % n), (h, n))
         # the plugin ships every Codex skill, pstack ones included (they stop when pstack-picks is off)
         shipped = {d.name for d in (REPO / "codex" / "skills").iterdir() if (d / "SKILL.md").is_file()}
-        self.assertEqual(shipped, (OURS - {"handoff"}) | set(NAMES) | set(scp.PROCESS_SKILLS))
+        self.assertEqual(shipped, (OURS - {"handoff"}) | set(NAMES) | set(scp.PROCESS_SKILLS) | set(scp.OWN_SKILLS))
 
     def test_claude_skills_not_model_invoked(self):
         for n in NAMES:

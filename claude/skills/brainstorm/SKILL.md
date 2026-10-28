@@ -94,7 +94,7 @@ From approaches on it is architectural depth; for bounded work, context plus a q
 - When exploring the idea, proposing approaches or presenting the design, read `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/reference.md` § Understanding the idea, § Exploring approaches, § Presenting the design, § Design for isolation and clarity and § Working in existing codebases.
 - When you want the whole flow as a graph, read `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/reference.md` § Process flow.
 
-Design work (UI/UX, layout, visual style, components, on-screen copy) also uses the design skills the rules name, when installed.
+Design work (UI/UX, layout, visual style, components, on-screen copy) runs the `dryas:lens` design panel before you present the design; a new user-facing feature or product idea runs the `dryas:lens` product panel (not internal tooling, unless the user asks) before you propose approaches; the user saying "3 lens" runs it at any point. Put the lens page's link or path and the `## Lens` block (`${CLAUDE_PLUGIN_ROOT}/skills/lens/reference.md` § Lens block) in the in-chat design or the spec.
 
 **Terminal states are path-bound.** Architectural: the ONLY skill you invoke after brainstorming is the `dryas:plan` skill, never a frontend-design, mcp-builder or other implementation skill. Bounded: after approval, implementation goes straight through the normal development workflow; no plan document. Spike: the terminal state is a reported recommendation.
 

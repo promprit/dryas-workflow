@@ -1,0 +1,1 @@
+New feature with UI: a streak counter shown on the todo app's home screen. Requirements are complete: count consecutive days with a finished todo. Run both lens panels and present the design now. Do not write code.

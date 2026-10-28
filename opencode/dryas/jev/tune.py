@@ -165,6 +165,11 @@ def build(log_dir: Optional[str] = None) -> Dict[str, Any]:
     dispatch, scope = read("dispatch", log_dir), read("scope", log_dir)
     review, merge = read("review", log_dir), read("merge", log_dir)
     judged = [r for r in gate if "latency_ms" in r]
+    # calls.jsonl and gate.jsonl rotate separately: count only the calls the current gate log covers
+    # (string compare: both logs are written by jevlog with the same local-time ts format)
+    start = min((r["ts"] for r in gate if isinstance(r.get("ts"), str)), default=None)
+    if start:
+        calls = [r for r in calls if not isinstance(r.get("ts"), str) or r["ts"] >= start]
     decided = [r for r in gate if r.get("provider") in ("jev", "local") and r.get("decision") != "skipped"]
     shadowed = [r for r in decided if "shadow_decision" in r]
     per_task: Counter = Counter()
